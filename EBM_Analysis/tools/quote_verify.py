@@ -33,11 +33,33 @@ def _pdf_text(data):
 def _fetch(url, timeout=60):
     return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read()
 
+_BROWSER_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                             "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+def _unpaywall_text(doi):
+    """有 DOI 就問 Unpaywall：找到 OA PDF→抓文字。回 text 或 None。（退 ai_synthesis 前的最後一搏）
+    機構典藏(如 Dundee)常擋非瀏覽器 UA→用完整瀏覽器 UA 抓。"""
+    if not doi:
+        return None
+    try:
+        import unpaywall
+        purl = unpaywall.oa_pdf(doi)
+        if not purl or not purl.lower().endswith(".pdf"):
+            return None
+        raw = urllib.request.urlopen(urllib.request.Request(purl, headers=_BROWSER_UA), timeout=60).read()
+        txt = _pdf_text(raw)
+        return txt if txt and len(txt) > 1000 else None
+    except Exception:
+        return None
+
 def source_text(paper_id, seed_map):
     """回 (text, note)；text=None 表無法取得來源。"""
     s = seed_map.get(paper_id, {})
     ch = s.get("fulltext_channel"); url = s.get("fulltext_url"); pdf = s.get("pdf_file")
+    doi = s.get("doi")
     if ch == "ai_synthesis":
+        t = _unpaywall_text(doi)  # 退二手前先問 Unpaywall 有沒有 OA 全文
+        if t:
+            return t, "unpaywall:oa（原標 ai_synthesis，實有開放全文）"
         return None, "ai_synthesis（二手·無全文可核對）"
     # local：先試 inputs/<paper_id>.pdf，再試 seed pdf_file
     if ch == "local":
@@ -69,7 +91,14 @@ def source_text(paper_id, seed_map):
                 return re.sub(r"<[^>]+>", " ", src), "online:pmc"
             return _pdf_text(_fetch(url)), "online:fetch"
         except Exception as e:
+            t = _unpaywall_text(doi)
+            if t:
+                return t, "unpaywall:oa（online 主來源失敗後備援）"
             return None, "online 取得失敗:%s" % str(e)[:40]
+    # 無 channel/url：仍嘗試 Unpaywall（有 DOI 就試）
+    t = _unpaywall_text(doi)
+    if t:
+        return t, "unpaywall:oa"
     return None, "無 channel/url"
 
 def match(quote, src_norm, threshold):

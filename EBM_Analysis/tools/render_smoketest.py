@@ -44,12 +44,9 @@ def _find_data():
         pass
     return None
 
-def check(pdf, data_path):
+def checks_on(txt, data):
+    """純邏輯：給 PDF 文字＋資料(synthesis dict 或 None)，回 fails[]。可單元測試。"""
     fails = []
-    txt = _pdf_text(pdf)
-    if not txt:
-        return ["無法讀取 PDF 文字（pypdf 失敗或檔不存在）：%s" % pdf]
-
     # V1 磚塊
     bad = sorted({c for c in TOFU if c in txt})
     if bad:
@@ -63,13 +60,6 @@ def check(pdf, data_path):
         if gaps:
             fails.append("V2 章節跳號：缺第 %s 節（某段可能空資料被整段跳過）" % "、".join(map(str, gaps)))
 
-    data = None
-    if data_path and os.path.exists(data_path):
-        try:
-            d = json.load(open(data_path, encoding="utf-8"))
-            data = d.get("synthesis", d)  # 兼容 {synthesis:..} 或純 synthesis / 檢索報告
-        except Exception as e:
-            fails.append("V3-5 資料檔無法解析：%s" % str(e)[:60])
     if data is not None:
         is_grade = "sof" in data or "body_of_evidence" in data
         if is_grade:
@@ -91,6 +81,20 @@ def check(pdf, data_path):
                 if missing:
                     fails.append("V5 SoF 列疑遭吞：PDF 找不到 %d/%d outcome（%s）" % (len(missing), len(sof), "、".join(missing[:3])))
     return fails
+
+def check(pdf, data_path):
+    """讀 PDF 文字＋載入資料檔，再交給純邏輯 checks_on。"""
+    txt = _pdf_text(pdf)
+    if not txt:
+        return ["無法讀取 PDF 文字（pypdf 失敗或檔不存在）：%s" % pdf]
+    data = None
+    if data_path and os.path.exists(data_path):
+        try:
+            d = json.load(open(data_path, encoding="utf-8"))
+            data = d.get("synthesis", d)  # 兼容 {synthesis:..}／純 synthesis／檢索報告
+        except Exception as e:
+            return checks_on(txt, None) + ["V3-5 資料檔無法解析：%s" % str(e)[:60]]
+    return checks_on(txt, data)
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
