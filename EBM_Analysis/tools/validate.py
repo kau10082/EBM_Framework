@@ -4,7 +4,7 @@
 
   python tools/validate.py p1 cache/paper1.p1.json
   python tools/validate.py p3 cache/paper1.p3.json
-  phase 代號：p1 / p2 / p3 / per_paper / synthesis
+  phase 代號：p0 / p1 / p2 / p3 / per_paper / synthesis
 """
 import sys
 import json
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "schema"
 
 MAP = {
+    "p0": ("phase0_corpus.json", None),
     "p1": ("phase1_extract.json", None),
     "p2": ("phase2_triage.json", None),
     "p3": ("phase3_grade.json", None),

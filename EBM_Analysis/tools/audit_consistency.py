@@ -16,7 +16,9 @@ except Exception:
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = ROOT / "cache"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workdir  # noqa: E402  執行期資料導向工作夾（見 workdir.py）
+CACHE = Path(workdir.cache_dir())
 
 # outcome 名 → 類別（關鍵字）
 # 順序＝優先（先具體後一般）：嚴重/無惡化須在「惡化率」之前；整體安全在專項 AESI 之前

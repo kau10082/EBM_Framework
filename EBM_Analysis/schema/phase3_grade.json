@@ -68,8 +68,9 @@
         "rationale": { "type": "string", "description": "判定依據；不得空白（C75 透明記錄）" },
         "rob2": {
           "type": "object",
-          "description": "僅 risk_of_bias 用（RCT）：RoB 2 五子領域逐項判斷（report_completeness 護欄）",
+          "description": "僅 risk_of_bias 用（RCT）：RoB 2 五子領域逐項判斷（report_completeness 護欄）。一旦提供此物件，五子領域＋overall 全須填(Ch8 §8.2.4；整體=最不利領域，由 selfcheck C1 驗算)。",
           "additionalProperties": false,
+          "required": ["randomization", "deviations", "missing_data", "measurement", "selective_reporting", "overall"],
           "properties": {
             "randomization": { "enum": ["low", "some_concerns", "high"] },
             "deviations": { "enum": ["low", "some_concerns", "high"] },

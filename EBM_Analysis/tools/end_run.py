@@ -1,0 +1,110 @@
+# -*- coding: utf-8 -*-
+"""
+end_run.py — 「EBM 分析結案」一鍵整合：封存這輪 → 清空所有工作區，下一輪乾淨開始。
+==============================================================================
+動作（依序）：
+  1) 封存 runs/<YYYY-MM>_<slug>/：
+       audit/        ← cache/*.json（_corpus、*.p1-p3、_synthesis 等審計軌跡）
+       deliverables/ ← outputs/* ＋ reports/*（FINAL_REPORT、SR/GRADE 報告 PDF/MD）
+       handoff/      ← 交接資料夾的中繼檔（_corpus_seed.json、_search_report.json、_需補全文清單.txt）
+       MANIFEST.txt  ← 清掉了哪些檔（含手工 PDF 檔名，供日後追溯）
+  2) 清空：cache/、outputs/、inputs/（保留 .gitkeep）、reports/、交接全文資料夾（整個刪，含手工/下載 PDF）、run_state.json
+版權 PDF 不複製進封存（只記檔名）；runs/ 為本機、gitignored。
+
+用法：python tools/end_run.py [--keep-pdfs] [--dry-run]
+  --keep-pdfs  封存時連手工/下載 PDF 一起複製進 runs/（預設只記檔名不複製）
+  --dry-run    只列出會做什麼、不複製不刪除
+"""
+import sys, os, json, shutil
+from pathlib import Path
+try: sys.stdout.reconfigure(encoding="utf-8")
+except Exception: pass
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import workdir
+try:
+    import run_state
+    ST = run_state.load()
+except Exception:
+    ST = {}
+
+def _files(p):
+    p = Path(p)
+    return [x for x in p.iterdir() if x.is_file()] if p.is_dir() else []
+
+def main():
+    keep_pdfs = "--keep-pdfs" in sys.argv
+    dry = "--dry-run" in sys.argv
+    slug = ST.get("slug") or "run"
+    date = (ST.get("search_date") or "")[:7] or "unknown"
+    CACHE = Path(workdir.cache_dir()); OUTPUTS = Path(workdir.outputs_dir()); INPUTS = Path(workdir.inputs_dir())
+    reports = ST.get("paths", {}).get("reports_dir")
+    ftd = ST.get("paths", {}).get("fulltext_dir")
+    arch = Path(workdir.runs_dir()) / f"{date}_{slug}"
+    print(f"== EBM 分析結案：{slug}（{date}）{'［DRY-RUN］' if dry else ''} ==")
+    print(f"封存到：{arch}")
+
+    manifest = [f"# 結案封存 {slug} {date}", ""]
+    def archive(srcdir, sub, exts=None, label=""):
+        n = 0
+        for f in _files(srcdir):
+            if exts and f.suffix.lower() not in exts:
+                if f.suffix.lower() == ".pdf" and not keep_pdfs:
+                    manifest.append(f"[未複製·已刪] {label}/{f.name}（{f.stat().st_size//1024} KB）"); continue
+            d = arch / sub
+            if not dry:
+                d.mkdir(parents=True, exist_ok=True); shutil.copy2(f, d / f.name)
+            n += 1
+        return n
+
+    # 1) 封存
+    a1 = archive(CACHE, "audit", label="cache")
+    a2 = archive(OUTPUTS, "deliverables", label="outputs")
+    a3 = archive(reports, "deliverables", label="reports") if reports else 0
+    # 交接資料夾：只存中繼檔（json/txt/md），PDF 依 --keep-pdfs
+    a4 = 0
+    if ftd:
+        for f in _files(ftd):
+            if f.suffix.lower() in (".json", ".txt", ".md") or keep_pdfs:
+                if not dry:
+                    (arch / "handoff").mkdir(parents=True, exist_ok=True); shutil.copy2(f, arch / "handoff" / f.name)
+                a4 += 1
+            elif f.suffix.lower() == ".pdf":
+                manifest.append(f"[未複製·已刪] handoff/{f.name}（{f.stat().st_size//1024} KB）")
+    if not dry:
+        arch.mkdir(parents=True, exist_ok=True)
+        (arch / "MANIFEST.txt").write_text("\n".join(manifest), encoding="utf-8")
+    print(f"  封存：audit {a1}｜deliverables {a2+a3}｜handoff {a4}")
+
+    # 2) 清空
+    def clear_dir(p, keep_gitkeep=True):
+        if not p or not Path(p).is_dir(): return 0
+        n = 0
+        for f in Path(p).iterdir():
+            if keep_gitkeep and f.name == ".gitkeep": continue
+            if not dry:
+                (shutil.rmtree(f) if f.is_dir() else f.unlink())
+            n += 1
+        return n
+    c1 = clear_dir(CACHE); c2 = clear_dir(OUTPUTS); c3 = clear_dir(INPUTS); c4 = clear_dir(reports, keep_gitkeep=False)
+    # run_state 先重設（與資料夾刪除無關，避免後者被鎖時連帶跳過）
+    rs = Path(workdir.work_root()) / "run_state.json"
+    if rs.exists() and not dry:
+        try: rs.unlink()
+        except Exception: pass
+    # 交接全文資料夾：先清檔，再盡力刪空夾（OneDrive 可能鎖住空夾→忽略，空夾無害）
+    c5 = 0
+    if ftd and Path(ftd).is_dir():
+        c5 = len(list(Path(ftd).iterdir()))
+        if not dry:
+            for f in Path(ftd).iterdir():
+                try: (shutil.rmtree(f) if f.is_dir() else f.unlink())
+                except Exception: pass
+            try: os.rmdir(ftd)
+            except Exception: print("  （交接夾內容已清空；空夾被 OneDrive 暫鎖、留著無害）")
+    print(f"  清空：cache {c1}｜outputs {c2}｜inputs {c3}｜reports {c4}｜交接夾 {c5}（整夾刪）｜run_state 重設")
+    print("✅ 結案完成，下一輪可乾淨開始。" if not dry else "（DRY-RUN：未實際變更）")
+    print(f"   這輪記錄保存在：{arch}")
+
+if __name__ == "__main__":
+    main()

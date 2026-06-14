@@ -43,18 +43,18 @@
 
 ## Structure / 檔案結構
 
-> **本子計畫在 EBM_Framework 內僅於 Claude Code 運作**（入口 skill＝`EBM_Framework/.claude/skills/ebm-search/`，指向本資料夾的 `SKILL.md`）。不再打包成 Claude Desktop skill。設定集中於 **`EBM_Framework/config/settings.yaml`**（根，gitignored）；腳本以 `default_settings_path()` 解析（env `EBM_CONFIG` > 根 config > 本地回退）。
+> **本子計畫是 EBM_Framework 的檢索引擎**；完整規格＝本資料夾的 `SEARCH_SPEC.md`，由框架的**單一 skill `ebm-framework`**（根 `SKILL.md`，可打包匯入 Claude Desktop）載入，亦可在 Claude Code 專案模式下由 `.claude/skills/ebm-search/` 啟動器載入。設定集中於 **`EBM_Framework/config/settings.yaml`**（根，gitignored）；腳本以 `default_settings_path()` 解析（env `EBM_CONFIG` > 根 config > 本地回退）。
 
 ```
 EBM_Search/
-├── SKILL.md                     # 完整規格（workflow, rules, changelog）/ 由框架 ebm-search 啟動器載入
+├── SEARCH_SPEC.md                     # 完整規格（workflow, rules, changelog）/ 由框架 ebm-search 啟動器載入
 ├── scripts/
 │   ├── xref_verify.py           # Crossref + PubMed cross-verification engine / 交叉驗證引擎（含 default_settings_path）
 │   ├── journal_quartile.py      # SCImago SJR quartile gate / 期刊分位品質閘
 │   ├── zotero_import.py         # Zotero archiving (Crossref-enriched) / Zotero 歸檔
 │   ├── fulltext_fetch.py        # Legal OA full-text fetch (Unpaywall + PMC) / 合法 OA 全文
 │   ├── build_corpus_seed.py     # 交接層：寫 _corpus_seed.json 給 EBM_Analysis / handoff
-│   └── pack_skill.py            # （選用）安全 ZIP 打包器；Claude-Code-only 下平常用不到
+│   └── pack_skill.py            # （選用）子計畫單獨打包器；整框架打包改用根 pack_framework.py
 ├── config/
 │   └── settings.example.yaml    # 指向根 config 的薄指標（真值集中於 EBM_Framework/config/settings.yaml）
 └── references/

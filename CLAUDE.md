@@ -1,6 +1,6 @@
 # EBM_Framework — Claude Code 專案指引
 
-實證醫學（EBM）管線，兩個子計畫整合為一：**EBM_Search**（多源檢索＋Crossref/PubMed 交叉驗證、去幻覺）→ **EBM_Analysis**（GRADE 評讀、Claude 即引擎、無外部 API）。本框架**只在 Claude Code 內運作**（不再打包成 Claude Desktop skill）。
+實證醫學（EBM）管線，兩個子計畫整合為一：**EBM_Search**（多源檢索＋Crossref/PubMed 交叉驗證、去幻覺）→ **EBM_Analysis**（GRADE 評讀、Claude 即引擎、無外部 API）。本框架有兩種用法：**(a) 當 Claude Code 專案**開啟使用；**(b) 用 `pack_framework.py` 打包成單一 skill**（`EBM_Framework_skill.zip`）匯入 **Claude Desktop**（已上傳，skill 名 `ebm-framework`）。兩種模式並存。
 
 ## 工作根與路徑規則（重要）
 - **工作目錄＝本資料夾 `EBM_Framework`**（使用者在 Claude Code 開啟的專案根）。
@@ -16,7 +16,7 @@
 
 ## Skill 位置
 `.claude/skills/ebm-search/` 與 `.claude/skills/ebm-analysis/` 為**薄啟動器**（攜帶觸發 description ＋ 路徑前綴規則），各自指向子計畫的完整規格正本：
-- 入口規格：[`EBM_Search/SKILL.md`](EBM_Search/SKILL.md)
+- 入口規格：[`EBM_Search/SEARCH_SPEC.md`](EBM_Search/SEARCH_SPEC.md)
 - 評讀規格：[`EBM_Analysis/ANALYSIS_SPEC.md`](EBM_Analysis/ANALYSIS_SPEC.md)
 
 ## 機敏／個人設定（單一真值來源）

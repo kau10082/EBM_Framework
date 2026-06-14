@@ -49,6 +49,25 @@
       }
     },
     "n_total": { "type": ["integer", "string", "null"], "description": "整數或 '[Not Stated in Source]'" },
+    "dual_extraction": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "description": "雙人獨立萃取(MECIR C46；以兩條獨立 AI pass 近似)：對關鍵數字(N/主效應/CI)各自萃取後自動比對，不一致→needs_review。",
+      "properties": {
+        "method": {"type": ["string", "null"], "description": "如『同模型清空上下文重跑兩次』" },
+        "agreement": {"enum": ["full", "minor_discrepancy", "major_discrepancy", null] },
+        "discrepancies": {"type": "array", "items": {"type": "string"} }
+      }
+    },
+    "shared_control": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "description": "多臂試驗共用對照組(Ch3 §3.2.3.1、Ch5 §5.3.6)：避免 unit-of-analysis error。",
+      "properties": {
+        "is_multiarm": {"type": ["boolean", "null"] },
+        "control_arm_n": {"type": ["integer", "string", "null"] },
+        "arms_sharing_control": {"type": "array", "items": {"type": "string"} },
+        "handling": {"type": ["string", "null"], "description": "如『對照組樣本按介入臂數拆分』" }
+      }
+    },
     "forest_plot_present": { "type": "boolean" },
     "i2": { "type": ["number", "string", "null"], "description": "數值或 '[Not Stated in Source]'" },
     "data_gaps": {

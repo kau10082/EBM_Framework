@@ -15,10 +15,10 @@ description: >-
 
 # EBM_Search 啟動器（框架入口）
 
-本檔是 Claude Code 的 skill 入口。**完整規格在 [`EBM_Search/SKILL.md`](../../../EBM_Search/SKILL.md)**——載入它並逐步執行。
+本檔是 Claude Code 的 skill 入口。**完整規格在 [`EBM_Search/SEARCH_SPEC.md`](../../../EBM_Search/SEARCH_SPEC.md)**——載入它並逐步執行。
 
 ## 執行約定（Claude Code，工作根＝EBM_Framework）
-- **工作目錄＝`EBM_Framework`**（使用者開啟的專案根）。`EBM_Search/SKILL.md` 內所有相對路徑（`scripts/`、`config/`、`references/`）**相對於 `EBM_Search/`**；實際執行時一律**加前綴 `EBM_Search/`**：
+- **工作目錄＝`EBM_Framework`**（使用者開啟的專案根）。`EBM_Search/SEARCH_SPEC.md` 內所有相對路徑（`scripts/`、`config/`、`references/`）**相對於 `EBM_Search/`**；實際執行時一律**加前綴 `EBM_Search/`**：
   - 檢索/驗證引擎：`python EBM_Search/scripts/xref_verify.py …`
   - 分位閘：`python EBM_Search/scripts/journal_quartile.py …`
   - Zotero：`python EBM_Search/scripts/zotero_import.py …`

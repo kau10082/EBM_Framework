@@ -24,9 +24,11 @@ from pathlib import Path
 from datetime import datetime
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = ROOT / "cache"
-OUTPUTS = ROOT / "outputs"
-RUNS = ROOT / "runs"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workdir  # noqa: E402  執行期資料導向工作夾（見 workdir.py）
+CACHE = Path(workdir.cache_dir())
+OUTPUTS = Path(workdir.outputs_dir())
+RUNS = Path(workdir.runs_dir())
 
 
 def gen_sources(dest):

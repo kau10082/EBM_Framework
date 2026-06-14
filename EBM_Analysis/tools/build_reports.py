@@ -17,9 +17,12 @@ except Exception:
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = ROOT / "cache"
-OUTPUTS = ROOT / "outputs"
-SYM = {"high": "⊕⊕⊕⊕", "moderate": "⊕⊕⊕◯", "low": "⊕⊕◯◯", "very_low": "⊕◯◯◯"}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workdir  # noqa: E402  執行期資料導向工作夾（見 workdir.py）
+CACHE = Path(workdir.cache_dir())
+OUTPUTS = Path(workdir.outputs_dir())
+# 確定性符號：用 ○(U+25CB，CJK 字型有字形) 而非 ◯(U+25EF，msjh 缺字形)，避免 .md 轉 PDF 出磚塊
+SYM = {"high": "⊕⊕⊕⊕", "moderate": "⊕⊕⊕○", "low": "⊕⊕○○", "very_low": "⊕○○○"}
 AMSTAR2_SYM = {"high": "高信心", "moderate": "中等信心", "low": "低信心", "critically_low": "極低信心"}
 ORDER = ["very_low", "low", "moderate", "high"]
 
@@ -232,6 +235,20 @@ def final_report():
 
 
 def main():
+    # 渲染前硬 gate：統合自我一致性（RoB2 overall=最不利／贊助偏誤歸發表偏誤／SoF 合併效應註來源）
+    if (CACHE / "_synthesis.json").exists() and "--skip-consistency" not in sys.argv:
+        try:
+            import selfcheck_consistency as _sc
+            _fails = _sc.check()
+        except Exception as e:
+            _fails = []
+            sys.stderr.write(f"⚠️ 一致性 gate 未能執行（{e}），略過。\n")
+        if _fails:
+            sys.stderr.write("❌ 渲染中止：統合報告未通過自我一致性檢查（%d）——\n" % len(_fails))
+            for f in _fails:
+                sys.stderr.write("  - " + f + "\n")
+            sys.stderr.write("  修正 cache/_synthesis.json 後重跑；確需略過用 --skip-consistency。\n")
+            sys.exit(1)
     OUTPUTS.mkdir(exist_ok=True)
     for pid in paper_ids():
         report(pid)
@@ -239,6 +256,16 @@ def main():
     fr = final_report()
     n = ledger()
     extra = " / FINAL_REPORT.md" if fr else ""
+    # 自動更新 run-state 指標檔（成品位置＋階段），避免座標檔走舊
+    try:
+        import run_state
+        run_state.update(stage="phase4_rendered",
+                         artifacts={"final_report_md": str(OUTPUTS / "FINAL_REPORT.md"),
+                                    "synthesis_md": str(OUTPUTS / "synthesis.md"),
+                                    "ledger_csv": str(OUTPUTS / "ledger.csv")})
+        run_state.autofill()
+    except Exception:
+        pass
     print(f"✅ {n} papers → outputs/（report.md / synthesis.md{extra} / ledger.csv）")
 
 

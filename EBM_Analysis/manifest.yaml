@@ -65,6 +65,14 @@ guardrails:
   nonreporting:             {applies_to: sr_ma,      trigger: "評讀 SR/MA 缺失證據"}
   computation_check:        {applies_to: all,        trigger: "輸出含 NNT/ARR"}
   output_selfcheck:         {applies_to: all,        trigger: "送出核心結論前"}
+  selfcheck_consistency:    {applies_to: synthesis,  trigger: "產統合報告前(硬 gate)", note: "tools/selfcheck_consistency.py C1-C10：①RoB2 overall=最不利 ②贊助者偏誤歸發表偏誤 ③SoF合併效應註來源 ④非全文不得low ⑤NNTH非NNH ⑥二分類附CI ⑦運算重算 ⑧連續結果須MID/再表達 ⑨HR結果須絕對欄 ⑩證據體GRADE須齊備。不過則擋渲染。"}
+  model_choice:             {applies_to: sr_ma,       trigger: "outcome 來自 MA", note: "固定vs隨機選擇：禁以 I²/Chi² 決定模型；不對稱下隨機效應放大偏誤(Ch10 §10.10.4.1)"}
+  rare_events:              {applies_to: sr_ma,       trigger: "罕見事件/罕見 harms", note: "雙臂零事件略去、避免固定0.5校正與DL隨機效應、<1%偏好Peto、RD不適用(Ch10 §10.4.4)"}
+  time_to_event:            {applies_to: all,         trigger: "HR/存活/至首次事件", note: "HR≠RR、PH假設、HR→絕對風險再表達(absrisk hr)；SoF須絕對欄(Ch6 §6.8、Ch14 §14.1.5.2)"}
+  prisma_reporting:         {applies_to: synthesis,   trigger: "產最終報告", note: "對齊 PRISMA 2020：流程圖/摘要12項/通俗摘要/Discussion四子標/Conclusions禁籠統(Part III)"}
+  v65_supplements:          {applies_to: all,         trigger: "見各條", note: "預測區間/MID再表達/零事件/estimand/registry secondary/ROB-MEN/RoB2領域4/COI招募者路徑/統計量轉換/共用對照/圖形萃取/證據體GRADE/敏感度分析/critical-outcomes必列/對照SOC/MA採用一致性"}
+  quote_verify:             {applies_to: all,         trigger: "抽取後/定稿前(反幻覺皇冠)", note: "tools/quote_verify.py：每筆 source_locators.quote 回原始全文(local PDF/online/PMC)模糊比對，對不上即 FAIL。實測抓到 AIRLEAF 圖文未核對＋48週誤記。"}
+  no_hardcode_render:       {applies_to: synthesis,   trigger: "報告渲染", note: "renderer 內容文字一律從 cache/RQ 帶、禁硬編題目專屬語句(藥名/PICO/數字)——硬編會挾帶 data 層 gate 抓不到的矛盾(如 SWiM)、且換主題無聲出錯。"}
   adversarial_review:       {applies_to: full_track,  trigger: "Phase 3 後、產報告前", note: "懷疑者複查：抓離群/違規則/未驗證即當低偏誤；revise 則回改重驗"}
   wording_template:         {applies_to: all,        trigger: "輸出核心結論"}
   vote_counting:            {applies_to: synthesis,  trigger: "統合 ≥2 篇"}

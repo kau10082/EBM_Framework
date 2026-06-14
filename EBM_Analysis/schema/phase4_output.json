@@ -81,7 +81,10 @@
             "properties": {
               "trial": {"type": "string"}, "randomization": {"type": "string"}, "deviations": {"type": "string"},
               "missing_data": {"type": "string"}, "measurement": {"type": "string"},
-              "selective_reporting": {"type": "string"}, "overall": {"type": "string"}
+              "selective_reporting": {"type": "string"}, "overall": {"type": "string"},
+              "evidence_basis": {"type": "string", "description": "抽取資料來源(full_text/abstract/ai_synthesis/registry)；非全文者 RoB2 overall 不得 low(selfcheck C4)"},
+              "registry_check": {"type": "string", "description": "註冊 vs 發表主要結果比對結果(selective_reporting/Domain5)"},
+              "note": {"type": "string", "description": "some concerns 原因註記(逐領域)；overall=low 可寫『各領域皆 low』"}
             }
           }
         },
@@ -101,6 +104,32 @@
             }
           }
         },
+        "literature_status": {
+          "type": "array",
+          "description": "納入文獻狀態表（流程圖後）：每篇角色＋全文取得狀態（尤其有無全文）。供 report_completeness 透明度",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["paper", "role", "fulltext"],
+            "properties": {
+              "paper": {"type": "string"}, "role": {"type": "string"},
+              "fulltext": {"type": "string", "description": "全文取得：有全文(線上OA/本機人工補)／僅AI合成摘要／僅書目"}
+            }
+          }
+        },
+        "body_of_evidence": {
+          "type": "array",
+          "description": "★證據體 GRADE（Ch14 §14.2.1）：逐 outcome 對『合併後該結果跨研究』重評確定性，非逐篇分數取均/取最差。不一致性=跨研究、不精確=合併 CI vs MID/OIS、發表偏誤=跨研究。",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["outcome", "certainty", "basis"],
+            "properties": {
+              "outcome": {"type": "string"},
+              "certainty": {"enum": ["high", "moderate", "low", "very_low"]},
+              "basis": {"type": "string", "description": "確定性如何由跨研究證據體導出(五領域於證據體層之判斷摘要)"}
+            }
+          }
+        },
+        "missing_evidence_sensitivity": { "type": ["string", "null"], "description": "缺失證據敏感度分析(ROB-ME；Ch13)：假設未發表/進行中研究為 null，估計合併效應是否被稀釋/翻轉，作為發表偏誤降級之佐證(非僅以『廠商資助』籠統降級)" },
         "publication_bias": { "type": ["string", "null"], "description": "發表偏誤/缺失證據聲明（<10 不畫漏斗圖）" },
         "subgroup_implications": { "type": ["string", "null"], "description": "次群組＋對研究的意涵" },
         "baseline_risk_strata": {
@@ -131,7 +160,10 @@
               "relative_effect": { "type": "string", "description": "RR/OR/HR＋95% CI" },
               "n_participants_studies": { "type": "string", "description": "參與者數（研究數）" },
               "certainty": { "enum": ["high", "moderate", "low", "very_low"] },
-              "comment": { "type": ["string", "null"], "description": "如替代終點侷限、單藥 vs 類別" }
+              "comment": { "type": ["string", "null"], "description": "如替代終點侷限、單藥 vs 類別" },
+              "mid": { "type": ["string", "null"], "description": "連續結果之最小重要差異 MID/MCID（Ch14 §14.1.6.2 應每結果註明）；不精確以 CI 是否跨 MID 判定(Ch15 §15.5)" },
+              "continuous_reexpression": { "type": ["string", "null"], "description": "連續結果可解讀再表達(熟悉量表/平均值之比/MID 單位/二分化 logOR≈1.81×SMD；Ch15 §15.5.3)" },
+              "dose_response": { "type": ["string", "null"], "description": "劑量反應梯度(危害/益處不可只用單一劑量代表類別；Ch14 lumping/splitting＋GRADE 上調領域)" }
             }
           }
         }

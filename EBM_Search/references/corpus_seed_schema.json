@@ -97,6 +97,15 @@
             "type": ["string", "null"],
             "description": "相對 fulltext_dir 的 PDF 檔名(如 <paper_id>.pdf)。fulltext_status∈{have,have_manual} 時應有；否則 null(Analysis 標 light_summary 或待人工補)。"
           },
+          "fulltext_channel": {
+            "type": ["string", "null"],
+            "enum": ["online", "local", "ai_synthesis", "none", null],
+            "description": "★全文取得管道(交班重點，三選一)：online=網路可讀全文(OA／PMC／機構綠色 OA／出版商；Analysis 沿 fulltext_url 線上重讀)；local=本機 PDF(使用者人工補入)；ai_synthesis=無全文、僅 AI 合成摘要(★Analysis 務必特別標註、data_source=ai_synthesis、視為二手並 registry-backfill＋確定性封頂)；none=皆無。Analysis 每次分析皆沿管道『重新讀取原始來源』再萃取，以降低幻覺/失誤。"
+          },
+          "fulltext_url": {
+            "type": ["string", "null"],
+            "description": "online 時填全文可讀的實際 URL(供 Analysis 每次直接重讀，不必再查；機構綠色 OA 填典藏 PDF 連結)。local/ai_synthesis/none 可留 null。"
+          },
           "cross_check": {
             "type": ["string", "null"],
             "description": "選填：PubMed/Crossref 雙源交叉檢核狀態摘要(僅呈現，非篩選依據)。"

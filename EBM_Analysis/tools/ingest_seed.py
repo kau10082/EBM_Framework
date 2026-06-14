@@ -41,9 +41,11 @@ SEED_FILENAME = "_corpus_seed.json"
 SUPPORTED_SCHEMA = "1.0"
 O_PLACEHOLDER = "（待 Phase 0 與使用者補定）"
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import workdir  # noqa: E402  執行期資料導向工作夾（見 workdir.py）
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INPUTS_DIR = os.path.join(ROOT, "inputs")
-CACHE_DIR = os.path.join(ROOT, "cache")
+INPUTS_DIR = workdir.inputs_dir()
+CACHE_DIR = workdir.cache_dir()
 
 
 def _force_utf8_console():

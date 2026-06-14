@@ -38,12 +38,34 @@ It is here to **support** your judgment, not replace expert reading. The final c
 
 ---
 
+## 它怎麼避免「亂掰」和「前後不一」· How it guards against making things up and drifting
+
+AI 最怕兩件事：**掰出不存在的數字**，以及**報告跟它自己的判斷對不上**。這個工具用「機器自己檢查機器」來壓制這兩者——不是靠它自律，而是**過不了關就生不出報告**：
+
+- **每個數字都要回得到原文**：報告裡引用的每一句關鍵數據，都會**自動拿去跟原始全文逐字比對**，對不上就擋下來（連 AI 自己抄錯一個追蹤週數都被抓出來過）。
+- **十幾道一致性檢查**：例如「偏誤風險的整體評級必須等於最差的那一項」「危害的人數一定要附信賴區間，不能假裝精確」「報告裡的確定性等級必須前後一致」——任何一條不符就停。
+- **算術重新算一遍**：所有 NNT、絕對風險、GRADE 確定性等級，都會由程式**重算並核對**，不接受手打的數字。
+- **一鍵全驗**：定稿前一個指令把上面全部跑過，全綠才能出報告。
+
+AI's two biggest risks are **inventing numbers** and **a report that doesn't match its own judgments**. This tool fights both by having **the machine check the machine** — not by trusting itself, but by **refusing to produce a report until every check passes**:
+
+- **Every figure must trace back to the source**: each key number quoted in the report is **automatically matched, word-for-word, against the original full text**, and blocked if it doesn't match (it has even caught the AI mis-typing a follow-up duration).
+- **A dozen-plus consistency checks**: e.g. "overall risk-of-bias must equal the worst domain", "harms must carry a confidence interval, no false precision", "certainty grades must agree across the report" — any breach halts it.
+- **Arithmetic recomputed**: all NNTs, absolute risks and GRADE certainty levels are **recomputed and cross-checked** by code; no hand-typed numbers accepted.
+- **One-command full check**: before finalizing, a single command runs all of the above; the report is only produced when everything is green.
+
+---
+
 ## 怎麼用 · How to use
 
 1. 在 Claude Code 裡**開啟這個資料夾**（`EBM_Framework`）。
 2. 用白話對它說，例如：「**幫我對〈某個主題或藥物〉做 EBM 分析**」「**幫我查文獻**」「**幫我查證這個說法有沒有根據**」。
 3. 它會**分階段進行**，每做完一段就停下來回報、問你是否繼續；你確認後它才往下。中途它會問你一次「**檢索做完了，要不要接著做證據評估？**」，回「**繼續**」即可。
 4. 全部做完後，報告會放在你電腦「**文件**」夾的 `EBM_Framework\reports` 裡（PDF／Markdown）。
+
+5. 一輪做完、想換下一個主題時，對它說「**EBM分析結束**」或「**結案**」：它會**先把這輪封存**（留一份記錄），**再把工作區和報告清空**，下一輪乾淨開始。（它會先列出要刪什麼給你看再動手。）
+
+5. When a round is done and you want a fresh topic, say "**EBM分析結束 / wrap up**": it **archives this round first** (keeping a record), then **clears the workspace and reports** so the next one starts clean. (It shows you what it will delete before doing it.)
 
 > 你**只要會用白話描述問題**就能用，不需要懂底下的技術。下面的〈安裝與設定〉是給**要自己把這套裝起來**的人看的。
 
@@ -66,7 +88,7 @@ It is here to **support** your judgment, not replace expert reading. The final c
 
 | 項目 · Item | 說明 · Notes |
 |---|---|
-| **Claude Code** | 本工具只在 Claude Code 內運作。· Runs only inside Claude Code. |
+| **Claude Code／Desktop** | 兩種用法：在 Claude Code 開啟本資料夾，或匯入打包好的 skill（`ebm-framework`）。· Either open this folder in Claude Code, or import the packaged skill. |
 | **Python 3.8+** | 檢索部分的腳本零第三方相依（純標準庫）。· The search scripts have zero third-party dependencies (stdlib only). |
 | **檢索用 MCP · Search MCPs** | 找文獻會用到 **Consensus**、**PubMed** 等 MCP，建議再加 **OpenEvidence**（設定見下方〈[連接檢索用的 MCP](#連接檢索用的-mcp--connecting-the-search-mcp-servers)〉）。· Finding literature uses MCP servers such as **Consensus** and **PubMed**, with **OpenEvidence** recommended (see below). |
 
@@ -206,9 +228,9 @@ curl -s http://127.0.0.1:8787/health      # 預期 expect: {"ok":true,"connected
 
 ## 給想深入的人 · For the curious
 
-評讀流程逐條對照國際標準 **Cochrane Handbook v6.5** 與 **GRADE**；檢索流程對齊 **Cochrane 第 4 章與 PRISMA-S／PRISMA 2020**（敏感度優先、做引文追蹤、誠實聲明覆蓋限制）。完整規格見 `EBM_Search/SKILL.md`、`EBM_Analysis/ANALYSIS_SPEC.md`，整合流程見 `INTEGRATION.md`。
+評讀流程逐條對照國際標準 **Cochrane Handbook v6.5（全 21 章）** 與 **GRADE**；檢索流程對齊 **Cochrane 第 4 章與 PRISMA-S／PRISMA 2020**（敏感度優先、做引文追蹤、誠實聲明覆蓋限制）。報告含**證據摘要表（SoF）**、絕對效應與 **NNTB／NNTH（附信賴區間）**、**RoB 2 逐領域**、跨研究的**證據體 GRADE**、缺失證據敏感度與註冊庫對照。前述「自我查核」由 `EBM_Analysis/tools/` 的 `selfcheck_consistency.py`（一致性 gate）、`quote_verify.py`（逐字回原文）、`validate.py`（算術重算）、`verify_all.py`（一鍵全驗）落實。完整規格見 `EBM_Search/SEARCH_SPEC.md`、`EBM_Analysis/ANALYSIS_SPEC.md`，整合流程見 `INTEGRATION.md`。
 
-The appraisal is cross-checked against the **Cochrane Handbook v6.5** and **GRADE**; the search aligns with **Cochrane Ch. 4 and PRISMA-S / PRISMA 2020**. Full specs are in `EBM_Search/SKILL.md` and `EBM_Analysis/ANALYSIS_SPEC.md`; the integration is in `INTEGRATION.md`.
+The appraisal is cross-checked against the **Cochrane Handbook v6.5 (all 21 chapters)** and **GRADE**; the search aligns with **Cochrane Ch. 4 and PRISMA-S / PRISMA 2020**. Reports include a **Summary-of-Findings table**, absolute effects with **NNTB／NNTH (with confidence intervals)**, **per-domain RoB 2**, a cross-study **body-of-evidence GRADE**, a missing-evidence sensitivity analysis, and trial-registry cross-checks. The "self-checking" above is implemented by `selfcheck_consistency.py` (consistency gates), `quote_verify.py` (word-for-word source matching), `validate.py` (arithmetic recompute) and `verify_all.py` (one-command full check) in `EBM_Analysis/tools/`. Full specs are in `EBM_Search/SEARCH_SPEC.md` and `EBM_Analysis/ANALYSIS_SPEC.md`; the integration is in `INTEGRATION.md`.
 
 > ⚠️ **誠實的提醒**：評讀的判斷終究是 Claude 做的。雖然有多道結構與複查把關，但複查者仍是同一個 Claude，不是真正獨立的第二方；結論請務必由你或專業人員覆核。
 > **An honest caveat**: the appraisal judgments are ultimately Claude's. Despite several structural checks and a review pass, the reviewer is the same Claude — not a truly independent second party; please have a human expert confirm the conclusions.

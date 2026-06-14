@@ -57,5 +57,7 @@ packaging:
 
 analysis:
   project_dir: ""                    # EBM_Analysis 專案根的絕對路徑（個資）；留空＝由 skill 以相對位置推定
-  pdf_output_dir: ""                 # 評讀成品 PDF；留空＝寫到專案 outputs/。建議 <文件>\EBM_Framework\reports
+  work_dir: ""                       # ★執行期資料夾：inputs/cache/outputs/runs 寫這底下；留空＝寫到專案 EBM_Analysis/ 內（Claude Code 專案模式）。
+                                     #   打包成 skill 用時務必設成 <文件>\EBM_Framework\work，否則 run 資料會寫進安裝包、重匯入時被洗掉。env 覆寫：EBM_WORKDIR
+  pdf_output_dir: ""                 # 評讀成品 PDF；留空＝寫到工作夾 outputs/。建議 <文件>\EBM_Framework\reports
   cjk_font: "C:/Windows/Fonts/msjh.ttc"   # PDF CJK 字型（系統字型）

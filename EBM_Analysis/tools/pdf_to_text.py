@@ -14,8 +14,10 @@ except Exception:
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
-INPUTS = ROOT / "inputs"
-CACHE = ROOT / "cache"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workdir  # noqa: E402  執行期資料導向工作夾（見 workdir.py）
+INPUTS = Path(workdir.inputs_dir())
+CACHE = Path(workdir.cache_dir())
 MIN_CHARS = 400
 
 

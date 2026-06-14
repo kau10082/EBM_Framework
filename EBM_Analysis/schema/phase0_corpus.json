@@ -15,7 +15,30 @@
         "P": { "type": "string" },
         "I": { "type": "string" },
         "C": { "type": "string" },
-        "O": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        "O": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "outcomes_prioritized": {
+          "type": "array", "maxItems": 7,
+          "description": "事前 outcome 排序(Ch3 §3.2.4 C14-C18)：最多 7 個、含至少一益一害、標 critical/important、註明測量工具/時點。",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["name", "importance"],
+            "properties": {
+              "name": {"type": "string"},
+              "importance": {"enum": ["critical", "important", "not_important"]},
+              "direction": {"enum": ["benefit", "harm", "both"]},
+              "measure_timepoint": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "eligibility": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "description": "事前合格條件(Ch3 §3.2 C5-C11)：設計合格條件＋理由、部分合格參與者處理策略。",
+          "properties": {
+            "study_designs": {"type": ["string", "null"]},
+            "design_rationale": {"type": ["string", "null"]},
+            "partial_eligibility_strategy": {"type": ["string", "null"]}
+          }
+        }
       }
     },
     "papers": {
