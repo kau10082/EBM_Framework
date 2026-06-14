@@ -51,10 +51,22 @@ def source_text(paper_id, seed_map):
                 return _pdf_text(_fetch(url)), "online:pdf"
             m = re.search(r"(PMC\d+)", url)
             if m:
-                num = m.group(1).replace("PMC", "")
-                xml = _fetch("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=%s&rettype=full&retmode=xml" % num).decode("utf-8", "replace")
-                body = re.search(r"<body\b.*?</body>", xml, re.S)
-                return re.sub(r"<[^>]+>", " ", body.group(0) if body else xml), "online:pmc"
+                pmcid = m.group(1)
+                # 先用 Europe PMC（容器內可達），失敗再退 NCBI efetch
+                xml = None
+                try:
+                    xml = _fetch("https://www.ebi.ac.uk/europepmc/webservices/rest/%s/fullTextXML" % pmcid).decode("utf-8", "replace")
+                    if len(xml) < 2000:
+                        xml = None
+                except Exception:
+                    xml = None
+                if not xml:
+                    num = pmcid.replace("PMC", "")
+                    xml = _fetch("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=%s&rettype=full&retmode=xml" % num).decode("utf-8", "replace")
+                # 摘要與正文都算「可引用全文」：abstract 常含主要結果(HR/RR/N),只取 <body> 會漏抓
+                parts = re.findall(r"<abstract\b.*?</abstract>", xml, re.S) + re.findall(r"<body\b.*?</body>", xml, re.S)
+                src = " ".join(parts) if parts else xml
+                return re.sub(r"<[^>]+>", " ", src), "online:pmc"
             return _pdf_text(_fetch(url)), "online:fetch"
         except Exception as e:
             return None, "online 取得失敗:%s" % str(e)[:40]

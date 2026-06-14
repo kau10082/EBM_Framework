@@ -87,7 +87,10 @@ def main():
         srp = os.path.join(ftd, "_search_report.json") if ftd else None
         if srp and os.path.exists(srp):
             sr = json.loads(open(srp, encoding="utf-8").read())
-            n_search = len(sr.get("studies", []))
+            # 只數「試驗 Study 單位」：檢索報告 studies 表常含 SR/MA 顯示群(非 Study)，排除之
+            # (與 analysis 的 study_characteristics＝試驗單位 對齊；SR/MA 屬合併效應來源、非分析單位)
+            n_search = len([g for g in sr.get("studies", [])
+                            if not str(g.get("study", "")).replace("\n", " ").strip().upper().startswith("SR/MA")])
             syn = json.loads((CACHE / "_synthesis.json").read_text(encoding="utf-8")).get("synthesis", {})
             n_analysis = len(syn.get("study_characteristics", []))
             ok = (n_search == n_analysis) or n_analysis == 0
@@ -95,6 +98,31 @@ def main():
             print(f"  {'✅' if ok else '❌'} 跨報告 Study 數一致（search={n_search} / analysis={n_analysis}）")
     except Exception as e:
         print("  ⏭  跨報告檢查略過:", str(e)[:40])
+
+    # 6) 渲染煙霧測試（視覺/完整性：磚塊/章節跳號/空表/SoF 必要結局）——若 GRADE PDF 已產
+    try:
+        pdf = None
+        try:
+            import run_state
+            pdf = (run_state.load() or {}).get("paths", {}).get("grade_pdf")
+        except Exception:
+            pass
+        for c in (pdf, os.path.join(workdir.outputs_dir(), "FINAL_REPORT.pdf")):
+            if c and os.path.exists(c):
+                rr = subprocess.run([sys.executable, str(HERE / "render_smoketest.py"), c],
+                                    capture_output=True, text=True, encoding="utf-8")
+                ok = rr.returncode == 0
+                results.append(("渲染煙霧測試", ok, rr.stdout[-200:]))
+                print(f"  {'✅' if ok else '❌'} 渲染煙霧測試" + ("" if ok else "（見下）"))
+                if not ok:
+                    for ln in rr.stdout.splitlines():
+                        if "❌" in ln: print("    " + ln.strip())
+                break
+        else:
+            print("  ⏭  渲染煙霧測試略過（GRADE PDF 未產）")
+    except Exception as e:
+        print("  ⏭  渲染煙霧測試略過:", str(e)[:40])
+
     # 彙總
     bad = [n for n, ok, _ in results if not ok]
     print("\n== 彙總 ==")

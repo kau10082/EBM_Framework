@@ -115,9 +115,16 @@ def validate(seed):
             if sug.get("grade_track") not in GRADE_TRACK:
                 errs.append("%s suggested.grade_track 非法(實得 %r)" % (tag, sug.get("grade_track")))
 
-        # 一致性：有全文者應給 pdf_file；無全文者建議 light_summary
-        if p.get("fulltext_status") in ("have", "have_manual") and not p.get("pdf_file"):
-            errs.append("%s fulltext_status=%s 但缺 pdf_file" % (tag, p.get("fulltext_status")))
+        # 一致性：有全文者要有「可取得依據」。本機管道(local/人工補)要 pdf_file；
+        # 線上管道(Claude 線上直讀,不必下載 PDF；對齊 analysis-read-fulltext-not-download)改要 fulltext_url 或 doi/pmid。
+        if p.get("fulltext_status") in ("have", "have_manual"):
+            ch = p.get("fulltext_channel")
+            if ch == "online":
+                if not (p.get("fulltext_url") or p.get("doi") or p.get("pmid")):
+                    errs.append("%s fulltext_status=%s channel=online 但缺 fulltext_url/doi/pmid(線上取得依據)"
+                                % (tag, p.get("fulltext_status")))
+            elif not p.get("pdf_file"):  # local / 人工補 / 未標 channel → 視為本機，需 pdf_file
+                errs.append("%s fulltext_status=%s(本機管道) 但缺 pdf_file" % (tag, p.get("fulltext_status")))
 
     return errs
 

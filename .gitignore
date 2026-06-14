@@ -41,3 +41,6 @@ _strip*.py
 _build*.py
 
 # 註：committed 範本只含 *.example.yaml（佔位、無真值），不被上面規則排除。
+
+# session 暫存
+_run_tmp/

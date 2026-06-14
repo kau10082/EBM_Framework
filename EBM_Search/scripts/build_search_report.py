@@ -18,14 +18,17 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, CondPageBreak, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
 # ── 字形淨化（msjh 缺字形 → 等義有字形；雙向箭頭/三角項目符全缺）──
 _SAFE_TR = str.maketrans({'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○',
-                          '↔': '／', '⇔': '／', '⇄': '／', '⟷': '／', '▸': '•', '►': '•'})
+                          '↔': '／', '⇔': '／', '⇄': '／', '⟷': '／', '▸': '•', '►': '•',
+                          # v0.20.1：補淨化 msjh 常缺字形的符號(實測造成磚塊)
+                          '™': '', '✅': '○', '✓': '○', '✔': '○', '∧': '且', '≠': '不等於',
+                          '→': '→', ' ': ' ', '⟶': '→', '►': '•'})
 def safe(t): return (t or '').translate(_SAFE_TR)
 
 def _font():
@@ -109,6 +112,10 @@ def build(data, out_pdf):
     E.append(Spacer(1, 4))
 
     # 二、核心證據表（以 Study 分組）
+    # 標題不孤行：核心表每個 Study 用 SPAN→首個 Study 區塊不可拆,門檻須容得下「表頭＋最大首區塊」,
+    # 否則整塊跳頁而標題留前頁。動態估首個 study 區塊高度(列數×列高)再加表頭裕度。
+    _first_rows = (len(data.get("studies", [{}])[0].get("reports", [])) + 2) if data.get("studies") else 3
+    E.append(CondPageBreak(min(150, _first_rows * 7.0 + 18) * mm))
     E.append(P("二、核心證據表：納入原始研究（以 Study 為單位；含全文狀態與交叉檢核）", H2))
     rows = [[P("<b>研究（期別/登錄）</b>", CELL), P("<b>報告（標題簡述／期刊年）</b>", CELL), P("<b>DOI</b>", CELL), P("<b>全文狀態</b>", CELL), P("<b>交叉檢核</b>", CELL)]]
     spans = []; r = 1
@@ -126,6 +133,7 @@ def build(data, out_pdf):
 
     # 二之二、進行中試驗
     if data.get("ongoing_trials"):
+        E.append(CondPageBreak(40 * mm))
         E.append(P("二之二、進行中試驗（ClinicalTrials.gov；不計入證據，供完整度查核）", H2))
         orows = [[P("<b>登錄號</b>", CELL), P("<b>內容（藥物／類型）</b>", CELL), P("<b>狀態</b>", CELL)]] + [[P(a, CELL), P(b, CELL), P(c, CELL)] for a, b, c in data["ongoing_trials"]]
         t2b = Table(orows, colWidths=[34 * mm, 180 * mm, 60 * mm], repeatRows=1)
@@ -136,6 +144,7 @@ def build(data, out_pdf):
 
     # 三、背景
     if data.get("background"):
+        E.append(CondPageBreak(40 * mm))
         E.append(P("三、背景／對照參考（不計入納入 N；供脈絡）", H2))
         b = [[P("<b>背景文獻（標題／來源）</b>", CELL), P("<b>DOI</b>", CELL), P("<b>型態</b>", CELL), P("<b>全文狀態</b>", CELL)]] + [[P(t, CELL), P(d, CELL), P(ty, CELL), P(fs, CELL)] for t, d, ty, fs in data["background"]]
         t3 = Table(b, colWidths=[150 * mm, 52 * mm, 30 * mm, 42 * mm], repeatRows=1)
@@ -146,12 +155,14 @@ def build(data, out_pdf):
 
     # 四、APA
     if data.get("apa"):
+        E.append(CondPageBreak(35 * mm))
         E.append(P("四、完整參考文獻（APA，納入報告）", H2))
         for i, a in enumerate(data["apa"], 1): E.append(P(f"{i}. {a}", SMALL))
         E.append(Spacer(1, 4))
 
     # 五、檢索原則
     if data.get("axes"):
+        E.append(CondPageBreak(35 * mm))
         E.append(P("五、檢索原則／方法（四軸展開字眼與必含連言軸篩選字眼）", H2))
         E.append(P("<b>四軸別名展開（檢索用同義詞）：</b>", BODY))
         for ln in data["axes"]: E.append(P("　" + ln, SMALL))
@@ -161,6 +172,7 @@ def build(data, out_pdf):
 
     # 方法學註記
     if data.get("method_notes"):
+        E.append(CondPageBreak(30 * mm))
         E.append(P("方法學註記與限制", H2))
         for n in data["method_notes"]: E.append(P("• " + n, SMALL))
 

@@ -64,6 +64,27 @@ def main(argv):
     direction = (_opt(argv, "--dir") or [None])[0]
     term = _nnt_term(direction)
 
+    # 防呆(v0.20.1)：rr/hr/or 位置順序「效應量在前、對照風險在後」易寫反——
+    # 支援具名旗標覆寫(--rr/--hr/--or/--control)，順序就不會錯；計算前一律印醒目「解讀」行。
+    def _pos(i):  # 位置參數：是數字才取，旗標(--x)回 None
+        return argv[i] if (i < len(argv) and not str(argv[i]).startswith("--")) else None
+    def _resolve():
+        pe, pc = _pos(1), _pos(2)
+        eff = float(pe) if pe is not None else None
+        ctrl = _norm(pc) if pc is not None else None
+        for fl in ("--rr", "--hr", "--or"):
+            v = _opt(argv, fl)
+            if v: eff = float(v[0])
+        v = _opt(argv, "--control") or _opt(argv, "--acr") or _opt(argv, "--pc")
+        if v: ctrl = _norm(v[0])
+        if eff is None or ctrl is None:
+            raise SystemExit(f"absrisk {kind}：需效應量與對照風險。位置式『absrisk {kind} <效應量> <對照風險>』"
+                             f"（效應量在前），或具名式『absrisk {kind} --{kind} X --control Y』(順序不會錯)。")
+        return eff, ctrl
+    def _echo(eff, ctrl):
+        print(f"▶ 解讀：效應量 {kind.upper()}={eff}、對照風險={ctrl*100:.1f}%"
+              f"（若反了請改用：absrisk {kind} --{kind if kind in('rr','hr','or') else 'rr'} {eff} --control {ctrl}）")
+
     # SMD → OR（連續結果可解讀化，Ch15 §15.5.3.3：lnOR ≈ 1.81×SMD）
     if kind == "smd2or":
         import math
@@ -77,7 +98,8 @@ def main(argv):
 
     # 時間事件 HR → 絕對風險（Ch14 §14.1.5.2）：給對照組於某時點之事件風險 p_c → 介入 p_i=1-(1-p_c)^HR
     if kind == "hr":
-        hr = float(argv[1]); pc = _norm(argv[2]); pi = 1 - (1 - pc) ** hr; rd = pi - pc
+        hr, pc = _resolve(); _echo(hr, pc)
+        pi = 1 - (1 - pc) ** hr; rd = pi - pc
         print(f"HR={hr}，對照組事件風險 {pc*100:.1f}%（某時點）→ 介入組 {pi*100:.1f}%（假設比例風險）")
         print(f"  絕對風險差 RD = {rd*100:+.1f} 個百分點" + (f"；{term} = {1/abs(rd):.0f}" if abs(rd) > 1e-9 else ""))
         ci = _opt(argv, "--ci", 2)
@@ -120,14 +142,13 @@ def main(argv):
             print(f"  {term} = {1/abs(rd):.0f}")
         return 0
 
-    eff = float(argv[1])
     if "--rate" in argv:
-        acr = float(argv[2]); corr = eff * acr; rd = corr - acr
+        eff = float(argv[1]); acr = float(argv[2]); corr = eff * acr; rd = corr - acr
         print(f"率比 {eff}，對照率={acr}/單位時間 → 介入率 {corr:.3f}，率差 {rd:+.3f}/單位時間")
         print("  ⚠️ 率（count）結果不套 NNT。")
         return 0
 
-    acr = _norm(argv[2])
+    eff, acr = _resolve(); _echo(eff, acr)
     corr = _corr(kind, eff, acr); rd = corr - acr
     print(f"相對效應 {kind.upper()}={eff}，對照風險 ACR={acr*100:.1f}% → 對應介入風險 {corr*100:.1f}%")
     print(f"  絕對風險差 RD = {rd*100:+.1f} 個百分點")
