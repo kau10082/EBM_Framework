@@ -84,7 +84,7 @@ EBM_Framework/
 |---|---|
 | **Claude Code** | 本框架只在 Claude Code 內運作，不再打包成桌面版 skill。· Runs only inside Claude Code; no longer packaged as a Desktop skill. |
 | **Python 3.8+** | EBM_Search 的腳本零第三方相依（純標準庫）。· EBM_Search scripts have zero third-party dependencies (stdlib only). |
-| **檢索用 MCP · Search MCPs** | 檢索階段需連上 **Consensus** 與 **PubMed** MCP，建議再加 **OpenEvidence**。ClinicalTrials.gov／OpenAlex／Europe PMC 免金鑰、不需設定。· The search stage needs **Consensus** and **PubMed** MCP, with **OpenEvidence** recommended. ClinicalTrials.gov / OpenAlex / Europe PMC are keyless. |
+| **檢索用 MCP · Search MCPs** | 檢索階段需連上 **Consensus** 與 **PubMed** MCP，建議再加 **OpenEvidence**（設定見下方〈[連接檢索用的 MCP](#連接檢索用的-mcp--connecting-the-search-mcp-servers)〉）。ClinicalTrials.gov／OpenAlex／Europe PMC 免金鑰、不需設定。· The search stage needs **Consensus** and **PubMed** MCP, with **OpenEvidence** recommended (see *Connecting the search MCP servers* below). ClinicalTrials.gov / OpenAlex / Europe PMC are keyless. |
 
 ---
 
@@ -163,6 +163,65 @@ pip install reportlab                            # 只有要產 PDF 報告時 ·
 ```
 
 EBM_Search 本身不需要 `pip install`（純標準庫）。· EBM_Search needs no `pip install` (stdlib only).
+
+---
+
+## 連接檢索用的 MCP · Connecting the search MCP servers
+
+檢索階段（EBM_Search）靠幾個 MCP server 取得候選文獻。它們都是**每台機器各自連、屬於你的 Claude Code 環境，不會放進這個 repo**。每條檢索腿都會回報自己的狀態，所以**就算只連上其中幾個也能跑**——沒連到的腿會被標示為「跳過」。下游的評讀（EBM_Analysis）則完全不需要 MCP。
+
+The search stage (EBM_Search) pulls candidate literature from a few MCP servers. They are **connected per-machine as part of your own Claude Code setup and are never committed to this repo**. Each search leg reports its own status, so **the pipeline runs even if you only connect some of them** — any leg you haven't connected is simply marked "skipped". The downstream appraisal (EBM_Analysis) needs no MCP at all.
+
+> 在 Claude Code 加 MCP 的兩種方式：用 `claude mcp add <名稱> -- <啟動指令>`，或直接編輯使用者層的 `~/.claude.json`（也可放專案層 `.mcp.json`）。
+> Two ways to add an MCP in Claude Code: run `claude mcp add <name> -- <launch-command>`, or edit the user-level `~/.claude.json` (a project-level `.mcp.json` also works).
+
+### Consensus MCP（學術語意搜尋 · semantic literature search）
+
+提供 AI 合成的候選文獻，框架以 `Consensus:search` 呼叫；屬「被驗證的來源」，真偽一律交給 Crossref／PubMed 把關。請依 Consensus 官方的 MCP 說明連上。
+
+Supplies AI-synthesized candidate papers, called via `Consensus:search`; treated as a "to-be-verified" source whose existence is always checked against Crossref/PubMed. Connect it following Consensus's official MCP instructions.
+
+### PubMed MCP（MEDLINE 檢索與驗證 · search + verification）
+
+提供 `search_articles`、`get_article_metadata`、`get_full_text_article` 等工具，同時用於**深度檢索**與**驗證 lane**（自帶 PMID/DOI 可預過）。連上任一可用的 PubMed／NCBI MCP 即可。
+
+Provides tools like `search_articles`, `get_article_metadata`, and `get_full_text_article`, used both for **deep retrieval** and as a **verification lane** (its built-in PMID/DOI pre-validates hits). Connect any working PubMed/NCBI MCP.
+
+### OpenEvidence MCP（建議 · recommended）
+
+採用社群維護的 **[`htlin222/openevidence-mcp`](https://github.com/htlin222/openevidence-mcp)**——**非官方**、**免 API key**，透過你**已登入的瀏覽器分頁**查詢 OpenEvidence；支援 fire-and-forget 提問、可並行的 relay daemon，回傳的引用自帶 **BibTeX ＋ Crossref 驗證**（所以高相似度者可直接視為預過）。
+
+Uses the community-maintained **[`htlin222/openevidence-mcp`](https://github.com/htlin222/openevidence-mcp)** — **unofficial**, **no API key** — querying OpenEvidence through your **already-logged-in browser tab**. It supports fire-and-forget asks, a shared relay daemon for concurrent sessions, and returns citations carrying **BibTeX + Crossref validation** (so high-similarity hits count as pre-verified).
+
+**安裝 · Install**（需 Node.js ≥ 20、Python 3）：
+
+```bash
+git clone https://github.com/htlin222/openevidence-mcp.git
+cd openevidence-mcp
+make all                       # 裝相依、建 server＋relay 擴充、註冊進 Claude/Codex
+# 只想註冊到 Claude Code： make install-claude-global
+```
+
+**登入（一次性）· Authenticate (one-time)**：到 `chrome://extensions` 開啟「開發人員模式」→「載入未封裝」選 `extension/dist`，並在該瀏覽器**保持登入 openevidence.com、分頁不關**。驗證連線：
+
+In `chrome://extensions`, enable Developer mode → Load unpacked → pick `extension/dist`, then **stay logged into openevidence.com in that browser and keep the tab open**. Check connectivity:
+
+```bash
+curl -s http://127.0.0.1:8787/health      # 預期 expect: {"ok":true,"connected":true,...}
+```
+
+框架用到的工具與旗標：`oe_ask`（提問，預設 fire-and-forget；`wait_for_completion:true` 可一次取回）、`oe_article_get`（取結果，`include_bibtex`）、`oe_auth_status`（查登入）；Crossref 驗證由 `OE_MCP_CROSSREF_VALIDATE=1`（預設開）控制。
+
+Tools/flags the framework uses: `oe_ask` (fire-and-forget by default; `wait_for_completion:true` to block), `oe_article_get` (`include_bibtex`), and `oe_auth_status`; Crossref validation is controlled by `OE_MCP_CROSSREF_VALIDATE=1` (on by default).
+
+> ⚠️ OpenEvidence 以美國為中心、已退出歐盟與英國；非美國使用者請先用 `oe_auth_status` 確認可存取，不能用時此腿自動跳過。
+> OpenEvidence is US-centric and has withdrawn from the EU/UK; non-US users should confirm access via `oe_auth_status` first — the leg auto-skips when unavailable.
+
+### 免設定的來源 · No-setup sources
+
+**ClinicalTrials.gov、OpenAlex、Europe PMC** 由腳本直接走公開 HTTP API，**免金鑰、不需 MCP**。**Epistemonikos** 走直接 API，需要一個免費 token（填在 `config/settings.yaml` 的 `epistemonikos.api_token`），留空則該腿略過。
+
+**ClinicalTrials.gov, OpenAlex, and Europe PMC** are called directly over public HTTP APIs by the scripts — **keyless, no MCP needed**. **Epistemonikos** uses a direct API and needs a free token (set `epistemonikos.api_token` in `config/settings.yaml`); leave it empty to skip that leg.
 
 ---
 
