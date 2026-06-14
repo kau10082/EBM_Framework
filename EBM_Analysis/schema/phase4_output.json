@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 4 — 輸出（單篇報告 + 統合）的結構化真相來源",
+  "description": "人讀報告由本物件渲染，確保報告不與判定漂移。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["per_paper", "synthesis"],
+  "properties": {
+    "per_paper": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paper_id", "pico", "bottom_line", "dashboard", "caveats", "selfcheck_pass"],
+        "properties": {
+          "paper_id": { "type": "string" },
+          "pico": { "type": "string" },
+          "bottom_line": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "certainty", "wording_tier"],
+            "properties": {
+              "text": { "type": "string" },
+              "certainty": { "enum": ["high", "moderate", "low", "very_low"] },
+              "wording_tier": { "enum": ["直述", "likely", "may", "非常不確定"], "description": "wording_template 一致性" }
+            }
+          },
+          "dashboard": { "type": "string", "description": "APA + 方括號【GRADE/起始設計/升降領域/N/方法學】；禁效果數據與 p 值" },
+          "caveats": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "surrogate":    { "type": ["string", "null"] },
+              "harms":        { "type": ["string", "null"] },
+              "coi":          { "type": ["string", "null"] },
+              "imprecision":  { "type": ["string", "null"] },
+              "nma":          { "type": ["string", "null"] },
+              "nonreporting": { "type": ["string", "null"] }
+            }
+          },
+          "computation_checks": { "type": "array", "items": { "type": "string" } },
+          "selfcheck_pass": { "type": "boolean", "description": "output_selfcheck gate；false 不得輸出" }
+        }
+      }
+    },
+    "synthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consistency", "vote_counting_check", "conflict_analysis", "weight_adjudication"],
+      "properties": {
+        "consistency": { "type": "string", "description": "依效果估計收斂，非結論篇數" },
+        "vote_counting_check": { "type": "string", "description": "vote_counting 三層可取性" },
+        "swim_check":        { "type": ["string", "null"] },
+        "overlap_check":     { "type": ["string", "null"] },
+        "nma_check":         { "type": ["string", "null"] },
+        "conflict_analysis": { "type": "string" },
+        "weight_adjudication": { "type": "string", "description": "依 GRADE/RoB/一致性；不以 N 規模/期刊名" },
+        "report_title": { "type": ["string", "null"], "description": "最終報告標題" },
+        "bottom_line": { "type": "array", "items": { "type": "string" }, "description": "總結要點（FINAL_REPORT 自動渲染用）" },
+        "clinical_one_liner": { "type": ["string", "null"], "description": "給臨床的一句話" },
+        "study_characteristics": {
+          "type": "array",
+          "description": "納入研究特徵表（report_completeness）",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["trial", "drug", "phase", "n", "dose", "duration", "comparator", "primary_outcome"],
+            "properties": {
+              "trial": {"type": "string"}, "drug": {"type": "string"}, "phase": {"type": "string"},
+              "n": {"type": "string"}, "dose": {"type": "string"}, "duration": {"type": "string"},
+              "comparator": {"type": "string"}, "primary_outcome": {"type": "string"}
+            }
+          }
+        },
+        "rob_summary": {
+          "type": "array",
+          "description": "RoB 2 逐領域摘要（report_completeness）",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["trial", "randomization", "deviations", "missing_data", "measurement", "selective_reporting", "overall"],
+            "properties": {
+              "trial": {"type": "string"}, "randomization": {"type": "string"}, "deviations": {"type": "string"},
+              "missing_data": {"type": "string"}, "measurement": {"type": "string"},
+              "selective_reporting": {"type": "string"}, "overall": {"type": "string"}
+            }
+          }
+        },
+        "related_reviews": {
+          "type": "array",
+          "description": "相關 SR/MA 特徵＋AMSTAR 2 評級（amstar2 護欄）。與 4 RCT『納入研究特徵表』分離，維持 study-vs-review 單位區分（Ch V）；去重後不與個別 RCT 結論疊加（overlap_indirect）",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["review", "scope", "trials_covered", "amstar2_rating", "role"],
+            "properties": {
+              "review": {"type": "string", "description": "作者年代＋類型（如 Emara 2025 MA）"},
+              "scope": {"type": "string", "description": "涵蓋範圍（藥物／結果）"},
+              "trials_covered": {"type": "string", "description": "納入之原始試驗"},
+              "amstar2_rating": {"enum": ["high", "moderate", "low", "critically_low"], "description": "AMSTAR 2 整體信心（依關鍵領域缺陷數）"},
+              "amstar2_basis": {"type": ["string", "null"], "description": "評級依據：滿足/未滿足之關鍵領域（註冊/檢索/RoB/方法/發表偏誤/RoB入詮釋/排除清單）"},
+              "role": {"type": "string", "description": "在本報告中的角色（如校準／類別層級參照）"}
+            }
+          }
+        },
+        "publication_bias": { "type": ["string", "null"], "description": "發表偏誤/缺失證據聲明（<10 不畫漏斗圖）" },
+        "subgroup_implications": { "type": ["string", "null"], "description": "次群組＋對研究的意涵" },
+        "baseline_risk_strata": {
+          "type": "array",
+          "description": "基準風險分層的絕對效應",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["baseline_risk", "corresponding", "absolute_reduction"],
+            "properties": {
+              "baseline_risk": {"type": "string"}, "corresponding": {"type": "string"}, "absolute_reduction": {"type": "string"}
+            }
+          }
+        },
+        "limitations": { "type": "array", "items": { "type": "string" }, "description": "限制與尚待釐清" },
+        "sof": {
+          "type": "array",
+          "description": "Summary of Findings 表（sof_table 護欄）：最多 7 個病患重要結果；二分類須相對＋絕對並列",
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["outcome", "assumed_control_risk", "corresponding_risk", "absolute_effect", "relative_effect", "n_participants_studies", "certainty"],
+            "properties": {
+              "outcome": { "type": "string", "description": "結果＋測量時框" },
+              "assumed_control_risk": { "type": "string", "description": "對照組基線風險/率（註明來源）" },
+              "corresponding_risk": { "type": "string", "description": "介入組對應風險/率（由相對效應×基線導出）" },
+              "absolute_effect": { "type": "string", "description": "風險差/NNT（二分類）或率差（rate）；連續結果標 MD" },
+              "relative_effect": { "type": "string", "description": "RR/OR/HR＋95% CI" },
+              "n_participants_studies": { "type": "string", "description": "參與者數（研究數）" },
+              "certainty": { "enum": ["high", "moderate", "low", "very_low"] },
+              "comment": { "type": ["string", "null"], "description": "如替代終點侷限、單藥 vs 類別" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

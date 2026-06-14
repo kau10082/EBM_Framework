@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 2 — 多軌分級與 GRADE 起始確定性",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["paper_id", "integrity_check", "track", "grade_start"],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "integrity_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retraction", "erratum_or_eoc", "action"],
+      "properties": {
+        "retraction": { "type": "boolean" },
+        "erratum_or_eoc": { "type": "boolean" },
+        "action": { "enum": ["exclude", "flag", "none"] },
+        "note": { "type": "string" }
+      }
+    },
+    "track": { "enum": ["A", "B", "C", "low"], "description": "A=SR/MA, B=RCT, C=NRSI, low=case report 等" },
+    "grade_start": { "enum": ["high", "moderate", "low", "very_low"] },
+    "design_signals": {
+      "type": "object",
+      "description": "軌道 A 辨識訊號（非確定性判定）",
+      "additionalProperties": false,
+      "properties": {
+        "databases_searched": { "type": ["boolean", "null"] },
+        "prisma_or_criteria": { "type": ["boolean", "null"] },
+        "i2_or_forest": { "type": ["boolean", "null"] }
+      }
+    },
+    "selective_reporting": {
+      "type": "object",
+      "description": "選擇性報告查核（註冊計畫 vs 發表；selective_reporting 護欄）",
+      "additionalProperties": false,
+      "required": ["checked", "status"],
+      "properties": {
+        "checked": { "type": "boolean", "description": "是否實際取得並比對註冊 outcome 清單" },
+        "registry": { "type": ["string", "null"], "description": "NCT/EudraCT/PROSPERO 號" },
+        "status": { "enum": ["consistent", "switched", "unreported", "unclear"] },
+        "detail": { "type": ["string", "null"] },
+        "downgrade_candidate": { "type": "boolean" }
+      }
+    },
+    "protocol_completeness": {
+      "type": "array",
+      "description": "僅 SR/MA；10 項逐查（protocol_completeness 護欄）",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "status", "downgrade_candidate"],
+        "properties": {
+          "item": { "type": "string", "description": "①-⑩ 項目名" },
+          "status": { "enum": ["yes", "no", "unclear"] },
+          "downgrade_candidate": { "type": "boolean" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "track": { "const": "A" } } },
+      "then": { "required": ["protocol_completeness"] }
+    }
+  ]
+}

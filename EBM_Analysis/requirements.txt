@@ -1,0 +1,5 @@
+# tools/ 的無 API 輔助所需（運算引擎是 Claude 本身，不需 anthropic SDK）。
+jsonschema>=4.0    # tools/validate.py：驗證各階段 JSON 是否符合 schema
+PyYAML>=6.0        # 讀 manifest.yaml
+pymupdf>=1.23      # tools/pdf_to_text.py：PDF 抽文字（首選）
+pypdf>=4.0         # 後備抽取器

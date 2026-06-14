@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 1 — 結構化數據提取",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["paper_id", "citation", "data_source", "design", "pico", "n_total", "data_gaps", "source_locators", "extraction_validation"],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "citation": { "type": "string", "description": "APA 格式" },
+    "data_source": {
+      "type": "array",
+      "minItems": 1,
+      "description": "本次抽取用到的資料來源（registry_backfill 護欄）；ai_synthesis 與 abstract 須誠實標記",
+      "items": { "enum": ["full_text", "registry_results", "regulatory_doc", "abstract", "ai_synthesis"] }
+    },
+    "design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "multicenter"],
+      "properties": {
+        "type": { "enum": ["SR-MA", "RCT", "NRSI", "case-report", "other"] },
+        "multicenter": { "type": ["boolean", "null"] }
+      }
+    },
+    "pico": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["P", "I", "C", "O"],
+      "properties": {
+        "P": { "type": "string" },
+        "I": { "type": "string" },
+        "C": { "type": "string" },
+        "O": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "nature"],
+            "properties": {
+              "name": { "type": "string" },
+              "nature": { "enum": ["clinical", "surrogate"], "description": "outcome_nature 護欄" },
+              "effect_measure": { "type": ["string", "null"], "description": "RR/OR/MD/SMD/HR…" },
+              "point_estimate": { "type": ["number", "null"] },
+              "ci": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "n_total": { "type": ["integer", "string", "null"], "description": "整數或 '[Not Stated in Source]'" },
+    "forest_plot_present": { "type": "boolean" },
+    "i2": { "type": ["number", "string", "null"], "description": "數值或 '[Not Stated in Source]'" },
+    "data_gaps": {
+      "type": "array",
+      "description": "data_honesty：所有標 [Not Stated in Source] 或 ⚠️ 資料缺漏 的欄位",
+      "items": { "type": "string" }
+    },
+    "source_locators": {
+      "type": "array",
+      "minItems": 1,
+      "description": "關鍵數字（N、主要效應量與 CI 等）須逐筆附原文逐字引用 quote，供回核",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "quote", "page", "section"],
+        "properties": {
+          "claim": { "type": "string" },
+          "quote": { "type": "string", "description": "原文逐字片段（不得改寫；確認抽出數字確實在原文）" },
+          "page": { "type": ["integer", "string"] },
+          "section": { "type": "string" }
+        }
+      }
+    },
+    "extraction_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "method"],
+      "properties": {
+        "status": { "enum": ["ok", "needs_review"] },
+        "method": {
+          "type": "string",
+          "description": "實際如何驗證（如『N 與主要 HR/IRR/CI 已逐筆對回 source_locators 之 quote』）；不得空填或僅寫 ok"
+        },
+        "mismatches": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# EBM_Search / config/settings.example.yaml
+# =============================================================================
+# ★ 設定已集中到 EBM_Framework 根目錄：  EBM_Framework/config/settings.yaml
+#   （見根目錄 config/settings.example.yaml 範本與 INTEGRATION.md）。
+#
+# EBM_Search 腳本以 default_settings_path() 解析設定，順序：
+#     1) 環境變數 EBM_CONFIG（指向某個 settings.yaml 的絕對路徑）
+#     2) 根 config：  <repo>/../config/settings.yaml   ← 平常在 EBM_Framework 工作樹下用這個
+#     3) 本地回退：    <repo>/config/settings.yaml       ← 本檔所在；僅「打包安裝、看不到根 config」時才用
+#
+# 平常在 EBM_Framework 工作樹下開發 → 不需要本地 settings.yaml，填根 config 即可。
+#
+# 只有在「EBM_Search 被打包成 skill 單獨安裝、執行處看不到 EBM_Framework/config」時，
+# 才需要本地設定：屆時請
+#   (a) 設環境變數（最安全，秘密不落地）：EBM_CONFIG／ZOTERO_API_KEY／CROSSREF_MAILTO；或
+#   (b) 複製根 config/settings.example.yaml 成本資料夾的 settings.yaml 並填值
+#       （本地 settings.yaml 已被 EBM_Search/.gitignore 排除）。
+#
+# 欄位定義與佔位範本一律見：EBM_Framework/config/settings.example.yaml（唯一正本）。
+# =============================================================================

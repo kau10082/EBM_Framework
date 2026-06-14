@@ -1,0 +1,43 @@
+# EBM_Framework 根目錄 .gitignore（涵蓋整個大計畫的 repo）
+# ============================================================================
+# 防呆原則：機敏／個資／版權內容一律不進版控。子計畫各自的 .gitignore 仍會作用，
+# 此檔再做一層 repo 根層級的全域防護（即使子計畫被吸收為普通檔案也擋得住）。
+# ============================================================================
+
+# ── 機敏設定：唯一真值來源（含 Zotero 金鑰／email／本機絕對路徑）─────────────
+config/settings.yaml
+**/config/settings.yaml          # 含子計畫本地 settings.yaml（EBM_Search/config/…）
+.env
+.env.*
+!.env.template
+
+# ── 版權文獻 PDF／衍生內容（可能含 PHI；絕不上傳）───────────────────────────
+**/*.pdf
+EBM_Analysis/inputs/*
+!EBM_Analysis/inputs/.gitkeep
+EBM_Analysis/cache/*
+!EBM_Analysis/cache/.gitkeep
+EBM_Analysis/outputs/*
+!EBM_Analysis/outputs/.gitkeep
+EBM_Analysis/runs/                # 封存的歷次分析（含原文引用片段）
+
+# ── EBM_Search 執行產物（本機）──────────────────────────────────────────────
+EBM_Search/fulltext/
+EBM_Search/verified.json
+EBM_Search/verified.md
+EBM_Search/consensus.json
+EBM_Search/references/scimago_quartiles.json   # 2MB 快取，可重建
+
+# ── 打包產物 ─────────────────────────────────────────────────────────────────
+*.zip
+
+# ── Python／系統雜項 ─────────────────────────────────────────────────────────
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+_strip*.py
+_build*.py
+
+# 註：committed 範本只含 *.example.yaml（佔位、無真值），不被上面規則排除。

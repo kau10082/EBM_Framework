@@ -1,0 +1,61 @@
+# EBM_Framework / config/settings.example.yaml  —— 範本（只含佔位，進版控）
+# =============================================================================
+# 用法：複製本檔成同資料夾下的 settings.yaml，填入你的真值。settings.yaml 已被
+#       根 .gitignore 排除、不進版控，亦不進任何打包 ZIP。
+#
+# 這是整個 EBM_Framework（EBM_Search ＋ EBM_Analysis）唯一的機敏／個人設定來源。
+#   • EBM_Search 腳本解析順序：env EBM_CONFIG > 根 config/settings.yaml > 子計畫本地 config（回退）。
+#     - 打包後安裝的 skill 看不到根 config → 改用環境變數（EBM_CONFIG／ZOTERO_API_KEY／CROSSREF_MAILTO）
+#       或在安裝處放本地 settings.yaml。
+#   • EBM_Analysis 的 /ebm 評讀讀本檔的 analysis 區（專案根、輸出夾、字型）。
+# 優先序（高→低）：CLI 旗標 > 環境變數 > settings.yaml > 內建預設。
+# =============================================================================
+
+
+crossref:
+  mailto: "you@example.com"          # Crossref polite pool 用；非 API key。env: CROSSREF_MAILTO
+
+pubmed:
+  ncbi_api_key: ""                   # PubMed 走 MCP 時留空。env: NCBI_API_KEY
+  candidates: 5
+
+
+# ⚠️ api_key 是真秘密！填入後 settings.yaml 的 gitignore 排除即為「強制」。建議改用 env ZOTERO_API_KEY。
+zotero:
+  api_key: ""                        # ← 真秘密，切勿寫進本範本/ZIP
+  library_type: "user"
+  library_id: ""
+  collection_key: ""
+
+
+epistemonikos:
+  api_token: ""                      # 免費須申請；無 token → EK 腿跳過
+
+
+source:
+  mode: auto
+
+matching:
+  title_threshold: 0.85
+  soft_threshold: 0.65
+  year_tolerance: 1
+
+verdict:
+  verified_requires: any
+  drop_unverified: false
+
+
+# ⚠️ 絕對路徑含本機使用者名＝個資 → 真值只放 settings.yaml，本範本永遠留空。
+# 建議的對外工作資料夾基底＝ <Windows 文件>\EBM_Framework\，底下分 reports / fulltext / packages。
+report:
+  pdf_output_dir: ""                 # EBM_Search 報告成品；留空＝解析 <文件> 已知資料夾。建議 <文件>\EBM_Framework\reports
+  fulltext_dir: ""                   # 人工補全文＋交接包；留空＝<文件>\EBM_fulltext\。建議 <文件>\EBM_Framework\fulltext
+
+packaging:
+  output_dir: ""                     # 打包 ZIP 輸出（選用）。建議 <文件>\EBM_Framework\packages
+
+
+analysis:
+  project_dir: ""                    # EBM_Analysis 專案根的絕對路徑（個資）；留空＝由 skill 以相對位置推定
+  pdf_output_dir: ""                 # 評讀成品 PDF；留空＝寫到專案 outputs/。建議 <文件>\EBM_Framework\reports
+  cjk_font: "C:/Windows/Fonts/msjh.ttc"   # PDF CJK 字型（系統字型）

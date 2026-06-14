@@ -1,0 +1,30 @@
+# consensus-verify
+# 真值設定檔(含金鑰:Crossref mailto / NCBI key / Zotero api_key)不進版控;只提交 settings.example.yaml
+config/settings.yaml
+
+# 環境變數真值檔(若改用 .env);只提交 .env.template
+.env
+.env.*
+!.env.template
+
+# 打包產物(避免誤把含真值的 zip 進版控;打包請用安全指令排除真值檔)
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 執行輸出
+verified.json
+verified.md
+consensus.json
+
+# Phase 3 全文下載輸出(PDF/ manifest;勿進版控、勿進打包)
+fulltext/
+*.pdf
+
+# SCImago 分位快取(2MB,可由 journal_quartile.py --build 重建;勿進版控/打包)
+references/scimago_quartiles.json

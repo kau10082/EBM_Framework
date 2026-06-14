@@ -1,0 +1,4 @@
+# 統一文字檔換行為 LF（消除 Windows CRLF 警告）
+* text=auto eol=lf
+*.png binary
+*.pdf binary

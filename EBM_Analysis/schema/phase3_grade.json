@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 3 — GRADE 確定性評定（逐結果）",
+  "description": "★ 完整性強制核心：每個 outcome 必須對五下調＋三上調領域逐一給 verdict，缺欄即驗證失敗、引擎自動重試。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["paper_id", "outcomes"],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome_name", "certainty_start", "downgrade_domains", "upgrade_domains", "certainty_final"],
+        "properties": {
+          "outcome_name": { "type": "string" },
+          "certainty_start": { "enum": ["high", "moderate", "low", "very_low"] },
+          "downgrade_domains": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["risk_of_bias", "inconsistency", "indirectness", "imprecision", "publication_bias"],
+            "properties": {
+              "risk_of_bias":     { "$ref": "#/definitions/domain" },
+              "inconsistency":    { "$ref": "#/definitions/domain" },
+              "indirectness":     { "$ref": "#/definitions/domain" },
+              "imprecision":      { "$ref": "#/definitions/domain" },
+              "publication_bias": { "$ref": "#/definitions/domain" }
+            }
+          },
+          "upgrade_domains": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["large_effect", "dose_response", "plausible_confounding"],
+            "properties": {
+              "large_effect":          { "$ref": "#/definitions/upgrade" },
+              "dose_response":         { "$ref": "#/definitions/upgrade" },
+              "plausible_confounding": { "$ref": "#/definitions/upgrade" }
+            }
+          },
+          "guardrail_findings": {
+            "type": "array",
+            "description": "本 outcome 觸發的護欄結果（rob2/heterogeneity/coi/effect_measure/nonreporting/no_effect_interpretation/nma…）",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["guardrail_id", "triggered"],
+              "properties": {
+                "guardrail_id": { "type": "string" },
+                "triggered": { "type": "boolean" },
+                "finding": { "type": "string" }
+              }
+            }
+          },
+          "certainty_final": { "enum": ["high", "moderate", "low", "very_low"] }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "rationale"],
+      "properties": {
+        "verdict": { "enum": ["not_serious", "serious", "very_serious", "not_applicable"], "description": "降級量：not_serious=0、serious=-1、very_serious=-2" },
+        "rationale": { "type": "string", "description": "判定依據；不得空白（C75 透明記錄）" },
+        "rob2": {
+          "type": "object",
+          "description": "僅 risk_of_bias 用（RCT）：RoB 2 五子領域逐項判斷（report_completeness 護欄）",
+          "additionalProperties": false,
+          "properties": {
+            "randomization": { "enum": ["low", "some_concerns", "high"] },
+            "deviations": { "enum": ["low", "some_concerns", "high"] },
+            "missing_data": { "enum": ["low", "some_concerns", "high"] },
+            "measurement": { "enum": ["low", "some_concerns", "high"] },
+            "selective_reporting": { "enum": ["low", "some_concerns", "high"] },
+            "overall": { "enum": ["low", "some_concerns", "high"] }
+          }
+        }
+      }
+    },
+    "upgrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "rationale"],
+      "properties": {
+        "verdict": { "enum": ["none", "up_one", "up_two", "not_applicable"] },
+        "rationale": { "type": "string" }
+      }
+    }
+  }
+}

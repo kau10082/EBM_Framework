@@ -1,0 +1,75 @@
+# EBM_Analysis 執行規格清單（machine-readable）
+# 中央地圖：執行順序、護欄→GRADE 領域映射、觸發條件。
+# 規格正本＝phases/＋guardrails/＋schema/（無單一來源 txt）。
+
+version: "6.0"
+
+# ── 執行模型 ─────────────────────────────────────────
+# 運算引擎＝Claude 本身（在 Claude Code/Cowork/Chat 內執行）；不呼叫任何外部 API。
+# tools/ 僅提供「無 API」的確定性輔助：PDF 抽文字、schema 驗證、報告渲染。
+engine: claude-inline
+global_preamble: phases/00_global.md
+
+# ── I/O ─────────────────────────────────────────────
+io:
+  inputs: inputs/               # 一篇文獻一個 PDF（或對話內貼上；或由 EBM_Search 交接包複製進來）
+  cache:  cache/                # {paper}.p1.json … p4.json（Claude 逐階段產出並驗證）
+  outputs: outputs/             # {paper}.report.md、synthesis.md、ledger.csv
+
+# ── 交接層（與 EBM_Search 整合）─────────────────────
+# EBM_Search 收尾寫出 _corpus_seed.json（契約：EBM_Search/references/corpus_seed_schema.json）。
+# tools/ingest_seed.py 吃交接包 → 複製 PDF 進 inputs/ ＋ 產出預填 Phase 0 草稿 cache/_corpus.draft.json，
+# Phase 0 覆核後定稿為 cache/_corpus.json。映射規則與端到端流程見 ../INTEGRATION.md。
+handoff:
+  seed_file: _corpus_seed.json
+  ingester: tools/ingest_seed.py
+  draft: cache/_corpus.draft.json   # 預填草稿；非定稿，須 Phase 0 斷點覆核
+
+# ── 階段管線（逐篇）──────────────────────────────────
+phases:
+  - {id: triage_corpus, file: phases/00_triage.md, schema: schema/phase0_corpus.json, scope: corpus, note: "定 review question＋分流；只對 grade_track∈{full,targeted_harms} 續跑"}
+  - {id: extract,  file: phases/01_extract.md, schema: schema/phase1_extract.json}
+  - {id: triage,   file: phases/02_triage.md,  schema: schema/phase2_triage.json}
+  - {id: grade,    file: phases/03_grade.md,   schema: schema/phase3_grade.json}
+  - {id: output,   file: phases/04_output.md,  schema: schema/phase4_output.json}
+# 統合（output 階段的跨篇部分）在全批跑完後執行。
+
+# ── GRADE 五下調領域 → 輸入護欄 ──────────────────────
+grade_domains:
+  risk_of_bias:     {feeds_from: [rob2],          note: "RCT→rob2；NRSI→ROBINS-I（待辦4）"}
+  inconsistency:    {feeds_from: [heterogeneity, nma]}
+  indirectness:     {feeds_from: [surrogate, coi, nma]}
+  imprecision:      {feeds_from: [no_effect_interpretation], note: "OIS/RIS + CI 寬度"}
+  publication_bias: {feeds_from: [nonreporting]}
+upgrade_domains: [large_effect, dose_response, plausible_confounding]
+
+# ── 護欄登錄表（觸發條件 → 是否要求 verdict）─────────
+# 引擎依 applies_to/trigger 判斷某護欄這次要不要強制填欄；schema 負責「填了才算過」。
+guardrails:
+  no_effect_interpretation: {applies_to: all,        trigger: "CI 跨無效線"}
+  data_honesty:             {applies_to: all,        trigger: always}
+  extraction_conventions:   {applies_to: all,        trigger: always, note: "跨篇一致規則：多臂/AE 粒度/效應量選擇/方向"}
+  registry_backfill:        {applies_to: all,        trigger: "僅摘要/AI合成或缺RoB/各臂N/AE/CI", note: "固定補救：查 ClinicalTrials.gov/PROSPERO/FDA/EMA；補不到則確定性封頂"}
+  selective_reporting:      {applies_to: all,        trigger: "有 NCT/EudraCT/PROSPERO 號", note: "比對註冊 outcomes vs 發表，餵 RoB領域5/非報告偏誤"}
+  sof_table:                {applies_to: synthesis,  trigger: "產統合報告", note: "Summary of Findings 表＋絕對效應（Cochrane Ch14）"}
+  report_completeness:      {applies_to: synthesis,  trigger: "產最終報告", note: "研究特徵表/RoB 五領域/次群組+研究意涵/發表偏誤聲明/基準風險分層/含 harms"}
+  outcome_nature:           {applies_to: all,        trigger: "抽取每個 outcome"}
+  integrity_check:          {applies_to: all,        trigger: "每篇（分級前）"}
+  protocol_completeness:    {applies_to: sr_ma,      trigger: "來源為 SR/MA"}
+  grade_assessment:         {applies_to: all,        trigger: "每個 outcome"}
+  grading_rules:            {applies_to: all,        trigger: "每個 outcome 評定", note: "imprecision 操作準則/階層/多劑量/間接性疊加/COI 何時下調"}
+  heterogeneity:            {applies_to: sr_ma,      trigger: "outcome 來自 MA"}
+  rob2:                     {applies_to: rct,        trigger: "RCT 核心結果"}
+  coi:                      {applies_to: all,        trigger: "有 COI/Funding 章節"}
+  effect_measure:           {applies_to: all,        trigger: "讀已算好效應量"}
+  nonreporting:             {applies_to: sr_ma,      trigger: "評讀 SR/MA 缺失證據"}
+  computation_check:        {applies_to: all,        trigger: "輸出含 NNT/ARR"}
+  output_selfcheck:         {applies_to: all,        trigger: "送出核心結論前"}
+  adversarial_review:       {applies_to: full_track,  trigger: "Phase 3 後、產報告前", note: "懷疑者複查：抓離群/違規則/未驗證即當低偏誤；revise 則回改重驗"}
+  wording_template:         {applies_to: all,        trigger: "輸出核心結論"}
+  vote_counting:            {applies_to: synthesis,  trigger: "統合 ≥2 篇"}
+  swim:                     {applies_to: narrative_sr, trigger: "SR 無 MA／敘事綜整"}
+  overlap_indirect:         {applies_to: synthesis,  trigger: "統合 ≥2 篇 SR/MA"}
+  nma:                      {applies_to: nma,        trigger: "含 NMA／間接比較訊號"}
+  surrogate:                {applies_to: all,        trigger: "核心結論建於替代結果"}
+  harms:                    {applies_to: all,        trigger: "僅評療效未充分評 harms"}

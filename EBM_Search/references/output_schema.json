@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "consensus-verify output",
+  "type": "object",
+  "required": ["verified_requires", "summary", "results"],
+  "properties": {
+    "verified_requires": {
+      "type": "string",
+      "enum": ["any", "both"],
+      "description": "本次判定採用的規則(any=任一來源 / both=兩來源皆需)"
+    },
+    "summary": {
+      "type": "object",
+      "description": "各 verdict 的計數",
+      "additionalProperties": { "type": "integer" }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["input", "verdict", "evidence_level", "sources"],
+        "properties": {
+          "id": { "type": ["integer", "string", "null"] },
+          "input": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "year": { "type": ["integer", "null"] },
+              "doi": { "type": ["string", "null"] },
+              "first_author": { "type": "string" },
+              "doc_type": {
+                "type": ["string", "null"],
+                "description": "選填型態提示。conference_abstract/abstract/poster/proceedings → miss 改判 UNRESOLVED;synopsis/comment/editorial/journal_club/letter → 衍生性非原始"
+              },
+              "off_topic": {
+                "type": ["boolean", "null"],
+                "description": "true → 直接判 OFF_TOPIC,不查任何來源(P4)"
+              }
+            }
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["RETRACTED", "VERIFIED", "PARTIAL", "UNVERIFIED", "UNRESOLVED", "OFF_TOPIC"]
+          },
+          "evidence_level": {
+            "type": "string",
+            "enum": ["L1", "L2", "L3", "L4", "L5", "未分類"]
+          },
+          "evidence_note": {
+            "type": ["string", "null"],
+            "description": "次級分析/substudy 等級加註(P5);無則 null"
+          },
+          "reason": {
+            "type": ["string", "null"],
+            "description": "非 VERIFIED 時的細分原因(P3):not_indexed:conference_abstract / derivative_non_original / ahead_of_print/not_indexed? / not_found / no_source_queried / off_topic"
+          },
+          "resolved_doi": { "type": ["string", "null"] },
+          "resolved_pmid": { "type": ["string", "null"] },
+          "sources": {
+            "type": "object",
+            "description": "每個驗證來源的獨立結果",
+            "properties": {
+              "crossref": { "$ref": "#/$defs/source" },
+              "pubmed": { "$ref": "#/$defs/source" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["match", "soft", "miss", "retracted", "skipped", "error"]
+        },
+        "title": { "type": ["string", "null"] },
+        "year": { "type": ["integer", "null"] },
+        "doi": { "type": ["string", "null"] },
+        "pmid": { "type": ["string", "null"] },
+        "pubtypes": { "type": "array", "items": { "type": "string" } },
+        "type": { "type": ["string", "null"], "description": "Crossref work type(如 proceedings-article),供會議摘要自動偵測" },
+        "similarity": { "type": ["number", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

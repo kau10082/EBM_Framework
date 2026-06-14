@@ -1,0 +1,23 @@
+# ── 機敏／本機專屬：永不進公開 repo ──────────────────
+# 任何本機秘密檔（無 API key 也保留此忽略以防萬一）
+.env
+
+# 文獻原文（版權）＋抽取內容（可能含 PHI／病例資料）一律本機留存
+inputs/*
+cache/*
+outputs/*
+!inputs/.gitkeep
+!cache/.gitkeep
+!outputs/.gitkeep
+
+# 封存的歷次分析（含衍生分析與原文引用片段）— 本機留存
+runs/
+
+# ── 一般忽略 ─────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+_strip*.py
+_build*.py

@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 0 — 回顧問題 + corpus 相關性/角色分流",
+  "description": "在逐篇評讀前，先定 review question，並判每篇的相關性與證據角色；決定走哪條評讀軌。也記錄 MA 的納入試驗（供統合去重）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["review_question", "papers"],
+  "properties": {
+    "review_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "P", "I", "C", "O"],
+      "properties": {
+        "statement": { "type": "string" },
+        "P": { "type": "string" },
+        "I": { "type": "string" },
+        "C": { "type": "string" },
+        "O": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "papers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paper_id", "relevance", "role", "grade_track"],
+        "properties": {
+          "paper_id": { "type": "string" },
+          "title": { "type": "string" },
+          "relevance": {
+            "enum": ["direct", "indirect", "background", "excluded"],
+            "description": "相對於 review_question 的相關性"
+          },
+          "role": {
+            "enum": ["pivotal_efficacy", "meta_analysis", "safety", "supportive_secondary",
+                     "mechanism_pd", "pharmacokinetic", "narrative_review", "other"],
+            "description": "證據角色"
+          },
+          "design": { "type": ["string", "null"], "description": "RCT/SR-MA/NRSI/Phase I/review…" },
+          "grade_track": {
+            "enum": ["full", "targeted_harms", "light_summary", "none"],
+            "description": "full=跑完整四階段；targeted_harms=只評 harms；light_summary=背景摘要不分級；none=排除"
+          },
+          "included_trials": {
+            "type": "array",
+            "description": "僅 meta_analysis：其納入的原始試驗 id/名稱（供統合去重、查重疊）",
+            "items": { "type": "string" }
+          },
+          "overlap_with": {
+            "type": "array",
+            "description": "與哪些 paper_id 共用底層資料（如同一試驗的次分析/子群）",
+            "items": { "type": "string" }
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "overlap_notes": { "type": "string", "description": "整體重疊/雙重計算風險摘要" }
+  }
+}
