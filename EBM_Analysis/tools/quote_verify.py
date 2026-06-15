@@ -101,10 +101,21 @@ def source_text(paper_id, seed_map):
         return t, "unpaywall:oa"
     return None, "無 channel/url"
 
-def match(quote, src_norm, threshold):
+def _digits(s):
+    """取數字串集合（分隔符不敏感）：'0.58'→{'0','58'}、'0·52'→{'0','52'}、'2,525'→{'2','525'}。"""
+    return set(re.findall(r"\d+", s or ""))
+
+def match(quote, src_norm, threshold, src_digits=None):
+    """模糊比對 ＋『數字守門』：difflib 對長句改一個數字仍 >0.85，故額外要求 quote 內**每個數字串都在原文出現**，
+    否則一律不算 match（防『周圍文字對、數字被捏造』的假陽性；反幻覺皇冠的真守門）。"""
     qn = _norm(quote)
     if not qn:
         return False, 0.0
+    # 數字守門：src_digits 提供時，quote 的數字必須全在原文（捏造數字→直接 False）
+    if src_digits is not None:
+        miss = _digits(quote) - src_digits
+        if miss:
+            return False, -1.0           # ratio=-1 標記『文字近似但有原文沒有的數字』
     if qn in src_norm:
         return True, 1.0
     # 取片段做最佳比值（quote 可能含 {CI} 等被正規化後仍有小差）
@@ -140,11 +151,11 @@ def main():
             skip += len(locs)
             print(f"  ⚠ {pid}: 來源無法核對（{note}）— {len(locs)} quote 待人工")
             continue
-        src_norm = _norm(text)
+        src_norm = _norm(text); src_digits = _digits(text)
         pv = pf = 0
         for loc in locs:
             total += 1
-            good, ratio = match(loc.get("quote", ""), src_norm, a.threshold)
+            good, ratio = match(loc.get("quote", ""), src_norm, a.threshold, src_digits)
             if good: ok += 1; pv += 1
             else:
                 fail += 1; pf += 1
@@ -178,7 +189,7 @@ def main():
                 text, note = _src_text(pvn.get("source", ""))
                 if text is None:
                     skip += 1; print(f"  ⚠ SoF「{o.get('outcome','')[:12]}」{pvn.get('value','')}: 來源無法核對（{note}）"); continue
-                good, ratio = match(pvn.get("quote", ""), _norm(text), a.threshold)
+                good, ratio = match(pvn.get("quote", ""), _norm(text), a.threshold, _digits(text))
                 if good: ok += 1
                 else:
                     fail += 1; failures.append(f"SoF「{o.get('outcome','')[:14]}」value={pvn.get('value')} ratio={ratio} quote={pvn.get('quote','')[:60]}")
