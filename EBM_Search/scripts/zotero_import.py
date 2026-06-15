@@ -125,6 +125,63 @@ def enrich_from_crossref(doi, mailto="", timeout=20):
     return out
 
 
+def enrich_from_europepmc(doi, timeout=20):
+    """(1-fallback) Crossref 查無內容的 DOI(中文期刊 CMA 10.3760/DataCite/會議摘要)改打 EuropePMC core。
+    回同形 dict(publicationTitle/volume/issue/pages/date/creators/ISSN)。失敗回 {}。"""
+    if not doi:
+        return {}
+    q = urllib.parse.quote('DOI:"%s"' % doi)
+    url = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%s"
+           "&resultType=core&format=json&pageSize=1" % q)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "consensus-verify-zotero/0.2"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            res = json.loads(r.read().decode("utf-8", "replace")).get("resultList", {}).get("result", [])
+    except Exception:                        # noqa: BLE001
+        return {}
+    if not res:
+        return {}
+    m = res[0]
+    ji = m.get("journalInfo", {}) or {}
+    jr = ji.get("journal", {}) or {}
+    out = {}
+    if jr.get("title") or m.get("journalTitle"):
+        out["publicationTitle"] = jr.get("title") or m.get("journalTitle")
+    if ji.get("volume"):
+        out["volume"] = ji["volume"]
+    if ji.get("issue"):
+        out["issue"] = ji["issue"]
+    if m.get("pageInfo"):
+        out["pages"] = m["pageInfo"]
+    if m.get("pubYear"):
+        out["date"] = str(m["pubYear"])
+    if jr.get("issn") or jr.get("essn"):
+        out["ISSN"] = jr.get("issn") or jr.get("essn")
+    creators = []
+    for a in (m.get("authorList", {}) or {}).get("author", []):
+        ln = a.get("lastName") or ""
+        fn = a.get("firstName") or a.get("initials") or ""
+        if ln or fn:
+            creators.append({"creatorType": "author", "lastName": ln, "firstName": fn})
+        elif a.get("fullName"):
+            creators.append({"creatorType": "author", "lastName": a["fullName"], "firstName": ""})
+    if creators:
+        out["creators"] = creators
+    return out
+
+
+def enrich_metadata(doi, mailto=""):
+    """補書目:先 Crossref,查無內容(非 Crossref 註冊的 DOI)再 fallback EuropePMC。"""
+    out = enrich_from_crossref(doi, mailto)
+    if not out or not (out.get("creators") or out.get("publicationTitle")):
+        ep = enrich_from_europepmc(doi)
+        if ep:
+            # 以 EuropePMC 補滿缺欄(保留 Crossref 已有者)
+            for k, v in ep.items():
+                out.setdefault(k, v)
+    return out
+
+
 def _authors_to_creators(rec):
     """fallback:輸入只有 first_author 時的 creators(無 Crossref 時用)。"""
     inp = rec.get("input", rec)
@@ -163,6 +220,10 @@ def map_to_zotero(rec, collection_key, enrich=None):
         tags.append({"tag": "evidence:%s" % rec["evidence_level"]})
     if rec.get("verdict"):
         tags.append({"tag": "verdict:%s" % rec["verdict"]})
+    if rec.get("study"):
+        tags.append({"tag": "study:%s" % rec["study"]})
+    if rec.get("role"):
+        tags.append({"tag": "role:%s" % rec["role"]})
     if tags:
         item["tags"] = tags
     if collection_key:
@@ -193,6 +254,34 @@ def post_to_zotero(items, conf, timeout=30):
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def existing_dois(conf, timeout=30):
+    """(去重) 取目標 collection 既有 item 的 DOI 集合(小寫)。失敗回空集合(不擋匯入)。"""
+    lib_seg = "%ss" % conf["library_type"]
+    coll = conf.get("collection_key")
+    base = ("%s/%s/%s/collections/%s/items" % (ZOTERO_API, lib_seg, conf["library_id"], coll)) if coll \
+           else ("%s/%s/%s/items" % (ZOTERO_API, lib_seg, conf["library_id"]))
+    headers = {"Zotero-API-Key": conf["api_key"], "Zotero-API-Version": ZOTERO_API_VERSION}
+    out = set(); start = 0
+    try:
+        while True:
+            url = "%s?format=json&limit=100&start=%d" % (base, start)
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                batch = json.loads(r.read().decode("utf-8", "replace"))
+            if not batch:
+                break
+            for it in batch:
+                doi = (it.get("data", {}).get("DOI") or "").strip().lower()
+                if doi:
+                    out.add(doi)
+            if len(batch) < 100:
+                break
+            start += 100
+    except Exception as e:
+        sys.stderr.write("dedup: 取既有 DOI 失敗(%s) → 本次不去重\n" % str(e)[:60])
+    return out
+
+
 def main(argv=None):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -208,6 +297,7 @@ def main(argv=None):
     ap.add_argument("--library-id", default=None)
     ap.add_argument("--collection", default=None, help="覆蓋目標 collection key")
     ap.add_argument("--no-enrich", action="store_true", help="不打 Crossref 補 metadata")
+    ap.add_argument("--no-dedup", action="store_true", help="不對既有 collection 做 DOI 去重")
     ap.add_argument("--commit", action="store_true", help="實際寫入 Zotero(預設 dry-run)")
     args = ap.parse_args(argv)
 
@@ -215,13 +305,25 @@ def main(argv=None):
     records = load_items(args.infile)
     mailto = "" if args.no_enrich else _crossref_mailto(args)
 
-    items, enriched = [], 0
+    # (去重) 取既有 DOI；dry-run 也先查,讓 payload 反映實際會寫入者
+    seen = set()
+    if not args.no_dedup and conf.get("api_key") and conf.get("library_id"):
+        seen = existing_dois(conf)
+        if seen:
+            sys.stderr.write("dedup: collection 既有 %d 個 DOI,將跳過重複\n" % len(seen))
+
+    items, enriched, skipped = [], 0, 0
     for r in records:
         doi = r.get("resolved_doi") or r.get("input", {}).get("doi") or r.get("doi") or ""
-        e = {} if args.no_enrich else enrich_from_crossref(doi, mailto)
+        if doi and doi.strip().lower() in seen:
+            skipped += 1
+            continue
+        e = {} if args.no_enrich else enrich_metadata(doi, mailto)
         if e:
             enriched += 1
         items.append(map_to_zotero(r, conf["collection_key"], e))
+    if skipped:
+        sys.stderr.write("dedup: 跳過 %d 筆(DOI 已在 collection),實際待匯 %d 筆\n" % (skipped, len(items)))
 
     sys.stderr.write("zotero: library=%s/%s collection=%s api_key=%s | %d 筆(Crossref 補 %d)\n" % (
         conf["library_type"], conf["library_id"] or "(未設)", conf["collection_key"] or "(未設)",

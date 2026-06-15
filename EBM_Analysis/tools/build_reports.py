@@ -143,6 +143,8 @@ def final_report():
     rq = json.loads(cp.read_text(encoding="utf-8")).get("review_question", {}) if cp.exists() else {}
 
     L = [f"# {syn.get('report_title', '實證評讀總報告')}", ""]
+    if syn.get("plain_summary"):                       # 白話 lead 段（通勤可讀，30 秒看完）
+        L += ["> 📋 **一分鐘讀懂**", ">", "> " + str(syn["plain_summary"]).replace("\n", "\n> "), ""]
     if rq.get("statement"):
         L += [f"**臨床問題**：{rq['statement']}", ""]
     sc = syn.get("study_characteristics", [])

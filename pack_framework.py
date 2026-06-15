@@ -99,7 +99,9 @@ def main(argv=None):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, ROOT).replace("\\", "/")
                 # 排除規則（版權 PDF／git／快取一律排除；真值設定僅 --with-secrets 才含）
-                if f in ex_files or os.path.splitext(f)[1].lower() in EX_EXT or f.startswith("_"):
+                # 底線開頭檔＝暫存/快取資料(_corpus.json/_synthesis.json…)排除，但**保留 _*.py 正當原始碼**
+                # （如 _build_pdf.py＝GRADE PDF 渲染器；曾被此規則誤殺，導致打包後 skill 無法產 PDF）
+                if f in ex_files or os.path.splitext(f)[1].lower() in EX_EXT or (f.startswith("_") and not f.endswith(".py")):
                     skipped += 1
                     continue
                 if any(rel.startswith(p) for p in KEEPGITKEEP_PREFIXES) and f != ".gitkeep":

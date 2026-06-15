@@ -57,6 +57,7 @@
         "conflict_analysis": { "type": "string" },
         "weight_adjudication": { "type": "string", "description": "依 GRADE/RoB/一致性；不以 N 規模/期刊名" },
         "report_title": { "type": ["string", "null"], "description": "最終報告標題" },
+        "plain_summary": { "type": ["string", "null"], "description": "★白話總結（通勤可讀，FINAL_REPORT/PDF 開頭 lead 段）：3–5 句、口語流暢，30 秒看完『結論是什麼、給誰、要注意什麼』；術語就地白話化（NNTB→大約治療幾人能多幫到 1 人）。只改表達、不弱化判定/方向/不確定性。" },
         "bottom_line": { "type": "array", "items": { "type": "string" }, "description": "總結要點（FINAL_REPORT 自動渲染用）" },
         "clinical_one_liner": { "type": ["string", "null"], "description": "給臨床的一句話" },
         "study_characteristics": {
@@ -130,6 +131,7 @@
           }
         },
         "missing_evidence_sensitivity": { "type": ["string", "null"], "description": "缺失證據敏感度分析(ROB-ME；Ch13)：假設未發表/進行中研究為 null，估計合併效應是否被稀釋/翻轉，作為發表偏誤降級之佐證(非僅以『廠商資助』籠統降級)" },
+        "prisma_attest": { "type": ["object", "null"], "additionalProperties": { "type": "string" }, "description": "PRISMA 2020 人工聲明項(鍵=項號字串，如 \"24\")，供 prisma_audit 將回顧層 MANUAL 項(註冊/資金/利益衝突/資料蒐集流程/可得性)轉 ATTEST。" },
         "publication_bias": { "type": ["string", "null"], "description": "發表偏誤/缺失證據聲明（<10 不畫漏斗圖）" },
         "subgroup_implications": { "type": ["string", "null"], "description": "次群組＋對研究的意涵" },
         "baseline_risk_strata": {
@@ -163,7 +165,20 @@
               "comment": { "type": ["string", "null"], "description": "如替代終點侷限、單藥 vs 類別" },
               "mid": { "type": ["string", "null"], "description": "連續結果之最小重要差異 MID/MCID（Ch14 §14.1.6.2 應每結果註明）；不精確以 CI 是否跨 MID 判定(Ch15 §15.5)" },
               "continuous_reexpression": { "type": ["string", "null"], "description": "連續結果可解讀再表達(熟悉量表/平均值之比/MID 單位/二分化 logOR≈1.81×SMD；Ch15 §15.5.3)" },
-              "dose_response": { "type": ["string", "null"], "description": "劑量反應梯度(危害/益處不可只用單一劑量代表類別；Ch14 lumping/splitting＋GRADE 上調領域)" }
+              "dose_response": { "type": ["string", "null"], "description": "劑量反應梯度(危害/益處不可只用單一劑量代表類別；Ch14 lumping/splitting＋GRADE 上調領域)" },
+              "provenance": {
+                "type": ["array", "null"],
+                "description": "★數字溯源(反幻覺)：本列關鍵數值各附原文 quote＋來源，供 quote_verify 回全文機器核對。直接建 synthesis(未走 p1.json)時尤其必要。",
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["value", "quote", "source"],
+                  "properties": {
+                    "value": { "type": "string", "description": "對應的數值(如 'HR 0.58' / 'NNTH 44' / '死亡 7 (1.2%)')" },
+                    "quote": { "type": "string", "description": "原文逐字片段(英文照錄)，quote_verify 會回 source 全文模糊比對" },
+                    "source": { "type": "string", "description": "來源 paper_id 或 DOI(去斜線檔名亦可)，供解析 fulltext_channel 取全文" }
+                  }
+                }
+              }
             }
           }
         }

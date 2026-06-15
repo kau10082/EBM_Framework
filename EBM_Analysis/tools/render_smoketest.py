@@ -80,6 +80,16 @@ def checks_on(txt, data):
                 missing = [s.get("outcome", "")[:6] for s in sof if s.get("outcome", "")[:6] and s.get("outcome", "")[:6] not in txt]
                 if missing:
                     fails.append("V5 SoF 列疑遭吞：PDF 找不到 %d/%d outcome（%s）" % (len(missing), len(sof), "、".join(missing[:3])))
+            # V6 渲染器一致性：資料有的關鍵欄位、PDF 必須渲得出來（防兩個 renderer 分歧，
+            #    如 clinical_one_liner 進了 md 卻漏進 pdf）。取去空白後的特徵片段比對。
+            _nz = re.sub(r"\s+", "", txt)
+            PARITY = [("clinical_one_liner", "給臨床的一句話"), ("report_title", "報告標題")]
+            for key, label in PARITY:
+                v = data.get(key)
+                if isinstance(v, str) and len(v.strip()) >= 12:
+                    snip = re.sub(r"\s+", "", v.strip())[:14]
+                    if snip and snip not in _nz:
+                        fails.append("V6 渲染器漏渲：synthesis.%s（%s）資料有、PDF 卻找不到（兩 renderer 分歧）" % (key, label))
     return fails
 
 def check(pdf, data_path):

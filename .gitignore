@@ -38,7 +38,7 @@ EBM_Search/references/scimago_quartiles.json   # 2MB 快取，可重建
 venv/
 .DS_Store
 _strip*.py
-_build*.py
+# 移除舊規則 _build*.py：它會誤殺核心渲染器 EBM_Analysis/_build_pdf.py（GRADE PDF）；session 暫存已由 _run_tmp/ 覆蓋
 
 # 註：committed 範本只含 *.example.yaml（佔位、無真值），不被上面規則排除。
 

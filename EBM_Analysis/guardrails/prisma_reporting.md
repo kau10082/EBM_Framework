@@ -17,3 +17,12 @@ feeds: report_completeness
 6. **註冊與 protocol 偏離**：聲明事前 protocol（見 protocol 產物）與任何偏離。
 
 輸出要求：產最終報告前，逐項自檢上列；缺漏者補齊或在報告明列「未含（理由）」。流程圖數字一律由 cache 帶、不硬編。
+
+## 機器稽核 gate（27 項，非靠自律）
+上列要點由 **`tools/prisma_audit.py`** 編成 PRISMA 2020 **27 個編號項**的硬稽核，逐項對檢索產物（`_search_report.json`）＋統合產物（`_synthesis.json`）判 **PASS／FAIL／MANUAL／ATTEST／PENDING**，並寫出 `cache/_prisma_checklist.json`（可作報告附錄與項 27「可得性」載體）。已併入 `verify_all.py`（定稿統一入口）。
+
+- **FAIL**（自動可驗卻缺維度）→ 阻擋定稿。對照本檔：項 16＝流程圖＋排除理由、項 17/18＝特徵表/RoB、項 20/22＝統合結果/確定性、項 23＝討論四子標且**禁籠統「需要更多研究」**（須具體缺口）。
+- **MANUAL**（結構化資料無法判定）＝項 9 資料蒐集流程、24 註冊/protocol、25 資金、26 利益衝突、（無報告產物時）27 可得性。預設不阻擋但**一律列出、不靜默跳過**；於報告補齊或在 `synthesis.prisma_attest`（鍵＝項號字串，如 `"24"`）寫聲明 → 轉 **ATTEST**。`--strict` 時未聲明的 MANUAL 也計失敗。
+- **PENDING**＝該階段對應產物尚未產出（如只跑完檢索、評讀未做），中性、不阻擋。
+
+與 `selfcheck_consistency`（C1–C14，查「寫出來的彼此矛盾」）互補：本 gate 查「該有的維度齊不齊」。與 `report_completeness`（feeds 來源）同源，數字一律由 cache 帶。

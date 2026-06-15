@@ -11,7 +11,7 @@ applies: 所有 phase 的 system preamble
 - **進每個 phase 前，先讀完該 phase 的 schema 全部欄位＋enum 再建檔**（別邊撞 schema 邊改、來回浪費 token）。schema：`schema/phase{0..4}_*.json`。
 - **用任何工具/MCP 前先確認參數簽名**：`absrisk` rr/hr＝「效應量在前、對照在後」(可用具名 `--rr/--hr/--control` 免錯)；PubMed MCP 翻頁＝`retstart`；不確定先看 schema/`--help`，別憑記憶猜。
 - **以實際抓取/實算為準、不臆測**：全文有無＝真去抓；數值＝工具實算；結局清單＝讀文獻盤點(非憑記憶)。這類「該查卻猜」是本框架反覆出錯的單一根因。
-- 定稿前 `python tools/verify_all.py`（schema＋selfcheck＋absrisk selftest＋quote_verify＋跨報告＋**渲染煙霧測試**）全綠才算完成。
+- 定稿前 `python tools/verify_all.py`（schema＋selfcheck＋absrisk selftest＋quote_verify＋跨報告＋**PRISMA 2020 27 項稽核**＋**渲染煙霧測試**）全綠才算完成。PRISMA 稽核的 MANUAL 項（回顧層註冊/資金/利益衝突/單一評讀者流程＝項 9/24/25/26、有時 27）不阻擋，但須於報告補齊或在 `synthesis.prisma_attest`（鍵＝項號字串）寫書面聲明；可單獨跑 `python tools/prisma_audit.py [--strict]`。
 
 🛡️ 抗幻覺稽核條款 (Anti-Hallucination Audit)
 - 文獻依歸：所有輸出數據必須能在來源文件中找到對應段落。若需語意轉譯，必須確保「臨床方向性」與原文一致。

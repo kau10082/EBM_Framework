@@ -39,6 +39,20 @@ def main():
     date = (ST.get("search_date") or "")[:7] or "unknown"
     CACHE = Path(workdir.cache_dir()); OUTPUTS = Path(workdir.outputs_dir()); INPUTS = Path(workdir.inputs_dir())
     reports = ST.get("paths", {}).get("reports_dir")
+    if not reports:
+        # 防呆：run_state 未記 reports_dir 時，從 config 解析（否則 SR/GRADE 成品 PDF 漏封存——實測曾漏 SR 報告 PDF）
+        try:
+            import re as _re
+            cfgp = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
+            if cfgp.exists():
+                txt = cfgp.read_text(encoding="utf-8")
+                m = (_re.search(r'analysis:.*?pdf_output_dir\s*:\s*"?([^"\n#]+)', txt, _re.S)
+                     or _re.search(r'pdf_output_dir\s*:\s*"?([^"\n#]+)', txt))
+                if m and m.group(1).strip():
+                    reports = m.group(1).strip()
+                    print(f"  （reports_dir 未在 run_state，已從 config 解析：{reports}）")
+        except Exception:
+            pass
     ftd = ST.get("paths", {}).get("fulltext_dir")
     arch = Path(workdir.runs_dir()) / f"{date}_{slug}"
     print(f"== EBM 分析結案：{slug}（{date}）{'［DRY-RUN］' if dry else ''} ==")

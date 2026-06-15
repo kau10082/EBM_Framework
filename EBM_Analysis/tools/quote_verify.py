@@ -150,6 +150,42 @@ def main():
                 fail += 1; pf += 1
                 failures.append(f"{pid} [{loc.get('claim','')[:30]}] ratio={ratio} quote={loc.get('quote','')[:60]}")
         print(f"  {'✅' if pf==0 else '❌'} {pid}: {pv}/{pv+pf} 核對通過（來源 {note}）")
+
+    # ── 同時核對 synthesis SoF 的 provenance（直接建 synthesis、未走 p1.json 時的『數字溯源』）──
+    synp = CACHE / "_synthesis.json"
+    if synp.exists():
+        syn = json.loads(synp.read_text(encoding="utf-8")).get("synthesis", {})
+        by_doi = {}
+        for pid_, p in seed_map.items():
+            d = (p.get("doi") or "")
+            if d:
+                by_doi[d.lower()] = p; by_doi[d.lower().replace("/", "_")] = p
+        _txtcache = {}
+        def _src_text(source):
+            if source in _txtcache: return _txtcache[source]
+            # (a) 直接 inputs/<source>.pdf（doi-slug 命名）
+            for cand in (INPUTS / (source + ".pdf"), INPUTS / (source.replace("/", "_") + ".pdf")):
+                if cand.exists():
+                    r = (_pdf_text(cand.read_bytes()), f"local:{cand.name}"); _txtcache[source] = r; return r
+            # (b) 經交接包 paper_id/doi 解析管道
+            sp = seed_map.get(source) or by_doi.get(source.lower()) or by_doi.get(source.lower().replace("/", "_"))
+            r = source_text(sp["paper_id"], seed_map) if sp else (None, "source 未在交接包/ inputs")
+            _txtcache[source] = r; return r
+        sof_q = 0
+        for o in syn.get("sof", []):
+            for pvn in (o.get("provenance") or []):
+                total += 1; sof_q += 1
+                text, note = _src_text(pvn.get("source", ""))
+                if text is None:
+                    skip += 1; print(f"  ⚠ SoF「{o.get('outcome','')[:12]}」{pvn.get('value','')}: 來源無法核對（{note}）"); continue
+                good, ratio = match(pvn.get("quote", ""), _norm(text), a.threshold)
+                if good: ok += 1
+                else:
+                    fail += 1; failures.append(f"SoF「{o.get('outcome','')[:14]}」value={pvn.get('value')} ratio={ratio} quote={pvn.get('quote','')[:60]}")
+                print(f"  {'✅' if good else '❌'} SoF/{pvn.get('value','')[:20]}（{note}）")
+        if sof_q:
+            print(f"  — SoF provenance 共核 {sof_q} 個數值")
+
     print(f"\n總計：{ok} 通過 / {fail} 失敗 / {skip} 無法核對（共 {total+skip} quote）")
     if failures:
         print("失敗清單："); [print("  -", x) for x in failures]

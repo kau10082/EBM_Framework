@@ -20,4 +20,4 @@ __pycache__/
 venv/
 .DS_Store
 _strip*.py
-_build*.py
+# 移除 _build*.py：會誤殺核心渲染器 _build_pdf.py（GRADE PDF）；session 暫存由 _run_tmp/ 覆蓋

@@ -138,7 +138,35 @@ def check(syn=None):
         ae = (o.get("absolute_effect") or "") + (o.get("dose_response") or "")
         if re.search(r"NNT[BH]\s*[≈≒=]?\s*\d", ae) and not re.search(r"CI|到|[–-]\s*\d|無限大|不顯著|跨", ae):
             fails.append(f"C14 SoF「{o.get('outcome','')[:16]}」NNT 點估計缺 CI/不確定標記（假性精確；事件少時 CI 常含無限大）")
+    # C15: SoF 受試者數一致性（防『每次報告 N 飄移』）——所有「跨 N 個 RCT 合併」列須用同一個受試者總數；
+    #      子比較列(單試驗單劑量 vs 安慰劑)允許不同，但其 N 須等於兩臂和。
+    def _ints(s): return [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", s or "")]
+    pooled_totals = {}
+    for o in syn.get("sof", []):
+        nps = o.get("n_participants_studies") or ""
+        nums = [n for n in _ints(nps) if n >= 100]            # 忽略研究數/小數
+        if re.search(r"RCT|試驗", nps) and not re.search(r"vs|＋|\+|臂|單試驗|單劑量", nps):
+            # 視為「跨 RCT 合併」列：取其最大數為該列宣稱的合併總數
+            if nums:
+                pooled_totals.setdefault(max(nums), []).append(o.get("outcome", "")[:14])
+    if len(pooled_totals) > 1:
+        desc = "；".join(f"{n}（{'/'.join(v)}）" for n, v in sorted(pooled_totals.items()))
+        fails.append(f"C15 SoF 跨-RCT 合併列出現 {len(pooled_totals)} 個不同受試者總數：{desc} → 須統一(隨機分配總數)，MA分析集差異只在敘述explain、勿混入 SoF 欄")
     return fails
+
+def warnings(syn=None):
+    """非阻擋的提醒（soft）：缺了會降可讀性/完整性、但不擋定稿者。回提醒清單。"""
+    if syn is None:
+        try:
+            syn = json.loads((CACHE / "_synthesis.json").read_text(encoding="utf-8")).get("synthesis", {})
+        except Exception:
+            return []
+    warns = []
+    # W1: 有 SoF 卻沒寫白話總結 plain_summary（通勤可讀開頭；schema 允許 null→不會被硬擋）
+    if syn.get("sof") and not (syn.get("plain_summary") or "").strip():
+        warns.append("W1 缺 plain_summary（白話『一分鐘讀懂』開頭）——報告少了通勤可讀的總結；建議補上（口語、術語就地白話化）")
+    return warns
+
 
 def main():
     fails = check()
