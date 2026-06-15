@@ -31,7 +31,7 @@ def check(syn=None):
         syn = json.loads((CACHE / "_synthesis.json").read_text(encoding="utf-8")).get("synthesis", {})
     fails = []
     # C1: RoB2 overall == worst
-    for r in syn.get("rob_summary", []):
+    for r in (syn.get("rob_summary") or []):
         worst = max((r[d] for d in DOMS), key=lambda v: ORDER.get(v, 0))
         if r.get("overall") != worst:
             fails.append(f"C1 [{r.get('trial')}] overall={r.get('overall')} ≠ 最不利領域={worst}")
@@ -40,23 +40,23 @@ def check(syn=None):
     if syn.get("rob_summary") and not re.search(r"廠商|贊助|sponsor|資助|發表偏誤", pb):
         fails.append("C2 廠商資助之偏誤未在 publication_bias 聲明（應歸此處，非 RoB2 domain5）")
     # C3: SoF 合併效應須標來源
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""
         if re.search(r"合併|pooled|池化", rel) and not any(m in rel + (o.get("comment") or "") for m in SRC_MARK):
             fails.append(f"C3 SoF「{o.get('outcome')[:20]}」relative_effect 標『合併』但未註來源：{rel}")
     # C4: RoB2『全文依賴性』——僅摘要/AI 合成抽取者，overall 不得 low（最高 some_concerns）
-    for r in syn.get("rob_summary", []):
+    for r in (syn.get("rob_summary") or []):
         basis = (r.get("evidence_basis") or "full_text")
         if basis in ("abstract", "ai_synthesis") and r.get("overall") == "low":
             fails.append(f"C4 [{r.get('trial')}] 證據來源={basis}（非全文）卻判 RoB2 overall=low；無資訊不得提議 low，最高 some_concerns（MECIR C54/C55）")
     # C5: 危害結果用詞——須用 NNTH，禁用 NNH（Cochrane 強烈建議）
     harm_kw = re.compile(r"不良|危害|harm|過度角化|hyperkeratosis|牙周|感染|AE")
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         ae = (o.get("absolute_effect") or "")
         if harm_kw.search(o.get("outcome") or "") and re.search(r"\bNNH\b", ae):
             fails.append(f"C5 SoF「{o.get('outcome')[:20]}」危害結果用了 NNH，應改用 NNTH（指明方向、避免誤解）")
     # C6: 二分類 SoF（相對效應為 RR/OR）之絕對效應若給 NNT 類，須附 95% CI
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         if re.search(r"\b(RR|OR)\b", rel) and re.search(r"NNT[BH]?", ae) and not re.search(r"CI|到|—|–", ae):
             fails.append(f"C6 SoF「{o.get('outcome')[:20]}」二分類絕對效應給了 NNT 但缺 95% CI（須由相對效應 CI 代入 ACR 回推）")
@@ -67,7 +67,7 @@ def check(syn=None):
             m = re.search(pat, s or ""); return float(m.group(1)) if m else None
         def _pct(s):
             m = re.search(r'([\d.]+)\s*%', s or ""); return float(m.group(1)) / 100 if m else None
-        for o in syn.get("sof", []):
+        for o in (syn.get("sof") or []):
             rel, ae = o.get("relative_effect") or "", o.get("absolute_effect") or ""
             if "率" in (o.get("assumed_control_risk") or "") or "/人年" in ae:
                 continue  # 率結果不套 NNT
@@ -96,18 +96,18 @@ def check(syn=None):
     except Exception:
         pass
     # C8: 連續結果 SoF 須附 MID 或可解讀再表達（Ch14 §14.1.6.2、Ch15 §15.5）
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         is_cont = re.search(r"\bMD\b|平均差|mL|percentage|百分點變化|分數", ae) and not re.search(r"\b(RR|OR|HR)\b|率比|風險差|NNT", ae)
         if is_cont and not (o.get("mid") or o.get("continuous_reexpression")):
             fails.append(f"C8 SoF「{o.get('outcome','')[:18]}」為連續結果但缺 MID/可解讀再表達")
     # C9: 時間事件(HR)結果 SoF 須有絕對欄（Ch14 §14.1.5.2）
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         if re.search(r"\bHR\b", rel) and not re.search(r"%|NNT|風險|存活|事件|百分點", ae):
             fails.append(f"C9 SoF「{o.get('outcome','')[:18]}」為 HR 結果但缺絕對效應欄（須由 absrisk hr 換算）")
     # C10: ≥2 試驗時須有證據體 GRADE（Ch14 §14.2.1，非逐篇取均/取最差）
-    if len(syn.get("rob_summary", [])) >= 2 and not syn.get("body_of_evidence"):
+    if len((syn.get("rob_summary") or [])) >= 2 and not syn.get("body_of_evidence"):
         fails.append("C10 證據體 GRADE 缺失：≥2 試驗時 synthesis 須含 body_of_evidence（跨研究逐 outcome 確定性）")
     # C11: critical outcomes 必列 SoF（全因死亡＋SAE，即使罕見/不顯著/不可統合；Ch14 §14.1.6.1，防結果報告偏誤）
     if syn.get("sof"):
@@ -117,15 +117,15 @@ def check(syn=None):
         if not re.search(r"嚴重不良|\bSAE\b|serious adverse", sof_text, re.I):
             fails.append("C11 SoF 缺『嚴重不良事件 SAE』critical outcome（須列）")
     # C12: 借用他人 MA 合併值卻宣稱『不池化』且未明示採用理由＝自我矛盾（Emara paradox 防呆）
-    borrowed = any(re.search(r"取自.{0,6}MA|Emara.{0,6}合併|pooled", (o.get("relative_effect") or "") + (o.get("comment") or "")) for o in syn.get("sof", []))
+    borrowed = any(re.search(r"取自.{0,6}MA|Emara.{0,6}合併|pooled", (o.get("relative_effect") or "") + (o.get("comment") or "")) for o in (syn.get("sof") or []))
     nopool = re.search(r"不池化|未自行(統計)?池化", (syn.get("vote_counting_check") or "") + (syn.get("conflict_analysis") or ""))
-    adopt = re.search(r"採用|特例|明示|adopt", (syn.get("conflict_analysis") or "") + (syn.get("vote_counting_check") or "") + "".join((o.get("comment") or "") for o in syn.get("sof", [])))
+    adopt = re.search(r"採用|特例|明示|adopt", (syn.get("conflict_analysis") or "") + (syn.get("vote_counting_check") or "") + "".join((o.get("comment") or "") for o in (syn.get("sof") or [])))
     if borrowed and nopool and not adopt:
         fails.append("C12 借用他人 MA 合併值但宣稱『不池化』且未明示採用理由（自我矛盾，須標明特例採用 MA 合併估計）")
     # C13: 跨呈現確定性一致——body_of_evidence 與 SoF 同 outcome 確定性須相符（防手改一處飄移）
     def _kw(s): return set(re.findall(r"[一-鿿A-Za-z0-9]{2,}", re.sub(r"[（）()／/、，,。.；;]", " ", s or "")))
-    sof = syn.get("sof", [])
-    for b in syn.get("body_of_evidence", []):
+    sof = (syn.get("sof") or [])
+    for b in (syn.get("body_of_evidence") or []):
         bk = _kw(b.get("outcome", ""))
         best = None; bestov = 0
         for o in sof:
@@ -134,7 +134,7 @@ def check(syn=None):
         if best and bestov >= 2 and b.get("certainty") != best.get("certainty"):
             fails.append(f"C13 證據體 GRADE「{b.get('outcome','')[:14]}」確定性={b.get('certainty')} ≠ SoF「{best.get('outcome','')[:14]}」={best.get('certainty')}（跨呈現飄移）")
     # C14: SoF 任何 NNTB/NNTH 點估計必附 CI 或不確定標記（含危害；防假性精確，Ch15 §15.4.4）
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         ae = (o.get("absolute_effect") or "") + (o.get("dose_response") or "")
         if re.search(r"NNT[BH]\s*[≈≒=]?\s*\d", ae) and not re.search(r"CI|到|[–-]\s*\d|無限大|不顯著|跨", ae):
             fails.append(f"C14 SoF「{o.get('outcome','')[:16]}」NNT 點估計缺 CI/不確定標記（假性精確；事件少時 CI 常含無限大）")
@@ -142,7 +142,7 @@ def check(syn=None):
     #      子比較列(單試驗單劑量 vs 安慰劑)允許不同，但其 N 須等於兩臂和。
     def _ints(s): return [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", s or "")]
     pooled_totals = {}
-    for o in syn.get("sof", []):
+    for o in (syn.get("sof") or []):
         nps = o.get("n_participants_studies") or ""
         nums = [n for n in _ints(nps) if n >= 100]            # 忽略研究數/小數
         if re.search(r"RCT|試驗", nps) and not re.search(r"vs|＋|\+|臂|單試驗|單劑量", nps):

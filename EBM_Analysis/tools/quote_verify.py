@@ -21,7 +21,7 @@ except Exception: pass
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workdir
 CACHE = Path(workdir.cache_dir()); INPUTS = Path(workdir.inputs_dir())
-UA = {"User-Agent": "Mozilla/5.0 (EBM quote_verify; kau10082ai@gmail.com)"}
+UA = {"User-Agent": "Mozilla/5.0 (EBM_Framework quote_verify; +https://github.com/kau10082/EBM_Framework)"}
 
 def _norm(s):
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()

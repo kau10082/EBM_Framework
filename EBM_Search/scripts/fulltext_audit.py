@@ -16,8 +16,8 @@ import sys, os, json, argparse, time
 from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
-os.environ.setdefault("CROSSREF_MAILTO", os.environ.get("CROSSREF_MAILTO", "kau10082@gmail.com"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "EBM_Analysis" / "tools"))
+# Unpaywall 的 email 由 unpaywall._mailto() 解析（env CROSSREF_MAILTO ＞ config crossref.mailto）；不在此寫死個資
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "EBM_Analysis" / "tools"))
 
 NOT_GOT = {"ai_synthesis", "none", None, ""}
 NOT_GOT_STATUS = {"ai_summary_only", "none", None, ""}

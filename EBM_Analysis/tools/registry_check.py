@@ -22,7 +22,7 @@ def fetch(nct):
               "protocolSection.outcomesModule.secondaryOutcomes,"
               "protocolSection.statusModule.primaryCompletionDateStruct")
     url = API + nct + "?" + urllib.parse.urlencode({"fields": fields})
-    req = urllib.request.Request(url, headers={"User-Agent": "EBM/1.0 (kau10082ai@gmail.com)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "EBM_Framework/1.0 (+https://github.com/kau10082/EBM_Framework)"})
     j = json.loads(urllib.request.urlopen(req, timeout=40).read().decode("utf-8"))
     ps = j.get("protocolSection", {})
     om = ps.get("outcomesModule", {})

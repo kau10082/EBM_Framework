@@ -65,7 +65,7 @@ def main():
     src = a.infile
     if not src:
         try:
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "EBM_Analysis" / "tools"))
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "EBM_Analysis" / "tools"))
             import run_state
             ftd = (run_state.load() or {}).get("paths", {}).get("fulltext_dir")
             cand = (Path(ftd) / "_search_report.json") if ftd else None
