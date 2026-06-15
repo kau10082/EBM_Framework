@@ -1,5 +1,7 @@
 # EBM_Framework
 
+**Evidence-Based Medicine (EBM) end-to-end pipeline** — multi-source literature search, Crossref/PubMed cross-verification (anti-hallucination), and GRADE evidence appraisal, with Claude as the engine. 實證醫學（EBM）端到端自動化框架。
+
 > 問一個醫療問題，它幫你找齊相關研究、確認每篇都真實存在、評估證據可不可信，再整理成一份報告。在 Claude Code 裡用白話就能啟動。
 >
 > Ask a medical question, and it finds the relevant research, confirms each study really exists, judges how trustworthy the evidence is, and writes you a report — all started in plain language inside Claude Code.
