@@ -86,8 +86,9 @@ def check(syn=None):
             if stated_nnt is not None and abs(rd) > 1e-9 and abs(1/abs(rd) - stated_nnt) > 1.0:
                 fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT 重算 {1/abs(rd):.0f} ≠ 報告 {stated_nnt:.0f}")
             # NNT CI 覆驗
-            relci = re.search(r'(?:RR|OR)\s*[\d.]+.{0,14}CI\s*([\d.]+)\s*[–\-]\s*([\d.]+)', rel)
-            aeci = re.search(r'CI\s*([\d.]+)\s*[–\-到]\s*([\d.]+)', ae)
+            # CI 分隔符統一支援 –／-／到／to，避免「0.52 to 0.78」「0.52 到 0.78」讓 NNT CI 覆驗靜默跳過
+            relci = re.search(r'(?:RR|OR)\s*[\d.]+.{0,14}CI\s*([\d.]+)\s*(?:[–\-到]|\bto\b)\s*([\d.]+)', rel)
+            aeci = re.search(r'CI\s*([\d.]+)\s*(?:[–\-到]|\bto\b)\s*([\d.]+)', ae)
             if (rr or orr) and acr is not None and relci and aeci:
                 diffs = [abs(absrisk._corr("rr" if rr else "or", float(b), acr) - acr) for b in relci.groups()]
                 if all(d > 1e-9 for d in diffs):   # CI 觸無效線(diff≈0→NNT 無限大)時略過數值覆驗，避免 1/0 ZeroDivisionError 把整段 C7 靜默中斷
@@ -153,7 +154,8 @@ def check(syn=None):
     def _ints(s):
         # 受試者數提取：數字後若緊接劑量/單位(mg/µg/週/%…)則排除，避免把劑量(150mg/300mg)誤當 N 觸發 C15 假性阻擋
         out = []
-        for m in re.finditer(r"(\d[\d,]*)\s*(mg|µg|μg|ug|mcg|kg|m[lL]|%|週|周|wk|week|歲|year|yr|mmHg|nmol|mmol)?", s or "", re.I):
+        # 排除單位用多字元安全寫法（days?/months?/天，不用裸 d|m|mo——否則會誤排除「1200 deaths/died」這種真 N）
+        for m in re.finditer(r"(\d[\d,]*)\s*(mg|µg|μg|ug|mcg|kg|m[lL]|%|週|周|wk|week|days?|months?|天|歲|year|yr|mmHg|nmol|mmol)?", s or "", re.I):
             if not m.group(2):
                 out.append(int(m.group(1).replace(",", "")))
         return out
