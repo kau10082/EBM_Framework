@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/EBM_Search/scripts/gate_guard.py\" --auto --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

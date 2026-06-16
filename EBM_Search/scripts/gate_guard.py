@@ -1,0 +1,234 @@
+# -*- coding: utf-8 -*-
+"""
+gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 Stop hook 自動跑）
+================================================================================
+依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
+  • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
+  • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
+  • _search_report.json             → funnel_check（流程數字閉合）
+  • _corpus_seed.json               → fulltext_audit（交接前 Unpaywall 複查）
+
+設計目標：把「取盡」「跑 Unpaywall」從靠 Claude 記得，變成**機器條件**。
+任一檢查 FAIL → exit 1（Stop hook 收到非零碼即可 block 回灌）。
+`--auto`：找不到任何 EBM cache 時**靜默 exit 0**（非 EBM 對話不打擾）。
+
+用法：
+  python gate_guard.py --cache <cache_dir>        # 明指 cache
+  python gate_guard.py --auto                      # 自動從 run_state 找 cache；無則靜默放行
+  python gate_guard.py --auto --quiet              # Stop hook 用：PASS 不輸出
+"""
+import sys, os, json, argparse, time
+from pathlib import Path
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1] / "EBM_Analysis" / "tools"))
+try: sys.stdout.reconfigure(encoding="utf-8")
+except Exception: pass
+
+ACTIVE_FLAG = "_search_active.flag"  # Gate ① 開始時建、交接/結案時移除；不存在＝檢索非進行中→守門休眠
+
+def _load(p):
+    try: return json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception: return None
+
+def _active(cache):
+    """檢索是否進行中：唯有哨兵旗標存在才讓 Stop hook 生效（避免全域每回合打擾）。"""
+    return cache is not None and (cache / ACTIVE_FLAG).exists()
+
+def _find_cache(explicit=None):
+    if explicit and Path(explicit).exists():
+        return Path(explicit)
+    # 從 EBM run_state 解析 cache_dir
+    try:
+        import run_state
+        st = run_state.load() or {}
+        cd = (st.get("paths") or {}).get("cache_dir")
+        if cd and Path(cd).exists():
+            return Path(cd)
+    except Exception:
+        pass
+    # 退而求其次：env / 預設 OneDrive 文件
+    for cand in [os.environ.get("EBM_CACHE_DIR"),
+                 os.path.expanduser(r"~/OneDrive/文件/EBM_Framework/work/cache")]:
+        if cand and Path(cand).exists():
+            return Path(cand)
+    return None
+
+def _norm_doi(d):
+    if not d: return None
+    import re
+    d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
+
+def check_unpaywall_coverage(cache):
+    """Gate ②c：每筆『非全文且有 DOI』必須已過 Unpaywall，且不得其實是 OA 卻判成取不到。"""
+    content = _load(cache / "g2c_FINAL_content.json")
+    if content is None:
+        return None  # 此關尚未到
+    up = _load(cache / "g2c_unpaywall.json") or {}
+    fails = []
+    not_checked = []; misclassified = []
+    for c in content:
+        cls = c.get("class") or ""
+        if cls.startswith("有全文"):
+            continue
+        doi = _norm_doi(c.get("doi"))
+        if not doi:
+            continue  # 無 DOI 無法 Unpaywall（非失敗）
+        u = up.get(doi)
+        if u is None:
+            not_checked.append(doi)
+        elif u.get("is_oa") and (u.get("pdf") or u.get("url")):
+            misclassified.append((c.get("title") or doi)[:50])
+    if not_checked:
+        fails.append(f"②c 有 {len(not_checked)} 筆『非全文且有 DOI』未過 Unpaywall（漏跑）：{not_checked[:5]}{'…' if len(not_checked)>5 else ''}")
+    if misclassified:
+        fails.append(f"②c 有 {len(misclassified)} 筆 Unpaywall 其實有 OA 卻判取不到（誤分類）：{misclassified[:5]}")
+    return fails
+
+def check_waiting_fulltext(cache):
+    """Gate ③：判『待評估(無內容)』者，必須真的無任何全文路徑可取；
+    若還有 PMCID / Unpaywall PDF / OA 旗標未抓就丟待評估 → FAIL（全文有無以實際抓取為準）。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None  # 尚未到/未產最終 g3
+    fails = []
+    leaked = []
+    for r in g3:
+        v = r.get("verdict") or ""
+        if not v.startswith("待評估"):
+            continue
+        # 仍有全文路徑卻判待評估＝漏抓
+        if r.get("pmcid") or r.get("inPMC") or r.get("oa_pdf") or r.get("isOA") == "Y" \
+           or str(r.get("class") or "").startswith("有全文"):
+            # 唯一放行：已『窮盡所有管道』或『待人工補全文』的明確標記；
+            # 單純一次『抓取失敗(404/逾時/403)』不算——有路徑就要重試(EuropePMC→NCBI→Unpaywall→人工)
+            if r.get("channels_exhausted") or ("待人工補全文" in v) or ("已窮盡管道" in v):
+                continue
+            leaked.append((r.get("title") or r.get("pmid") or r.get("doi") or "?")[:50])
+    if leaked:
+        fails.append(f"③ 有 {len(leaked)} 筆有全文路徑(PMC/OA/Unpaywall)卻丟待評估、未窮盡抓取：{leaked[:5]}{'…' if len(leaked)>5 else ''}（單次抓取失敗≠無內容；須重試 EuropePMC→NCBI→Unpaywall→人工，或明標 channels_exhausted/待人工補全文）")
+    return fails
+
+def check_partition_provenance(cache):
+    """Gate ③ 反坍縮：以 uid 獨立重算，抓 key-collision 造成的污染/漏失。
+    (1) 分割閉合：screened ⊎ awaiting 的 uid 必須『無重複、互斥、恰覆蓋』base 全部 uid。
+    (2) 已篩來源證明：每筆 screened 的 base 紀錄必須真的有 abstract 或其 uid 在 fetched 表中
+        ——否則代表是被坍縮鍵污染進來的『無內容卻拿到判定』。"""
+    base = _load(cache / "g2c_FINAL_content.json")
+    scr = _load(cache / "g3_FINAL_screen.json")
+    awa = _load(cache / "g2c_awaiting_classification.json")
+    if base is None or scr is None or awa is None:
+        return None
+    fetched = _load(cache / "g3_fetched_by_uid.json") or {}
+    fails = []
+    base_by_uid = {b.get("uid"): b for b in base}
+    if any(b.get("uid") is None for b in base):
+        return ["g2c_FINAL_content.json 有紀錄缺 uid：無法以唯一鍵防坍縮（請先 uid 化）"]
+    if len(base_by_uid) != len(base):
+        fails.append(f"base uid 不唯一（{len(base)} 筆但只有 {len(base_by_uid)} 個 uid）：uid 必須穩定唯一")
+    su = [s.get("uid") for s in scr]; au = [a.get("uid") for a in awa]
+    sset, aset = set(su), set(au)
+    if len(su) != len(sset): fails.append(f"screened uid 有重複（{len(su)}→{len(sset)}）")
+    if len(au) != len(aset): fails.append(f"awaiting uid 有重複（{len(au)}→{len(aset)}）")
+    overlap = sset & aset
+    if overlap: fails.append(f"同一 uid 同時在 screened 與 awaiting（{len(overlap)} 筆）：分割不互斥")
+    missing = set(base_by_uid) - sset - aset
+    extra = (sset | aset) - set(base_by_uid)
+    if missing: fails.append(f"有 {len(missing)} 筆 base uid 未被分類（漏失）")
+    if extra: fails.append(f"有 {len(extra)} 個 uid 不在 base（憑空冒出）")
+    # (2) provenance：screened 每筆必須有自己的內容
+    no_content = []
+    for s in scr:
+        b = base_by_uid.get(s.get("uid"))
+        if b is None: continue
+        has_ab = bool((b.get("abstract") or "").strip())
+        if not has_ab and s.get("uid") not in fetched:
+            no_content.append((b.get("title") or b.get("uid") or "?")[:45])
+    if no_content:
+        fails.append(f"③ 有 {len(no_content)} 筆 screened 其 base 無 abstract 且 uid 不在 fetched 表（疑遭坍縮鍵污染、無內容卻拿到判定）：{no_content[:5]}")
+    return fails
+
+def check_report(cache):
+    """報告版型/內容硬 gate：對 _search_report.json 跑 report_check（③二分/PMID欄/無佔位/背景檢核/進行中表）。"""
+    data = _load(cache / "_search_report.json")
+    if data is None:
+        return None
+    try:
+        import report_check
+        return report_check.check(data)
+    except Exception as e:
+        return [f"report_check 載入失敗：{str(e)[:80]}"]
+
+def check_exhaust(cache):
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None
+    try:
+        import leg_exhaust_check
+        return leg_exhaust_check.check(man)
+    except Exception as e:
+        return [f"leg_exhaust_check 載入失敗：{str(e)[:80]}"]
+
+def run(cache, quiet=False):
+    checks = [("Gate① 取盡", check_exhaust(cache)),
+              ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
+              ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
+              ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
+              ("報告版型/內容", check_report(cache))]
+    all_fails = []
+    lines = []
+    for name, res in checks:
+        if res is None:
+            lines.append(f"  ⏭  {name}：尚未到此關（產物不存在）")
+        elif res:
+            lines.append(f"  ❌ {name}：")
+            for f in res: lines.append(f"       - {f}"); all_fails.append(f)
+        else:
+            lines.append(f"  ✅ {name}：通過")
+    if all_fails:
+        print("❌ gate_guard 攔截到未通關項目：")
+        print("\n".join(lines))
+        return 1
+    if not quiet:
+        print("✅ gate_guard：所有已抵達關卡通過")
+        print("\n".join(lines))
+    return 0
+
+def run_hook(cache):
+    """Stop hook 模式：FAIL 時把原因寫 stderr 並 exit 2（Claude Code Stop hook 以 exit 2 阻擋停止、回灌 stderr 給模型）。"""
+    if not _active(cache):
+        sys.exit(0)  # 檢索非進行中（無哨兵旗標）：靜默放行，全域零打擾
+    checks = [("Gate① 取盡", check_exhaust(cache)),
+              ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
+              ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
+              ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
+              ("報告版型/內容", check_report(cache))]
+    fails = []
+    for name, res in checks:
+        if res:
+            for f in res: fails.append(f"[{name}] {f}")
+    if fails:
+        sys.stderr.write("gate_guard 攔截：本輪檢索關卡有未通關項目，請修正後再結束：\n"
+                         + "\n".join("  - " + f for f in fails) + "\n")
+        sys.exit(2)
+    sys.exit(0)
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cache", default=None)
+    ap.add_argument("--auto", action="store_true")
+    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--hook", action="store_true", help="Stop hook 模式：FAIL→stderr＋exit 2")
+    a = ap.parse_args()
+    cache = _find_cache(a.cache)
+    if a.hook:
+        run_hook(cache)
+        return
+    if cache is None:
+        if a.auto:
+            sys.exit(0)  # 非 EBM 對話：靜默放行
+        print("⏭  找不到 EBM cache（--cache 指定，或先跑 Gate ①）"); sys.exit(0)
+    sys.exit(run(cache, quiet=a.quiet))
+
+if __name__ == "__main__":
+    main()

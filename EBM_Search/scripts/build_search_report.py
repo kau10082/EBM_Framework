@@ -117,15 +117,15 @@ def build(data, out_pdf):
     _first_rows = (len(data.get("studies", [{}])[0].get("reports", [])) + 2) if data.get("studies") else 3
     E.append(CondPageBreak(min(150, _first_rows * 7.0 + 18) * mm))
     E.append(P("二、核心證據表：納入原始研究（以 Study 為單位；含全文狀態與交叉檢核）", H2))
-    rows = [[P("<b>研究（期別/登錄）</b>", CELL), P("<b>報告（標題簡述／期刊年）</b>", CELL), P("<b>DOI</b>", CELL), P("<b>全文狀態</b>", CELL), P("<b>交叉檢核</b>", CELL)]]
+    rows = [[P("<b>研究（期別/登錄）</b>", CELL), P("<b>報告（標題簡述／期刊年）</b>", CELL), P("<b>PMID</b>", CELL), P("<b>DOI</b>", CELL), P("<b>全文狀態</b>", CELL), P("<b>交叉檢核</b>", CELL)]]
     spans = []; r = 1
     for grp in data.get("studies", []):
         reps = grp["reports"]; start = r
-        for i, (title, doi, ft, xref) in enumerate(reps):
+        for i, (title, pmid, doi, ft, xref) in enumerate(reps):
             c0 = P(grp["study"].replace("\n", "<br/>"), CELL) if i == 0 else P("", CELL)
-            rows.append([c0, P(title, CELL), P(doi, CELL), P(ft, CELL), P(xref, CELL)]); r += 1
+            rows.append([c0, P(title, CELL), P(str(pmid), CELL), P(doi, CELL), P(ft, CELL), P(xref, CELL)]); r += 1
         if len(reps) > 1: spans.append(("SPAN", (0, start), (0, start + len(reps) - 1)))
-    t2 = Table(rows, colWidths=[34 * mm, 150 * mm, 52 * mm, 24 * mm, 14 * mm], repeatRows=1)
+    t2 = Table(rows, colWidths=[28 * mm, 126 * mm, 22 * mm, 52 * mm, 24 * mm, 20 * mm], repeatRows=1)  # Σ=272mm（全表統一）
     t2.setStyle(TableStyle(hdr_style("#0b5394") + [("VALIGN", (0, 0), (-1, -1), "MIDDLE")] + spans))
     E.append(t2)
     if data.get("fulltext_legend"): E.append(P(data["fulltext_legend"], SMALL))
@@ -136,7 +136,7 @@ def build(data, out_pdf):
         E.append(CondPageBreak(40 * mm))
         E.append(P("二之二、進行中試驗（ClinicalTrials.gov；不計入證據，供完整度查核）", H2))
         orows = [[P("<b>登錄號</b>", CELL), P("<b>內容（藥物／類型）</b>", CELL), P("<b>狀態</b>", CELL)]] + [[P(a, CELL), P(b, CELL), P(c, CELL)] for a, b, c in data["ongoing_trials"]]
-        t2b = Table(orows, colWidths=[34 * mm, 180 * mm, 60 * mm], repeatRows=1)
+        t2b = Table(orows, colWidths=[32 * mm, 180 * mm, 60 * mm], repeatRows=1)  # Σ=272mm（全表統一）
         t2b.setStyle(TableStyle(hdr_style("#b45f06") + [("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fcf0e6")]), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
         E.append(t2b)
         if data.get("ongoing_note"): E.append(P(data["ongoing_note"], SMALL))
@@ -146,8 +146,8 @@ def build(data, out_pdf):
     if data.get("background"):
         E.append(CondPageBreak(40 * mm))
         E.append(P("三、背景／對照參考（不計入納入 N；供脈絡）", H2))
-        b = [[P("<b>背景文獻（標題／來源）</b>", CELL), P("<b>DOI</b>", CELL), P("<b>型態</b>", CELL), P("<b>全文狀態</b>", CELL)]] + [[P(t, CELL), P(d, CELL), P(ty, CELL), P(fs, CELL)] for t, d, ty, fs in data["background"]]
-        t3 = Table(b, colWidths=[150 * mm, 52 * mm, 30 * mm, 42 * mm], repeatRows=1)
+        b = [[P("<b>背景文獻（標題／來源）</b>", CELL), P("<b>PMID</b>", CELL), P("<b>DOI</b>", CELL), P("<b>型態</b>", CELL), P("<b>全文狀態</b>", CELL), P("<b>檢核</b>", CELL)]] + [[P(t, CELL), P(str(pm), CELL), P(d, CELL), P(ty, CELL), P(fs, CELL), P(xr, CELL)] for t, pm, d, ty, fs, xr in data["background"]]
+        t3 = Table(b, colWidths=[114 * mm, 22 * mm, 52 * mm, 28 * mm, 24 * mm, 32 * mm], repeatRows=1)  # Σ=272mm（全表統一）
         t3.setStyle(TableStyle(hdr_style("#38761d") + [("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eef7ea")]), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
         E.append(t3)
         if data.get("background_note"): E.append(P(data["background_note"], SMALL))
