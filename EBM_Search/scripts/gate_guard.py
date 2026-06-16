@@ -148,6 +148,17 @@ def check_partition_provenance(cache):
         fails.append(f"③ 有 {len(no_content)} 筆 screened 其 base 無 abstract 且 uid 不在 fetched 表（疑遭坍縮鍵污染、無內容卻拿到判定）：{no_content[:5]}")
     return fails
 
+def check_stage1(cache):
+    """Stage A→B 邊界守門：對 _stage1_corpus.json 跑 stage1_check（全文狀態resolved/待評估不混入候選/取盡/互斥）。"""
+    data = _load(cache / "_stage1_corpus.json")
+    if data is None:
+        return None
+    try:
+        import stage1_check
+        return stage1_check.check(data)
+    except Exception as e:
+        return [f"stage1_check 載入失敗：{str(e)[:80]}"]
+
 def check_no_retracted(cache):
     """撤稿管控：⑥交叉驗證標 RETRACTED 者，嚴禁出現在 納入/背景/報告表/Zotero payload/交接包。
     （2026-06 實測撤稿 SR 被當背景匯入 Zotero；撤稿須統一在交叉驗證查〔PubMed PT + Crossref is-retracted〕，
@@ -202,7 +213,8 @@ def check_exhaust(cache):
         return [f"leg_exhaust_check 載入失敗：{str(e)[:80]}"]
 
 def run(cache, quiet=False):
-    checks = [("Gate① 取盡", check_exhaust(cache)),
+    checks = [("Stage A→B 邊界", check_stage1(cache)),
+              ("Gate① 取盡", check_exhaust(cache)),
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
               ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
@@ -231,7 +243,8 @@ def run_hook(cache):
     """Stop hook 模式：FAIL 時把原因寫 stderr 並 exit 2（Claude Code Stop hook 以 exit 2 阻擋停止、回灌 stderr 給模型）。"""
     if not _active(cache):
         sys.exit(0)  # 檢索非進行中（無哨兵旗標）：靜默放行，全域零打擾
-    checks = [("Gate① 取盡", check_exhaust(cache)),
+    checks = [("Stage A→B 邊界", check_stage1(cache)),
+              ("Gate① 取盡", check_exhaust(cache)),
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
               ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),

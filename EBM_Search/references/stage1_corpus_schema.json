@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EBM_Search Stage A → Stage B 交接包 (_stage1_corpus.json)",
+  "description": "檢索切兩段：Stage A(廣搜→去重→高敏初篩→全文/摘要取得性)結束時凍結此契約；Stage B(嚴格篩→引文追蹤→交叉驗證→決定納入單位)只讀此檔做後續，看不到 Stage A 的原始混沌。設計目的＝把最易漂移的檢索中段邊界釘成磁碟產物，降低分心、強化遵從。欄位刻意與 corpus_seed(_corpus_seed.json) 同族，差別只在 verdict 多一個 candidate(Stage A 未定納入)。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "topic", "search_date", "review_question_seed", "legs", "candidates", "awaiting"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "stage1-1.0" },
+    "topic": { "type": "string" },
+    "search_date": { "type": "string", "description": "YYYY-MM-DD" },
+    "review_question_seed": {
+      "type": "object",
+      "required": ["statement", "P", "I", "C", "O"],
+      "properties": {
+        "statement": { "type": "string" },
+        "P": { "type": "string" }, "I": { "type": "string" },
+        "C": { "type": "string" }, "O": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "axis_synonyms": { "type": ["object", "null"] },
+    "legs": {
+      "type": "array",
+      "description": "Gate① 取盡證據：逐腿 hitCount/fetched/exhaustible/skipped+reason（供 leg_exhaust_check 對帳）。",
+      "items": {
+        "type": "object",
+        "required": ["leg"],
+        "properties": {
+          "leg": { "type": "string" },
+          "hitCount": { "type": ["integer", "null"] },
+          "fetched": { "type": ["integer", "null"] },
+          "exhaustible": { "type": ["boolean", "null"] },
+          "skipped": { "type": ["boolean", "null"] },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "description": "進 Stage B 嚴格篩的『有內容』候選（高敏初篩保留 ∩ 取得到全文或摘要）。verdict=candidate(尚未定納入)。",
+      "items": {
+        "type": "object",
+        "required": ["paper_id", "title", "verdict", "fulltext_status", "abstract_status"],
+        "properties": {
+          "paper_id": { "type": "string" },
+          "title": { "type": "string" },
+          "pmid": { "type": ["string", "null"] },
+          "doi": { "type": ["string", "null"] },
+          "journal": { "type": ["string", "null"] },
+          "year": { "type": ["string", "integer", "null"] },
+          "nct": { "type": ["string", "null"] },
+          "verdict": { "enum": ["candidate"] },
+          "fulltext_status": { "enum": ["have", "ai_summary_only", "none"] },
+          "abstract_status": { "enum": ["have", "none"] },
+          "fulltext_channel": { "type": ["string", "null"], "description": "online/pmc/unpaywall/manual_pending/abstract_only" },
+          "fulltext_url": { "type": ["string", "null"] },
+          "abstract": { "type": ["string", "null"], "description": "Stage B 嚴格篩判讀的內容基質(摘要或全文摘錄)。" }
+        }
+      }
+    },
+    "awaiting": {
+      "type": "array",
+      "description": "待評估研究：試過所有來源(PMC/NCBI/Unpaywall)仍無全文無摘要者；設置一旁、不進 Stage B 篩選。",
+      "items": {
+        "type": "object",
+        "required": ["paper_id", "reason"],
+        "properties": {
+          "paper_id": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "pmid": { "type": ["string", "null"] },
+          "doi": { "type": ["string", "null"] },
+          "reason": { "enum": ["兩者皆無", "待人工補全文"] },
+          "channels_exhausted": { "type": ["boolean", "null"] }
+        }
+      }
+    }
+  }
+}

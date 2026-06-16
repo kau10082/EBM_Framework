@@ -37,6 +37,11 @@ def main():
     allok &= _assert_fires("報告版型/內容（佔位名/空標題/缺PMID/背景欄/無進行中表）",
         report_check.check(bad))
 
+    import stage1_check
+    allok &= _assert_fires("Stage A→B 邊界（無內容混入候選）",
+        stage1_check.check({"schema_version":"stage1-1.0","legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
+          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"none","abstract_status":"none"}],"awaiting":[]}))
+
     import gate_guard, tempfile, json, io, shutil, os
     # 反坍縮：偽造一筆無內容卻在 screened
     tmp = Path(tempfile.mkdtemp())
