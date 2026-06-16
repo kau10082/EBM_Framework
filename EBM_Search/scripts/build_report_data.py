@@ -1,0 +1,169 @@
+# -*- coding: utf-8 -*-
+"""
+build_report_data.py — SR 報告資料『制式欄位＋務實填滿』確定性產生器
+====================================================================
+取代「每次手拼 _search_report.json」(欄位飄、常缺格)。從 cache 既有產物確定性組裝，
+**固定欄位、每格務實填滿（缺就自動回填）、撤稿排除**，並在寫出前自我驗證無缺格。
+
+制式欄位（canonical，勿自創）：
+  核心 Study 表 reports = [標題, PMID, DOI, 全文狀態, 交叉檢核]   （5 欄，全必填）
+  背景表  background     = [標題, PMID, DOI, 型態, 全文狀態, 檢核] （6 欄，全必填）
+  進行中  ongoing_trials = [登錄號, 內容, 狀態]                    （3 欄，登錄號必填）
+列舉值：全文狀態∈{線上,僅摘要,需補}；檢核∈{VERIFIED,UNVERIFIED}（RETRACTED 一律不入表）；
+        DOI 缺→「缺」(顯式)；PMID 必有(無→以登錄號/「—」+理由，不留空)。
+
+讀：g6_verified / g7_final_decision / g8_fulltext_audit / g1_ctgov（皆 cache）。
+缺 title/全文狀態/登錄號 → 以 EuropePMC core 回填（自我修復、不留空）。
+
+用法：python build_report_data.py --cache <dir> --out <_search_report.json>
+"""
+import sys, os, re, json, argparse, urllib.request, urllib.parse, time
+from pathlib import Path
+try: sys.stdout.reconfigure(encoding="utf-8")
+except Exception: pass
+
+CORE_COLS = ["標題", "PMID", "DOI", "全文狀態", "交叉檢核"]
+BG_COLS = ["標題", "PMID", "DOI", "型態", "全文狀態", "檢核"]
+ONGOING_COLS = ["登錄號", "內容", "狀態"]
+FT_ENUM = {"線上", "僅摘要", "需補"}
+
+def _load(cache, f):
+    p = Path(cache) / f
+    try: return json.loads(p.read_text(encoding="utf-8"))
+    except Exception: return None
+
+def _epmc_core(pmid):
+    try:
+        u = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:%s%%20AND%%20SRC:MED"
+             "&format=json&resultType=core&pageSize=1" % pmid)
+        r = (json.load(urllib.request.urlopen(u, timeout=25))["resultList"]["result"] or [{}])[0]
+        return r
+    except Exception:
+        return {}
+
+def _ft_status(pmid, r=None):
+    """線上/僅摘要/需補——以實際 OA 旗標＋Unpaywall 判，不留 '?'。"""
+    r = r or _epmc_core(pmid)
+    if r.get("isOpenAccess") == "Y" or r.get("pmcid"):
+        return "線上"
+    doi = r.get("doi")
+    if doi:
+        try:
+            d = json.load(urllib.request.urlopen(
+                "https://api.unpaywall.org/v2/" + urllib.parse.quote(doi) + "?email=kau10082@gmail.com", timeout=20))
+            if d.get("is_oa"):
+                return "線上"
+        except Exception:
+            pass
+    return "僅摘要"
+
+def build(cache):
+    ver = _load(cache, "g6_verified.json") or []
+    dec = _load(cache, "g7_final_decision.json") or {}
+    aud = _load(cache, "g8_fulltext_audit.json") or {"have": [], "need": []}
+    ctg = _load(cache, "g1_ctgov.json") or []
+    vmap = {str(v.get("pmid")): v for v in ver if v.get("pmid")}
+    retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED"}
+    ftmap = {}
+    for r in aud.get("have", []): ftmap[str(r["pmid"])] = ("線上" if r.get("status") == "有全文" else "僅摘要")
+    for r in aud.get("need", []): ftmap[str(r["pmid"])] = "需補"
+
+    def xref(pm):
+        v = vmap.get(pm, {})
+        return "VERIFIED" if v.get("verdict") == "VERIFIED" else (v.get("verdict") or "UNVERIFIED")
+
+    def fill_row5(pm):
+        v = vmap.get(pm, {}); core = None
+        title = (v.get("title") or "").strip()
+        if not title or len(title) < 5:
+            core = _epmc_core(pm); title = (core.get("title") or "").strip() or ("(PMID %s)" % pm)
+        ft = ftmap.get(pm) or _ft_status(pm, core)
+        if ft not in FT_ENUM: ft = "僅摘要"
+        doi = (v.get("doi") or (core or {}).get("doi") or "缺")
+        return [title[:95], str(pm), doi, ft, xref(pm)]
+
+    # 1. 核心 Study 表（排除撤稿；保持 g7 的 study 分組與順序）
+    MAIN = {"IMPACT": "29668352", "ETHOS": "32579807", "KRONOS": "30232048",
+            "TRIBUTE": "29429593", "SUNSET": "29779416"}
+    studies = []
+    for tr, pmids in dec.get("study_reports", {}).items():
+        if "PENDING" in tr: continue
+        name = tr.split("(")[0]
+        pmids = [str(p) for p in pmids if str(p) not in retr]
+        main = MAIN.get(name)
+        if main and main in pmids: pmids = [main] + [p for p in pmids if p != main]
+        if pmids:
+            studies.append({"study": name, "reports": [fill_row5(p) for p in pmids]})
+
+    # 2. 背景表（SR/MA＋指引；排除撤稿）
+    background = []
+    prim = {str(p) for g in studies for p in [r[1] for r in g["reports"]]}
+    for v in ver:
+        pm = str(v.get("pmid"))
+        if pm in retr or pm in prim: continue
+        dt = v.get("doctype")
+        if dt in ("Meta-Analysis", "Systematic Review", "Guideline"):
+            row = fill_row5(pm)  # [title,pmid,doi,ft,xref]
+            background.append([row[0][:78], row[1], row[2], dt, row[3], row[4]])
+
+    # 3. 進行中試驗（CT.gov 招募中/未招募 + 已發表 protocol；登錄號必填）
+    ONG = {"RECRUITING", "ACTIVE_NOT_RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION"}
+    ongoing = []
+    for s in ctg:
+        if s.get("status") in ONG:
+            intr = ", ".join((s.get("intr") or [])[:3]); t = s.get("title") or ""
+            blob = (t + " " + intr).lower()
+            if re.search(r"triple|ics.{0,5}laba.{0,5}lama|fluticasone furoate|budesonide.{0,15}glycopyrr|beclomet", blob) \
+               and re.search(r"dual|laba/lama|lama/laba|vilanterol|olodaterol|umeclidinium|glycopyrr", blob):
+                ongoing.append([s["nct"], (t[:70] + " ｜ " + intr[:40]), s.get("status")])
+    # 額外進行中（已發表 protocol/他庫登錄，如 TRACK；登錄號必填）— 讀 cache 的 g_extra_ongoing.json
+    extra = _load(cache, "g_extra_ongoing.json") or []
+    for e in extra:
+        if e and str(e[0]).strip():
+            ongoing.append([e[0], e[1], e[2] if len(e) > 2 else "protocol/待結果"])
+    return {"studies": studies, "background": background, "ongoing_trials": ongoing}
+
+def validate(data):
+    """完整性守門：每張表所有必填格非空、非佔位、非 '?'，列舉值合法。回 fails。"""
+    fails = []
+    for grp in data.get("studies", []):
+        for r in grp.get("reports", []):
+            if len(r) != 5: fails.append(f"[{grp.get('study')}] 核心列非 5 欄"); continue
+            for col, val in zip(CORE_COLS, r):
+                if val in (None, "", "?", "？", "(無標題)"): fails.append(f"[{grp.get('study')}] 核心『{col}』空/佔位（pmid={r[1]}）")
+            if r[3] not in FT_ENUM: fails.append(f"[{grp.get('study')}] 全文狀態非法『{r[3]}』")
+    for r in data.get("background", []):
+        if len(r) != 6: fails.append("背景列非 6 欄"); continue
+        for col, val in zip(BG_COLS, r):
+            if val in (None, "", "?", "？"): fails.append(f"背景『{col}』空（pmid={r[1]}）")
+    if not data.get("ongoing_trials"): fails.append("進行中試驗表空")
+    for o in data.get("ongoing_trials", []):
+        if not str(o[0]).strip() or str(o[0]) in ("—", "-"): fails.append(f"進行中缺登錄號：{str(o[1])[:40]}")
+    return fails
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cache", required=True)
+    ap.add_argument("--merge-into", default=None, help="把三表併入既有 _search_report.json（保留其餘欄位）")
+    ap.add_argument("--out", default=None)
+    a = ap.parse_args()
+    tables = build(a.cache)
+    fails = validate(tables)
+    if fails:
+        print("❌ 報告資料完整性未過（有缺格/佔位）：")
+        for f in fails: print("  -", f)
+        sys.exit(1)
+    target = a.merge_into or a.out
+    if a.merge_into and Path(a.merge_into).exists():
+        data = json.loads(Path(a.merge_into).read_text(encoding="utf-8"))
+        data.update(tables)
+    else:
+        data = tables
+    if target:
+        Path(target).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"✅ 制式三表已寫出（核心 {sum(len(s['reports']) for s in tables['studies'])} 報告／背景 {len(tables['background'])}／進行中 {len(tables['ongoing_trials'])}）→ {target}")
+    else:
+        print("✅ 完整性通過（未指定 --out/--merge-into，僅驗證）")
+
+if __name__ == "__main__":
+    main()

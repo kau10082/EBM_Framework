@@ -51,6 +51,10 @@ def check(data):
                 fails.append(f"[{name}] 報告標題空/佔位（pmid={pmid}）：渲染前須回填真實標題（EuropePMC core）")
             if not str(pmid).strip():
                 fails.append(f"[{name}] 報告缺 PMID（title={str(title)[:30]}）")
+            if str(ft).strip() in ("", "?", "？") or str(ft).strip() not in ("線上", "僅摘要", "需補"):
+                fails.append(f"[{name}] 全文狀態空/非列舉值『{ft}』（pmid={pmid}）：須∈線上/僅摘要/需補，不得留 ?")
+            if not str(doi).strip():
+                fails.append(f"[{name}] DOI 欄空（pmid={pmid}）：無 DOI 須顯式填『缺』")
     # 4. 省略字樣（全文掃 studies 區）
     blob = json.dumps(studies, ensure_ascii=False)
     if re.search(r"另含\s*\d+\s*篇|以下略|共\s*\d+\s*篇\)", blob):
@@ -60,8 +64,11 @@ def check(data):
         if not isinstance(r, (list, tuple)) or len(r) != 6:
             fails.append(f"背景表元組須 6 欄(title,pmid,doi,type,ft,xref)，實得 {len(r) if hasattr(r,'__len__') else '?'}")
             continue
-        if not str(r[1]).strip():
-            fails.append(f"背景表缺 PMID（{str(r[0])[:30]}）")
+        for col, val in zip(("標題","PMID","DOI","型態","全文狀態","檢核"), r):
+            if str(val).strip() in ("", "?", "？"):
+                fails.append(f"背景表『{col}』空/?（{str(r[0])[:28]}）")
+        if str(r[4]).strip() and str(r[4]).strip() not in ("線上", "僅摘要", "需補"):
+            fails.append(f"背景表全文狀態非列舉值『{r[4]}』（{str(r[0])[:28]}）")
     # 6. 進行中試驗表
     if not data.get("ongoing_trials"):
         fails.append("缺『進行中/待結果試驗』表（ongoing_trials 空）：CT.gov 招募中/protocol 須列，供 PRISMA 完整度")
