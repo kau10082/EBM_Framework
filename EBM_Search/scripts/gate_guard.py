@@ -148,6 +148,38 @@ def check_partition_provenance(cache):
         fails.append(f"③ 有 {len(no_content)} 筆 screened 其 base 無 abstract 且 uid 不在 fetched 表（疑遭坍縮鍵污染、無內容卻拿到判定）：{no_content[:5]}")
     return fails
 
+def check_no_retracted(cache):
+    """撤稿管控：⑥交叉驗證標 RETRACTED 者，嚴禁出現在 納入/背景/報告表/Zotero payload/交接包。
+    （2026-06 實測撤稿 SR 被當背景匯入 Zotero；撤稿須統一在交叉驗證查〔PubMed PT + Crossref is-retracted〕，
+     並由本守門確保下游不殘留。）"""
+    ver = _load(cache / "g6_verified.json")
+    if ver is None:
+        return None
+    retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED" and v.get("pmid")}
+    if not retr:
+        return []
+    fails = []
+    rep = _load(cache / "_search_report.json")
+    if rep:
+        for grp in rep.get("studies", []):
+            for r in grp.get("reports", []):
+                if len(r) >= 2 and str(r[1]) in retr:
+                    fails.append(f"撤稿 {r[1]} 出現在核心 Study 表（{grp.get('study')}）：須剔除、改列待評估/排除")
+        for r in rep.get("background", []):
+            if len(r) >= 2 and str(r[1]) in retr:
+                fails.append(f"撤稿 {r[1]} 出現在背景表：須剔除")
+    pay = _load(cache / "g8_zotero_payload.json")
+    if pay:
+        for p in pay:
+            if str(p.get("pmid")) in retr:
+                fails.append(f"撤稿 {p.get('pmid')} 在 Zotero payload：禁匯入（須先剔除再 commit）")
+    seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
+    if seed:
+        for p in seed.get("papers", []):
+            if str(p.get("pmid")) in retr:
+                fails.append(f"撤稿 {p.get('pmid')} 在交接包 papers：禁進 GRADE 證據體")
+    return fails
+
 def check_report(cache):
     """報告版型/內容硬 gate：對 _search_report.json 跑 report_check（③二分/PMID欄/無佔位/背景檢核/進行中表）。"""
     data = _load(cache / "_search_report.json")
@@ -174,7 +206,8 @@ def run(cache, quiet=False):
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
               ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
-              ("報告版型/內容", check_report(cache))]
+              ("報告版型/內容", check_report(cache)),
+              ("撤稿不得殘留納入/背景/Zotero", check_no_retracted(cache))]
     all_fails = []
     lines = []
     for name, res in checks:
@@ -202,7 +235,8 @@ def run_hook(cache):
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
               ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
-              ("報告版型/內容", check_report(cache))]
+              ("報告版型/內容", check_report(cache)),
+              ("撤稿不得殘留納入/背景/Zotero", check_no_retracted(cache))]
     fails = []
     for name, res in checks:
         if res:

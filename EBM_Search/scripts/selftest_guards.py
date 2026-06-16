@@ -48,6 +48,10 @@ def main():
     json.dump([{"class":"僅摘要","doi":"10.1/x","title":"t"}], io.open(tmp/"g2c_FINAL_content.json","w",encoding="utf-8"))
     json.dump({}, io.open(tmp/"g2c_unpaywall.json","w",encoding="utf-8"))
     allok &= _assert_fires("Gate②c Unpaywall 覆蓋（漏跑）", gate_guard.check_unpaywall_coverage(tmp))
+    # 撤稿不得殘留
+    json.dump([{"pmid":"999","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
+    json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
+    allok &= _assert_fires("撤稿殘留 Zotero payload", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
 
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))
