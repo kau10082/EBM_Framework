@@ -260,16 +260,19 @@ def _load(search_path=None, synth_path=None):
 
     # 27 資料可得性：報告/輸出產物是否存在
     art = False
-    try:
-        for d in (workdir.outputs_dir(),):
-            if d and os.path.isdir(d) and any(Path(d).glob("*")):
-                art = True; break
-        if not art:
+    try:   # 第一管道：workdir.outputs_dir()（workdir 若 import 失敗→NameError，獨立 try 不連累備援）
+        d = workdir.outputs_dir()
+        if d and os.path.isdir(d) and any(Path(d).glob("*")):
+            art = True
+    except Exception:
+        pass
+    if not art:   # 第二管道：run_state 備援（不因第一管道 NameError 被一起 except 吃掉而跳過）
+        try:
             import run_state
             paths = (run_state.load() or {}).get("paths", {})
             art = any(paths.get(k) and os.path.exists(paths[k]) for k in ("grade_pdf", "search_report_pdf", "reports_dir"))
-    except Exception:
-        pass
+        except Exception:
+            pass
     return search, syn, per_paper, art
 
 

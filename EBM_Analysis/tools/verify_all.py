@@ -31,6 +31,10 @@ def _run(name, argv):
     ok = r.returncode == 0
     results.append((name, ok, (r.stdout or "") + (r.stderr or "")))
     print(f"  {'✅' if ok else '❌'} {name}")
+    if not ok:   # 失敗時印出子程序細節(末 20 行)，免去使用者手動重跑單獨指令排查
+        detail = ((r.stdout or "") + (r.stderr or "")).strip()
+        for ln in detail.splitlines()[-20:]:
+            print("      │ " + ln)
     return ok
 
 def main():

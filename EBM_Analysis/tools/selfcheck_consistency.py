@@ -89,10 +89,12 @@ def check(syn=None):
             relci = re.search(r'(?:RR|OR)\s*[\d.]+.{0,14}CI\s*([\d.]+)\s*[–\-]\s*([\d.]+)', rel)
             aeci = re.search(r'CI\s*([\d.]+)\s*[–\-到]\s*([\d.]+)', ae)
             if (rr or orr) and acr is not None and relci and aeci:
-                ns = sorted(1/abs(absrisk._corr("rr" if rr else "or", float(b), acr) - acr) for b in relci.groups())
-                es = sorted(float(x) for x in aeci.groups())
-                if abs(ns[0]-es[0]) > 1.0 or abs(ns[1]-es[1]) > 1.0:
-                    fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT CI 重算 {ns[0]:.0f}-{ns[1]:.0f} ≠ 報告 {es[0]:.0f}-{es[1]:.0f}")
+                diffs = [abs(absrisk._corr("rr" if rr else "or", float(b), acr) - acr) for b in relci.groups()]
+                if all(d > 1e-9 for d in diffs):   # CI 觸無效線(diff≈0→NNT 無限大)時略過數值覆驗，避免 1/0 ZeroDivisionError 把整段 C7 靜默中斷
+                    ns = sorted(1/d for d in diffs)
+                    es = sorted(float(x) for x in aeci.groups())
+                    if abs(ns[0]-es[0]) > 1.0 or abs(ns[1]-es[1]) > 1.0:
+                        fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT CI 重算 {ns[0]:.0f}-{ns[1]:.0f} ≠ 報告 {es[0]:.0f}-{es[1]:.0f}")
     except Exception:
         pass
     # C8: 連續結果 SoF 須附 MID 或可解讀再表達（Ch14 §14.1.6.2、Ch15 §15.5）
@@ -124,6 +126,7 @@ def check(syn=None):
         fails.append("C12 借用他人 MA 合併值但宣稱『不池化』且未明示採用理由（自我矛盾，須標明特例採用 MA 合併估計）")
     # C13: 跨呈現確定性一致——body_of_evidence 與 SoF 同 outcome 確定性須相符（防手改一處飄移）
     def _kw(s): return set(re.findall(r"[一-鿿A-Za-z0-9]{2,}", re.sub(r"[（）()／/、，,。.；;]", " ", s or "")))
+    def _cln(s): return re.sub(r"[\s（）()／/、，,。.；;]", "", s or "")
     sof = (syn.get("sof") or [])
     for b in (syn.get("body_of_evidence") or []):
         bk = _kw(b.get("outcome", ""))
@@ -131,6 +134,13 @@ def check(syn=None):
         for o in sof:
             ov = len(bk & _kw(o.get("outcome", "")))
             if ov > bestov: bestov, best = ov, o
+        # 中文整詞無 token 重疊時的子字串後援（如「死亡」⊂「全因死亡」），避免 C13 漏檢一致性
+        if not best or bestov < 2:
+            bc = _cln(b.get("outcome", ""))
+            for o in sof:
+                oc = _cln(o.get("outcome", ""))
+                if len(bc) >= 2 and len(oc) >= 2 and (bc in oc or oc in bc):
+                    best, bestov = o, 2; break
         if best and bestov >= 2 and b.get("certainty") != best.get("certainty"):
             fails.append(f"C13 證據體 GRADE「{b.get('outcome','')[:14]}」確定性={b.get('certainty')} ≠ SoF「{best.get('outcome','')[:14]}」={best.get('certainty')}（跨呈現飄移）")
     # C14: SoF 任何 NNTB/NNTH 點估計必附 CI 或不確定標記（含危害；防假性精確，Ch15 §15.4.4）
@@ -140,7 +150,13 @@ def check(syn=None):
             fails.append(f"C14 SoF「{o.get('outcome','')[:16]}」NNT 點估計缺 CI/不確定標記（假性精確；事件少時 CI 常含無限大）")
     # C15: SoF 受試者數一致性（防『每次報告 N 飄移』）——所有「跨 N 個 RCT 合併」列須用同一個受試者總數；
     #      子比較列(單試驗單劑量 vs 安慰劑)允許不同，但其 N 須等於兩臂和。
-    def _ints(s): return [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", s or "")]
+    def _ints(s):
+        # 受試者數提取：數字後若緊接劑量/單位(mg/µg/週/%…)則排除，避免把劑量(150mg/300mg)誤當 N 觸發 C15 假性阻擋
+        out = []
+        for m in re.finditer(r"(\d[\d,]*)\s*(mg|µg|μg|ug|mcg|kg|m[lL]|%|週|周|wk|week|歲|year|yr|mmHg|nmol|mmol)?", s or "", re.I):
+            if not m.group(2):
+                out.append(int(m.group(1).replace(",", "")))
+        return out
     pooled_totals = {}
     for o in (syn.get("sof") or []):
         nps = o.get("n_participants_studies") or ""

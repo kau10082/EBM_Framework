@@ -50,6 +50,9 @@ def check(data, min_exprs=3):
         lhs, rhs = e.split("=", 1)
         L, R = _safe_eval(lhs), _safe_eval(rhs)
         if L is None or R is None:
+            # 看起來像算式(含數字+運算子)卻解析失敗→格式錯誤/含不支援運算(/、括號、錯字)，不可靜默跳過
+            if re.search(r"\d", e) and re.search(r"[+\-*/()]", e):
+                fails.append(f"流程圖算式無法解析：【{raw.strip()}】（僅支援 +−* 與數字；勿用 / 或括號或錯字，否則失去校驗）")
             continue
         checked += 1
         if L != R:

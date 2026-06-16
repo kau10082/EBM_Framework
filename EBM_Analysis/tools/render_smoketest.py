@@ -77,7 +77,10 @@ def checks_on(txt, data):
                     fails.append("V4 SoF 缺『嚴重不良事件 SAE』（C11）")
                 # V5 SoF 行數 vs PDF
                 # PDF 中每個 outcome 名稱前幾字應出現
-                missing = [s.get("outcome", "")[:6] for s in sof if s.get("outcome", "")[:6] and s.get("outcome", "")[:6] not in txt]
+                # 比對前淨化(去空白/標點/全半形括號差異)再取前 6 字，與下方 V6 一致，避免「全因死亡 (A」因全形括號/空格假陽性
+                _cl5 = lambda s: re.sub(r"\W+", "", s or "", flags=re.UNICODE)
+                _nz5 = _cl5(txt)
+                missing = [s.get("outcome", "")[:6] for s in sof if _cl5(s.get("outcome", ""))[:6] and _cl5(s.get("outcome", ""))[:6] not in _nz5]
                 if missing:
                     fails.append("V5 SoF 列疑遭吞：PDF 找不到 %d/%d outcome（%s）" % (len(missing), len(sof), "、".join(missing[:3])))
             # V6 渲染器一致性：資料有的關鍵欄位、PDF 必須渲得出來（防兩個 renderer 分歧，
