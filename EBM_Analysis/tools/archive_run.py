@@ -114,6 +114,24 @@ def main(argv):
             else:  # _adversarial_review.md、_stage_* 等 → 審計
                 shutil.copy2(f, audit / f.name); an += 1
 
+    # config reports 成品夾（SR/GRADE 報告 PDF）也入 deliverables——否則漏封存(同 end_run 曾犯之 bug)
+    try:
+        import re as _re
+        cfgp = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
+        reports_dir = None
+        if cfgp.exists():
+            txt = cfgp.read_text(encoding="utf-8")
+            m = (_re.search(r'analysis:.*?pdf_output_dir\s*:\s*"?([^"\n#]+)', txt, _re.S)
+                 or _re.search(r'pdf_output_dir\s*:\s*"?([^"\n#]+)', txt))
+            if m and m.group(1).strip():
+                reports_dir = Path(m.group(1).strip())
+        if reports_dir and reports_dir.exists():
+            for f in reports_dir.iterdir():
+                if f.is_file() and f.name != ".gitkeep" and not (deliver / f.name).exists():
+                    shutil.copy2(f, deliver / f.name); dn += 1
+    except Exception:
+        pass
+
     # cache：JSON 入 audit；.txt 視 --with-text
     if CACHE.exists():
         for f in CACHE.glob("*.json"):
