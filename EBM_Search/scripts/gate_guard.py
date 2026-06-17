@@ -216,7 +216,7 @@ def check_no_retracted(cache):
                 fails.append(f"撤稿 {p.get('pmid')} 在 Zotero payload：禁匯入（須先剔除再 commit）")
     seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
     if seed:
-        for p in seed.get("papers", []):
+        for p in (seed.get("papers", []) if isinstance(seed, dict) else seed):  # seed 可能是 bare list（同 check_have_verified）
             if str(p.get("pmid")) in retr:
                 fails.append(f"撤稿 {p.get('pmid')} 在交接包 papers：禁進 GRADE 證據體")
     return fails
@@ -242,15 +242,29 @@ def check_exhaust(cache):
     except Exception as e:
         return [f"leg_exhaust_check 載入失敗：{str(e)[:80]}"]
 
+def _safe(name, fn, cache):
+    """呼叫單一守門：例外一律視為未通過(fail-closed)。
+    避免某個 check 自身拋例外（型態異常的 cache 等）讓 run_hook 以未捕捉例外退出 exit 1——
+    Stop hook 只有 exit 2 才會 block，exit 1 會被當成『hook 出錯但放行』→ 守門靜默失效。"""
+    try:
+        return (name, fn(cache))
+    except Exception as e:
+        return (name, [f"守門 {fn.__name__} 自身拋例外（{str(e)[:80]}）：視為未通過(fail-closed)，請修 cache 或守門"])
+
+
+def _all_checks(cache):
+    return [_safe("有全文須實抓驗證", check_have_verified, cache),
+            _safe("Stage A→B 邊界", check_stage1, cache),
+            _safe("Gate① 取盡", check_exhaust, cache),
+            _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
+            _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
+            _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
+            _safe("報告版型/內容", check_report, cache),
+            _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache)]
+
+
 def run(cache, quiet=False):
-    checks = [("有全文須實抓驗證", check_have_verified(cache)),
-              ("Stage A→B 邊界", check_stage1(cache)),
-              ("Gate① 取盡", check_exhaust(cache)),
-              ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
-              ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
-              ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
-              ("報告版型/內容", check_report(cache)),
-              ("撤稿不得殘留納入/背景/Zotero", check_no_retracted(cache))]
+    checks = _all_checks(cache)
     all_fails = []
     lines = []
     for name, res in checks:
@@ -274,14 +288,7 @@ def run_hook(cache):
     """Stop hook 模式：FAIL 時把原因寫 stderr 並 exit 2（Claude Code Stop hook 以 exit 2 阻擋停止、回灌 stderr 給模型）。"""
     if not _active(cache):
         sys.exit(0)  # 檢索非進行中（無哨兵旗標）：靜默放行，全域零打擾
-    checks = [("有全文須實抓驗證", check_have_verified(cache)),
-              ("Stage A→B 邊界", check_stage1(cache)),
-              ("Gate① 取盡", check_exhaust(cache)),
-              ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
-              ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
-              ("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance(cache)),
-              ("報告版型/內容", check_report(cache)),
-              ("撤稿不得殘留納入/背景/Zotero", check_no_retracted(cache))]
+    checks = _all_checks(cache)  # 每個 check 以 _safe 兜底：例外→fail-closed，不讓 hook 退 1 放行
     fails = []
     for name, res in checks:
         if res:

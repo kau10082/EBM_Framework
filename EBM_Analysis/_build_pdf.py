@@ -253,7 +253,7 @@ try:
 except Exception:
     _DATE = '2026-06-14'
 story = []
-_TP = SYN.get('report_title', '實證評讀總報告').split('：')
+_TP = (SYN.get('report_title') or '實證評讀總報告').split('：')  # report_title 可能為 JSON null，需 or 防護（同 _TITLE）
 story += [Spacer(1, 6), Paragraph(md2rl(_TP[0]), H1),
           Paragraph(md2rl(_TP[1] if len(_TP) > 1 else '實證評讀總報告'), H1),
           Paragraph('臨床問題：' + md2rl(RQ.get('statement', '')) + '　｜　評讀日期：' + _DATE, SUB)]

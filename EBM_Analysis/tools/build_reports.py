@@ -107,7 +107,8 @@ def ledger():
         p2 = load(pid, "p2") or {}
         p3 = load(pid, "p3")
         p4 = load(pid, "p4") or {}
-        cs = [o["certainty_final"] for o in (p3 or {}).get("outcomes", [])]
+        cs = [o.get("certainty_final") for o in (p3 or {}).get("outcomes", [])]
+        cs = [c for c in cs if c in ORDER]  # 濾掉非法/缺值，避免 ORDER.index 對非列舉值拋 ValueError 連帶整份渲染中止
         worst = min(cs, key=ORDER.index) if cs else ""
         flags = []
         ic = p2.get("integrity_check", {})

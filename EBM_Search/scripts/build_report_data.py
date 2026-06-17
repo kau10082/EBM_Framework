@@ -67,8 +67,10 @@ def build(cache):
     vmap = {str(v.get("pmid")): v for v in ver if v.get("pmid")}
     retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED"}
     ftmap = {}
-    for r in aud.get("have", []): ftmap[str(r["pmid"])] = ("線上" if r.get("status") == "有全文" else "僅摘要")
-    for r in aud.get("need", []): ftmap[str(r["pmid"])] = "需補"
+    for r in aud.get("have", []):
+        if r.get("pmid") is not None: ftmap[str(r["pmid"])] = ("線上" if r.get("status") == "有全文" else "僅摘要")
+    for r in aud.get("need", []):
+        if r.get("pmid") is not None: ftmap[str(r["pmid"])] = "需補"
 
     def xref(pm):
         v = vmap.get(pm, {})

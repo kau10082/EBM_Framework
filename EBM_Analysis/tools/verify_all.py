@@ -106,7 +106,7 @@ def main():
             results.append(("跨報告 Study 數一致", ok, f"search={n_search} analysis={n_analysis}"))
             print(f"  {'✅' if ok else '❌'} 跨報告 Study 數一致（search={n_search} / analysis={n_analysis}）")
     except Exception as e:
-        print("  ⏭  跨報告檢查略過:", str(e)[:40])
+        results.append(("跨報告 Study 數一致", False, str(e)[:200])); print("  ❌ 跨報告檢查失敗（gate 自身出錯，fail-closed）:", str(e)[:40])
 
     # 5a-i) 檢索流程圖數字逐關閉合（funnel_check；反飄移）
     try:
@@ -123,7 +123,7 @@ def main():
         else:
             print("  ⏭  流程圖數字閉合略過（無 _search_report.json）")
     except Exception as e:
-        print("  ⏭  流程圖數字閉合略過:", str(e)[:50])
+        results.append(("流程圖數字閉合", False, str(e)[:200])); print("  ❌ 流程圖數字閉合失敗（gate 自身出錯，fail-closed）:", str(e)[:50])
 
     # 5a-ii) 全文取得『不可跳過 Unpaywall』複查（fulltext_audit；反幻覺/便宜行事）
     try:
@@ -141,7 +141,7 @@ def main():
         else:
             print("  ⏭  全文 Unpaywall 複查略過（無交接包）")
     except Exception as e:
-        print("  ⏭  全文 Unpaywall 複查略過:", str(e)[:50])
+        results.append(("全文取得Unpaywall複查", False, str(e)[:200])); print("  ❌ 全文 Unpaywall 複查失敗（gate 自身出錯，fail-closed）:", str(e)[:50])
 
     # 5b) PRISMA 2020 27 項報告完整度稽核（與 selfcheck 互補：那查矛盾、這查維度齊不齊）
     try:
@@ -158,7 +158,7 @@ def main():
         if c["MANUAL"]:
             print(f"      ⚠️ {c['MANUAL']} 項需人工聲明（不阻擋；於 synthesis.prisma_attest 補齊或報告明列）")
     except Exception as e:
-        print("  ⏭  PRISMA 稽核略過:", str(e)[:60])
+        results.append(("PRISMA 2020 27 項稽核", False, str(e)[:200])); print("  ❌ PRISMA 稽核失敗（gate 自身出錯，fail-closed）:", str(e)[:60])
 
     # 6) 渲染煙霧測試（視覺/完整性：磚塊/章節跳號/空表/SoF 必要結局）——若 GRADE PDF 已產
     try:
@@ -182,7 +182,7 @@ def main():
         else:
             print("  ⏭  渲染煙霧測試略過（GRADE PDF 未產）")
     except Exception as e:
-        print("  ⏭  渲染煙霧測試略過:", str(e)[:40])
+        results.append(("渲染煙霧測試", False, str(e)[:200])); print("  ❌ 渲染煙霧測試失敗（gate 自身出錯，fail-closed）:", str(e)[:40])
 
     # 彙總
     bad = [n for n, ok, _ in results if not ok]
