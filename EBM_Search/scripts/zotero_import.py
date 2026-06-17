@@ -33,6 +33,7 @@ consensus-verify / zotero_import.py  (Phase 2, v0.2)
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -170,6 +171,51 @@ def enrich_from_europepmc(doi, timeout=20):
     return out
 
 
+def enrich_from_pubmed(pmid, timeout=20):
+    """以 PMID 走 PubMed efetch(medline)補 title/creators/publicationTitle/date。
+    DOI 路徑(Crossref/EuropePMC)補不到時的後援——無 DOI/preprint/Crossref 查無者最常缺作者。失敗回 {}。"""
+    if not pmid:
+        return {}
+    try:
+        url = ("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s"
+               "&rettype=medline&retmode=text" % pmid)
+        txt = urllib.request.urlopen(url, timeout=timeout).read().decode("utf-8", "replace")
+    except Exception:
+        return {}
+    f = {}
+    cur = None
+    for line in txt.split("\n"):
+        m = re.match(r"^([A-Z]{2,4})\s*- (.*)$", line)
+        if m:
+            cur = m.group(1); f.setdefault(cur, []).append(m.group(2))
+        elif line.startswith("      ") and cur:
+            f[cur][-1] += " " + line.strip()
+    out = {}
+    ti = " ".join(f.get("TI", [])).strip()
+    if ti:
+        out["title"] = ti
+    creators = []
+    for fau in f.get("FAU", []):
+        if "," in fau:
+            ln, fn = fau.split(",", 1)
+            creators.append({"creatorType": "author", "lastName": ln.strip(), "firstName": fn.strip()})
+        else:
+            creators.append({"creatorType": "author", "lastName": fau.strip(), "firstName": ""})
+    if not creators:
+        for au in f.get("AU", []):
+            p = au.rsplit(" ", 1)
+            creators.append({"creatorType": "author", "lastName": p[0], "firstName": (p[1] if len(p) > 1 else "")})
+    if creators:
+        out["creators"] = creators
+    jt = (f.get("JT") or f.get("TA") or [""])[0]
+    if jt:
+        out["publicationTitle"] = jt
+    dp = (f.get("DP") or [""])[0]
+    if dp:
+        out["date"] = dp[:4]
+    return out
+
+
 def enrich_metadata(doi, mailto=""):
     """補書目:先 Crossref,查無內容(非 Crossref 註冊的 DOI)再 fallback EuropePMC。"""
     out = enrich_from_crossref(doi, mailto)
@@ -198,7 +244,7 @@ def map_to_zotero(rec, collection_key, enrich=None):
     """一筆 verified 結果 → Zotero journalArticle item。enrich(Crossref)優先,輸入值 fallback。"""
     enrich = enrich or {}
     inp = rec.get("input", rec)
-    title = inp.get("title") or rec.get("title") or ""
+    title = inp.get("title") or rec.get("title") or enrich.get("title") or ""
     doi = rec.get("resolved_doi") or inp.get("doi") or rec.get("doi") or ""
     pmid = rec.get("resolved_pmid") or rec.get("pmid") or ""
     year = enrich.get("date") or inp.get("year") or rec.get("year") or ""
@@ -319,6 +365,14 @@ def main(argv=None):
             skipped += 1
             continue
         e = {} if args.no_enrich else enrich_metadata(doi, mailto)
+        # PubMed 後援：Crossref/EuropePMC(DOI 路徑)補不到作者/標題時，以 PMID efetch 補齊
+        # （無 DOI、preprint、Crossref 查無者最常缺作者；避免匯入後書目缺標題/作者）
+        pmid = r.get("resolved_pmid") or r.get("pmid") or r.get("input", {}).get("pmid") or ""
+        if not args.no_enrich and pmid and (not e.get("creators") or not (r.get("title") or r.get("input", {}).get("title"))):
+            pm = enrich_from_pubmed(str(pmid))
+            for k, v in (pm or {}).items():
+                if v and not e.get(k):
+                    e[k] = v
         if e:
             enriched += 1
         items.append(map_to_zotero(r, conf["collection_key"], e))
