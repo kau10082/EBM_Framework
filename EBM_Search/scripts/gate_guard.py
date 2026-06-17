@@ -148,6 +148,36 @@ def check_partition_provenance(cache):
         fails.append(f"③ 有 {len(no_content)} 筆 screened 其 base 無 abstract 且 uid 不在 fetched 表（疑遭坍縮鍵污染、無內容卻拿到判定）：{no_content[:5]}")
     return fails
 
+def check_have_verified(cache):
+    """『判 have 必須實抓驗證』守門（防 OA 旗標高估）。
+    讀 seed.json／_corpus_seed.json：凡 verdict=included 且要評讀(grade_track∈full/targeted_harms)、
+    fulltext_status=have(online，無本機 pdf_file)者，必須帶 `fulltext_verified=true`
+    （由 verify_have_fetchable.py 實抓蓋章）。否則代表只信了 OA 旗標、沒實抓 → FAIL，強制跑驗證器。
+    （2026-06 實測：IMPACT/ETHOS 憑 Unpaywall is_oa 判 have，實抓 403/假陽性，拖到評讀才爆。）"""
+    seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
+    if seed is None:
+        return None
+    papers = seed.get("papers", []) if isinstance(seed, dict) else seed
+    fails = []
+    for p in papers:
+        if p.get("verdict") != "included":
+            continue
+        gt = (p.get("suggested") or {}).get("grade_track") or p.get("grade_track")
+        if gt not in ("full", "targeted_harms"):
+            continue
+        if p.get("fulltext_status") not in ("have", "have_manual"):
+            continue
+        if p.get("pdf_file"):           # 本機 PDF 直接信任
+            continue
+        ch = (p.get("fulltext_channel") or "").lower()
+        if "online" not in ch and "pmc" not in ch and "unpaywall" not in ch and ch != "":
+            continue
+        if not p.get("fulltext_verified"):
+            fails.append("%s 判 have(online) 但未經 verify_have_fetchable 實抓驗證(無 fulltext_verified)"
+                         "——只信 OA 旗標易高估；請跑 `verify_have_fetchable.py --in seed.json --only-included`，"
+                         "假 have 改 need-supplement" % (p.get("paper_id") or p.get("pmid")))
+    return fails
+
 def check_stage1(cache):
     """Stage A→B 邊界守門：對 _stage1_corpus.json 跑 stage1_check（全文狀態resolved/待評估不混入候選/取盡/互斥）。"""
     data = _load(cache / "_stage1_corpus.json")
@@ -213,7 +243,8 @@ def check_exhaust(cache):
         return [f"leg_exhaust_check 載入失敗：{str(e)[:80]}"]
 
 def run(cache, quiet=False):
-    checks = [("Stage A→B 邊界", check_stage1(cache)),
+    checks = [("有全文須實抓驗證", check_have_verified(cache)),
+              ("Stage A→B 邊界", check_stage1(cache)),
               ("Gate① 取盡", check_exhaust(cache)),
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
@@ -243,7 +274,8 @@ def run_hook(cache):
     """Stop hook 模式：FAIL 時把原因寫 stderr 並 exit 2（Claude Code Stop hook 以 exit 2 阻擋停止、回灌 stderr 給模型）。"""
     if not _active(cache):
         sys.exit(0)  # 檢索非進行中（無哨兵旗標）：靜默放行，全域零打擾
-    checks = [("Stage A→B 邊界", check_stage1(cache)),
+    checks = [("有全文須實抓驗證", check_have_verified(cache)),
+              ("Stage A→B 邊界", check_stage1(cache)),
               ("Gate① 取盡", check_exhaust(cache)),
               ("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage(cache)),
               ("Gate③ 待評估未漏抓全文", check_waiting_fulltext(cache)),
