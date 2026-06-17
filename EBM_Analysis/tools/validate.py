@@ -56,6 +56,7 @@ def check_p3_certainty(data):
         down = sum(_DOWN.get(d.get("verdict"), 0) for d in o.get("downgrade_domains", {}).values())
         down = min(down, 3)                       # GRADE：至多下調三級
         up = sum(_UP.get(u.get("verdict"), 0) for u in o.get("upgrade_domains", {}).values())
+        up = min(up, 3)                           # 與 down 對稱封頂（最終仍由下行夾住，此處求可讀/對稱）
         idx = max(0, min(3, start - down + up))   # 不低於極低、不高於高
         computed = _LEVELS[idx]
         stated = o.get("certainty_final")
