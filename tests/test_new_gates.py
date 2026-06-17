@@ -103,3 +103,17 @@ def test_fulltext_audit_skips_have():
               {"fulltext_channel": "ai_synthesis", "doi": None}]
     fails, missed = fulltext_audit.audit(papers)
     assert missed == []
+
+
+def _rob(overall, note, **dom):
+    base = {"trial": "T", "randomization": "low", "deviations": "low", "missing_data": "low",
+            "measurement": "low", "selective_reporting": "low", "overall": overall, "note": note}
+    base.update(dom)
+    return base
+
+
+def test_c16_rob_concern_needs_note():
+    fails = sc.check({"rob_summary": [_rob("some concerns", "", missing_data="some concerns")]})
+    assert any(f.startswith("C16") for f in fails)
+    ok = sc.check({"rob_summary": [_rob("low", "")]})
+    assert not any(f.startswith("C16") for f in ok)

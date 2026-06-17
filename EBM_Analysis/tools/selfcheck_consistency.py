@@ -170,6 +170,13 @@ def check(syn=None):
     if len(pooled_totals) > 1:
         desc = "；".join(f"{n}（{'/'.join(v)}）" for n, v in sorted(pooled_totals.items()))
         fails.append(f"C15 SoF 跨-RCT 合併列出現 {len(pooled_totals)} 個不同受試者總數：{desc} → 須統一(隨機分配總數)，MA分析集差異只在敘述explain、勿混入 SoF 欄")
+    # C16: RoB2 整體非「低」者，須在 note 說明 some concerns/high 之來源（PDF 末欄「some concerns 原因」要填，
+    #      防報告出現未解釋的 concern。2026-06 因 RoB 表 concern 無說明而立）。
+    for r in (syn.get("rob_summary") or []):
+        ov = str(r.get("overall") or "")
+        if ov and not re.search(r"^低$|low", ov, re.I):
+            if not str(r.get("note") or "").strip():
+                fails.append(f"C16 [{r.get('trial')}] RoB2 整體={ov} 但未填 note 說明來源（concern/high 須註明哪個領域、為何）")
     return fails
 
 def warnings(syn=None):
