@@ -65,6 +65,44 @@ def check_p3_certainty(data):
     return errs
 
 
+def check_p0_completeness(data):
+    """Phase 0 納入完整性（防樞紐試驗主報告被靜默漏掉）。
+    以 overlap_with 連通分量分群（同一 Study 的主報告＋子報告）；
+    任何『含 direct 相關文獻的多報告 Study 群』必須至少有 1 篇 grade_track=full（主報告），
+    否則代表主報告漏了或未設 full——樞紐試驗主報告標題常不含試驗縮寫，最易被分組漏掉。
+    回 fails 清單（空＝通過）。"""
+    papers = data.get("papers", []) or []
+    by_id = {p.get("paper_id"): p for p in papers}
+    parent = {}
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+    def union(a, b):
+        parent[find(a)] = find(b)
+    for p in papers:
+        pid = p.get("paper_id"); find(pid)
+        for o in (p.get("overlap_with") or []):
+            if o in by_id:
+                union(pid, o)
+    clusters = {}
+    for p in papers:
+        clusters.setdefault(find(p.get("paper_id")), []).append(p)
+    fails = []
+    for members in clusters.values():
+        directs = [m for m in members if m.get("relevance") == "direct"]
+        if not directs:
+            continue
+        has_full = any(m.get("grade_track") == "full" for m in members)
+        if len(members) >= 2 and not has_full:
+            ids = [m.get("paper_id") for m in members]
+            fails.append("Study 群（%d 報告：%s%s）含 direct 文獻但無 full-track 主報告"
+                         "——疑漏主報告/主報告未設 full（樞紐試驗主報告標題常不含縮寫，易被分組漏掉，請核對該試驗 primary publication 是否在 corpus）"
+                         % (len(members), ids[:5], "…" if len(ids) > 5 else ""))
+    return fails
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -85,6 +123,16 @@ def main(argv):
         for e in errs[:30]:
             print(f"  - /{'/'.join(map(str, e.path))}: {e.message}")
         return 1
+    # p0：額外做納入完整性檢查（防樞紐主報告漏掉）
+    if phase == "p0":
+        comp_errs = check_p0_completeness(data)
+        if comp_errs:
+            print(f"❌ {jf} 結構合格、但納入完整性有疑（{len(comp_errs)} 處）：")
+            for e in comp_errs:
+                print(f"  - {e}")
+            return 1
+        print(f"✅ {jf} 符合 {phase} schema ＋ 納入完整性（每 Study 群有 full 主報告）")
+        return 0
     # p3：額外做 GRADE 確定性算術檢查
     if phase == "p3":
         cert_errs = check_p3_certainty(data)
