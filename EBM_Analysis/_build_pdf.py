@@ -60,6 +60,9 @@ SYN = _SD.get('synthesis', _SD)
 _CP = _CACHE / '_corpus.json'
 _CORP = _deep_safe(json.loads(_CP.read_text(encoding='utf-8'))) if _CP.exists() else {'papers': []}
 RQ = _CORP.get('review_question', {})
+# 報告標題/頁尾一律資料驅動（不硬編題目；避免別案模板殘留）：report_title ＞ review_question.statement ＞ 預設
+_TITLE = (SYN.get('report_title') or RQ.get('statement') or 'EBM 實證評讀總報告').strip()
+_FOOTER = (SYN.get('report_title') or RQ.get('statement') or 'EBM_Analysis 評讀引擎').strip()
 # 流程圖數字一律由 cache/_corpus.json 帶（單一真相來源，不硬編）
 _PP = _CORP.get('papers', [])
 N_TOTAL = len(_PP)
@@ -312,8 +315,8 @@ story += [KeepTogether([Paragraph('<b>1. 納入研究特徵表</b>', BODYB), Spa
           KeepTogether([Paragraph('<b>2. 偏誤風險（RoB 2）逐領域摘要</b>', BODYB), Spacer(1, 3),
                         qtable(ROB_ROWS, [15, 15, 15, 15, 15, 17, 15, 63]),
                         Paragraph('RoB 2 為結果層級評估，上表取各試驗主要惡化終點之判斷；「整體」採最不利領域，'
-                                  '末欄逐筆註明 some concerns 的來源。四項試驗之選擇性報告領域經 ClinicalTrials.gov 註冊'
-                                  '與發表比對（多數一致；AIRLEAF 時框差異已標人工覆核），故判 low。', NOTE)]), Spacer(1, 8),
+                                  '末欄逐筆註明 some concerns 的來源。選擇性報告領域經 ClinicalTrials.gov 註冊'
+                                  '與發表比對（多數一致），故判 low。', NOTE)]), Spacer(1, 8),
           Paragraph('<b>3. 發表偏誤／缺失證據聲明</b>', BODYB),
           Paragraph(md2rl(SYN.get('publication_bias', '')), BODY),
           (Paragraph('<b>缺失證據敏感度（ROB-ME）：</b>' + md2rl(SYN.get('missing_evidence_sensitivity') or ''), NOTE)
@@ -346,8 +349,9 @@ if REL_REVIEWS:
                         '去重後不與個別 RCT 結論疊加。', NOTE), Spacer(1, 4),
               *rel_block, Spacer(1, 6)]
 
-story += [Paragraph('四、為何單一藥物與「DPP-1 類別」的確定性不同', H3),
+story += [Paragraph('四、跨研究確定性、衝突分析與權重裁決', H3),
           Paragraph(md2rl(SYN.get('conflict_analysis', '')), BODY),
+          (Paragraph('權重裁決：' + md2rl(SYN.get('weight_adjudication', '')), NOTE) if SYN.get('weight_adjudication') else Spacer(0, 0)),
           Paragraph('方法學說明：' + md2rl(SYN.get('vote_counting_check', '') or
                     '本引擎不做自己的統計池化；類別層級二分結果採用已發表統合分析之合併估計（標明異質性侷限），單藥療效以最大樞紐試驗為錨點。'), NOTE)]
 warn = Table([[Paragraph('<b>【注意】不可做非正式間接比較</b>：各試驗的參與者基線、藥物劑量與測量指標不盡相同，'
@@ -370,14 +374,14 @@ def footer(canvas, doc):
     canvas.saveState()
     w, h = canvas._pagesize
     canvas.setFont(FONT, 7.5); canvas.setFillColor(HexColor('#888'))
-    canvas.drawString(20 * mm, 10 * mm, 'EBM_Analysis 評讀引擎　｜　DPP-1 抑制劑於支氣管擴張症')
+    canvas.drawString(20 * mm, 10 * mm, 'EBM_Analysis 評讀引擎　｜　' + _FOOTER[:40])
     canvas.drawRightString(w - 20 * mm, 10 * mm, f'第 {doc.page} 頁')
     canvas.restoreState()
 
 _OUTPUTS.mkdir(parents=True, exist_ok=True)
 doc = BaseDocTemplate(str(_OUTPUTS / 'FINAL_REPORT.pdf'), pagesize=A4,
                       leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
-                      title='DPP-1 抑制劑於支氣管擴張症 — 實證評讀總報告', author='EBM_Analysis')
+                      title=_TITLE, author='EBM_Analysis')
 pw, ph = A4
 lw, lh = landscape(A4)
 doc.addPageTemplates([
