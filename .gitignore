@@ -45,9 +45,10 @@ _strip*.py
 # session 暫存
 _run_tmp/
 
-# ── 個人 AI coding 規則，不上傳（屬使用者個人工作方式）──────────────────────
+# ── 個人 AI coding 規則與交班簿，不上傳（屬使用者個人工作方式）──────────────
 AGENTS.md
 review-prompt.md
+.agents/handoff.md
 
 # ── 環境與私密設定（補既有 .env 未涵蓋者）────────────────────────────────────
 env/
