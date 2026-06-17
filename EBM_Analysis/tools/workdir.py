@@ -7,7 +7,8 @@
 
 解析順序（第一個有值者勝出）：
   1) 環境變數 EBM_WORKDIR
-  2) 根 config 的 analysis.work_dir（config 路徑：env EBM_CONFIG ＞ <skill_root>/config/settings.yaml）
+  2) 根 config 的 analysis.work_dir（config 路徑：env EBM_CONFIG ＞ <skill_root>/config/settings.yaml
+     ＞ <EBM_Analysis>/config/settings.yaml 本地回退——子計畫獨立打包看不到根 config 時用）
   3) 退回 EBM_Analysis 專案資料夾本身（Claude Code 專案模式的原行為，向後相容）
 
 schema/ 等「程式資料」不歸這裡管（仍隨腳本放安裝包）；本模組只管「執行期產出」。
@@ -22,8 +23,12 @@ def _config_path():
     env = os.environ.get("EBM_CONFIG")
     if env and os.path.exists(env):
         return env
-    p = os.path.join(_ROOT, "config", "settings.yaml")
-    return p if os.path.exists(p) else None
+    # 根 config 優先；找不到再回退子計畫本地 config（子計畫獨立打包成 skill 時）
+    for p in (os.path.join(_ROOT, "config", "settings.yaml"),
+              os.path.join(_ANALYSIS, "config", "settings.yaml")):
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def _work_dir_from_config():

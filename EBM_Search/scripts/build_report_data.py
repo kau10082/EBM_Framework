@@ -53,8 +53,10 @@ def _ft_status(pmid, r=None):
                 "https://api.unpaywall.org/v2/" + urllib.parse.quote(doi) + "?email=kau10082@gmail.com", timeout=20))
             if d.get("is_oa"):
                 return "線上"
-        except Exception:
-            pass
+        except Exception as e:
+            # 區分「抓取失敗」與「來源真的非 OA」：網路/403/逾時不可靜默當「僅摘要」，
+            # 否則暫時性錯誤會把可得全文誤標。發 stderr 警告留痕，供操作者複查。
+            sys.stderr.write(f"⚠️ _ft_status: Unpaywall 查詢失敗（doi={doi}：{str(e)[:60]}），暫記『僅摘要』待複查\n")
     return "僅摘要"
 
 def build(cache):

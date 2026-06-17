@@ -25,6 +25,8 @@ OUTPUTS = Path(workdir.outputs_dir())
 SYM = {"high": "⊕⊕⊕⊕", "moderate": "⊕⊕⊕○", "low": "⊕⊕○○", "very_low": "⊕○○○"}
 AMSTAR2_SYM = {"high": "高信心", "moderate": "中等信心", "low": "低信心", "critically_low": "極低信心"}
 ORDER = ["very_low", "low", "moderate", "high"]
+# ledger.csv 固定欄位（單一真相）：所有列照此建，不依資料動態決定欄位（AGENTS.md 資料表硬規則）
+LEDGER_COLS = ["paper_id", "status", "track", "grade_start", "worst_outcome_certainty", "flags", "updated"]
 
 
 def load(pid, ph):
@@ -120,9 +122,11 @@ def ledger():
         rows.append({"paper_id": pid, "status": status, "track": p2.get("track", ""),
                      "grade_start": p2.get("grade_start", ""), "worst_outcome_certainty": worst,
                      "flags": ";".join(flags), "updated": datetime.now().strftime("%Y-%m-%d %H:%M")})
-    cols = ["paper_id", "status", "track", "grade_start", "worst_outcome_certainty", "flags", "updated"]
+    # 寫檔前 shape 驗證：每列鍵集合必須等於固定欄位，不靜默寫出殘缺表（AGENTS.md 資料表硬規則）
+    for r in rows:
+        assert set(r) == set(LEDGER_COLS), f"ledger 列欄位不符 EXPECTED：{set(r) ^ set(LEDGER_COLS)}（paper_id={r.get('paper_id')}）"
     with open(OUTPUTS / "ledger.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=cols)
+        w = csv.DictWriter(f, fieldnames=LEDGER_COLS)
         w.writeheader()
         w.writerows(rows)
     return len(rows)
@@ -243,8 +247,10 @@ def main():
             import selfcheck_consistency as _sc
             _fails = _sc.check()
         except Exception as e:
-            _fails = []
-            sys.stderr.write(f"⚠️ 一致性 gate 未能執行（{e}），略過。\n")
+            # 失敗關閉（fail-closed）：一致性硬 gate 無法執行時，不可當作通過而靜默出報告；
+            # 中止渲染，要人修環境，或明確以 --skip-consistency 略過。
+            sys.stderr.write(f"❌ 渲染中止：一致性 gate 無法執行（{e}）。修好後重跑，確需略過用 --skip-consistency。\n")
+            sys.exit(1)
         if _fails:
             sys.stderr.write("❌ 渲染中止：統合報告未通過自我一致性檢查（%d）——\n" % len(_fails))
             for f in _fails:

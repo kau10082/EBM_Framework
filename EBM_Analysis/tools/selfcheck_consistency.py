@@ -96,8 +96,10 @@ def check(syn=None):
                     es = sorted(float(x) for x in aeci.groups())
                     if abs(ns[0]-es[0]) > 1.0 or abs(ns[1]-es[1]) > 1.0:
                         fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT CI 重算 {ns[0]:.0f}-{ns[1]:.0f} ≠ 報告 {es[0]:.0f}-{es[1]:.0f}")
-    except Exception:
-        pass
+    except Exception as e:
+        # 不靜默吞：C7 是數值覆驗，靜默跳過會放走絕對/相對效應不一致。失敗關閉——
+        # 回報為一條 fail 請人工核對（確需略過由 build_reports --skip-consistency 統一處理）。
+        fails.append(f"C7 覆驗中止（{str(e)[:80]}）——請人工核對 SoF 絕對效應與相對效應一致性")
     # C8: 連續結果 SoF 須附 MID 或可解讀再表達（Ch14 §14.1.6.2、Ch15 §15.5）
     for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
