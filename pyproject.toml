@@ -13,6 +13,12 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7", "pypdf>=4", "jsonschema>=4", "reportlab>=4", "pyyaml>=6"]
 
+# 本 repo 是「腳本集合」非可 import 套件：腳本一律按路徑執行（python EBM_Search/scripts/xxx.py）。
+# 不宣告此區，setuptools 會把 config/EBM_Search/EBM_Analysis 當多個頂層套件而報錯，
+# 使 `pip install -e .` 失敗。py-modules=[] 表明無套件可打包，僅裝 metadata＋依賴。
+[tool.setuptools]
+py-modules = []
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

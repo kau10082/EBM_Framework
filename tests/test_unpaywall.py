@@ -4,10 +4,17 @@ import pytest
 import unpaywall
 
 
-def test_mailto_resolves_non_placeholder():
-    """_mailto 要從 config 取真 email（非 example.com 佔位）。"""
+def test_mailto_returns_valid_email():
+    """_mailto 一定回可用 email（含 @）；fresh-clone 無 settings.yaml 時退回 anonymous@example.com 亦屬合法。"""
     m = unpaywall._mailto()
-    assert "@" in m and "example.com" not in m
+    assert "@" in m
+
+
+def test_mailto_prefers_env_override(monkeypatch):
+    """有 env CROSSREF_MAILTO 時優先採用、且非佔位（不依賴本機被 gitignore 的 settings.yaml）。"""
+    monkeypatch.setenv("CROSSREF_MAILTO", "real.user@hospital.org")
+    m = unpaywall._mailto()
+    assert m == "real.user@hospital.org" and "example.com" not in m
 
 
 def test_lookup_empty_doi_returns_empty():
