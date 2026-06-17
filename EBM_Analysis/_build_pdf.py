@@ -50,8 +50,13 @@ except Exception:
 # 字形淨化（微軟正黑體缺字形 → 等義有字形符號），於『載入時』遞迴套用整個 cache，避免任何渲染路徑漏網。
 _GLYPH_TR0 = str.maketrans({'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○',
                             '↔': '／', '⇔': '／', '▸': '•', '►': '•'})
+# emoji／dingbat／variation-selector（微軟正黑無字形→磚塊□/NULL）一律剔除；保留 ● ○ • → – — ① ② ③ ≈（不在這些區段）
+_EMOJI_RE = re.compile('[\U0001F000-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF'
+                       '\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U0001F1E6-\U0001F1FF]')
+def _strip_bricks(s):
+    return _EMOJI_RE.sub('', s).translate(_GLYPH_TR0)
 def _deep_safe(o):
-    if isinstance(o, str):  return o.translate(_GLYPH_TR0)
+    if isinstance(o, str):  return _strip_bricks(o)
     if isinstance(o, list): return [_deep_safe(x) for x in o]
     if isinstance(o, dict): return {k: _deep_safe(v) for k, v in o.items()}
     return o
@@ -78,7 +83,7 @@ _GLYPH_SAFE = {'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○
                '↔': '／', '⇔': '／', '▸': '•', '►': '•'}  # msjh 缺字形 → 等義有字形
 _GLYPH_TR = str.maketrans(_GLYPH_SAFE)
 def safe_glyphs(s):
-    return (s or '').translate(_GLYPH_TR)
+    return _EMOJI_RE.sub('', (s or '')).translate(_GLYPH_TR)
 
 def md2rl(s):
     """把 JSON 內的純文字安全送進 reportlab Paragraph：跳脫 & < >，**粗體**→<b>，換行→<br/>，淨化缺字形符號。"""
@@ -280,7 +285,7 @@ story += [Paragraph('二、每篇證據如何評分（GRADE）與品質如何把
 
 story += [PageBreak(), hbar('第二部分　分析結果'), Spacer(1, 8)]
 if SYN.get('plain_summary'):                       # 白話 lead 段（通勤可讀，30 秒看完）
-    story += [Paragraph('<b>📋 一分鐘讀懂</b>　' + md2rl(SYN['plain_summary']), BODY), Spacer(1, 10)]
+    story += [Paragraph('<b>【一分鐘讀懂】</b>　' + md2rl(SYN['plain_summary']), BODY), Spacer(1, 10)]
 _NSTUDY = len(SYN.get('study_characteristics', []))
 _DRUGS = '、'.join(dict.fromkeys(r.get('drug', '') for r in SYN.get('study_characteristics', []) if r.get('drug')))
 story += [Paragraph('一、總結：這次分析發現了什麼、對臨床有什麼意義', H3),
@@ -391,4 +396,15 @@ doc.addPageTemplates([
                  pagesize=landscape(A4), onPage=footer),
 ])
 doc.build(story)
-print('OK -> outputs/FINAL_REPORT.pdf')
+# 渲染後磚塊稽核：缺字形會渲成 NULL(\x00)；emoji/dingbat 漏網→警示（防交付帶磚塊）
+try:
+    import fitz as _fz
+    _t = ''.join(_pg.get_text() for _pg in _fz.open(str(_OUTPUTS / 'FINAL_REPORT.pdf')))
+    _bad = _t.count('\x00')
+    _emj = _EMOJI_RE.findall(_t)
+    if _bad or _emj:
+        print('⚠️ 磚塊稽核：NULL(\\x00) x%d、emoji漏網 %r —— 請檢查字形淨化' % (_bad, sorted(set(_emj))[:8]))
+    else:
+        print('OK -> outputs/FINAL_REPORT.pdf（磚塊稽核：無 NULL、無 emoji 漏網）')
+except Exception:
+    print('OK -> outputs/FINAL_REPORT.pdf')
