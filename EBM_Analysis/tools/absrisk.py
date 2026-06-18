@@ -28,7 +28,8 @@ def _nnt_term(direction):
 
 def _opt(argv, flag, n=1):
     if flag in argv:
-        i = argv.index(flag); return argv[i + 1:i + 1 + n]
+        i = argv.index(flag); vals = argv[i + 1:i + 1 + n]
+        return vals if len(vals) == n else None  # 不足 n 個視為未提供，免下游解包(lo,hi=...)/比對 crash
     return None
 
 def selftest():

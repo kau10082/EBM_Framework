@@ -38,7 +38,8 @@ def main(argv):
     ncts = [a for a in argv if a.upper().startswith("NCT")]
     pub = None
     if "--published" in argv:
-        pub = argv[argv.index("--published") + 1]
+        i = argv.index("--published")
+        pub = argv[i + 1] if i + 1 < len(argv) else None  # --published 當末參數時不 IndexError
     if not ncts:
         print(__doc__); return 2
     for nct in ncts:

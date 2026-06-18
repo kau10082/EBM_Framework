@@ -22,6 +22,10 @@ import json
 import shutil
 from pathlib import Path
 from datetime import datetime
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # Windows cp950 主控台/pipe 印 ✅ 等字元才不會 UnicodeEncodeError
+except Exception:
+    pass
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -88,7 +92,9 @@ def main(argv):
     slug = argv[0]
     date = datetime.now().strftime("%Y-%m")
     if "--date" in argv:
-        date = argv[argv.index("--date") + 1]
+        i = argv.index("--date")
+        if i + 1 < len(argv):
+            date = argv[i + 1]   # --date 當末參數時不 IndexError
     with_text = "--with-text" in argv
     clear = ("--clear" in argv) or ("--move" in argv)
     no_sources = "--no-sources" in argv
@@ -160,7 +166,11 @@ def main(argv):
         _clear(OUTPUTS)
 
     src_msg = "未產生（--no-sources）" if no_sources else ("有" if has_src else "無（缺 _corpus.json）")
-    print(f"✅ 封存完成 → {run.relative_to(ROOT)}")
+    try:
+        _disp = run.relative_to(ROOT)
+    except ValueError:
+        _disp = run   # runs/ 在 repo 之外（正常的 OneDrive 工作區設定）→ 印絕對路徑，不可因顯示而 crash
+    print(f"✅ 封存完成 → {_disp}")
     print(f"   deliverables: {dn} 檔　audit: {an} 檔　sources.md: {src_msg}")
     if clear:
         print("   已清空 cache/ 與 outputs/（保留 .gitkeep），可開始下一個分析。")
