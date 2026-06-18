@@ -2,6 +2,11 @@
 
 實證醫學（EBM）管線，兩個子計畫整合為一：**EBM_Search**（多源檢索＋Crossref/PubMed 交叉驗證、去幻覺）→ **EBM_Analysis**（GRADE 評讀、Claude 即引擎、無外部 API）。本框架有兩種用法：**(a) 當 Claude Code 專案**開啟使用；**(b) 用 `pack_framework.py` 打包成單一 skill**（`EBM_Framework_skill.zip`）匯入 **Claude Desktop**（已上傳，skill 名 `ebm-framework`）。兩種模式並存。
 
+## Agent 行為協定（自動載入）
+本專案的 AI agent 工作協定（核心原則、決策裁決、交班簿 `.agents/handoff.md`、外部審查流程、正確性／資料表／資料保全硬規則）見正本 `AGENTS.md`，以下引用會在每個 session 自動載入：
+
+@AGENTS.md
+
 ## 工作根與路徑規則（重要）
 - **工作目錄＝本資料夾 `EBM_Framework`**（使用者在 Claude Code 開啟的專案根）。
 - 子計畫的規格／腳本以**子計畫為相對基準**書寫；從本根執行時**一律加前綴**：
