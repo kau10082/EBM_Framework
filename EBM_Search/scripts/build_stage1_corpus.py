@@ -44,7 +44,7 @@ def build(cache, topic="", pico=None):
     legs = _load(cache, "g1_legs_manifest.json") or []
     pico = pico or {"statement": topic, "P": "", "I": "", "C": "", "O": []}
 
-    awaiting_uids = {a.get("uid") for a in awaiting_src}
+    awaiting_uids = {a.get("uid") for a in awaiting_src if a.get("uid")}  # 過濾 None：避免缺 uid 候選被 None 匹配誤跳過
     candidates, awaiting = [], []
     for c in content:
         ab = (c.get("abstract") or "").strip()
