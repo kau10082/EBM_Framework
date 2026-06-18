@@ -28,9 +28,10 @@ try:
 except Exception:
     ST = {}
 
-def _files(p):
+def _entries(p):
+    # 回傳所有項目（含子目錄）——子目錄也要被封存，否則 clear_dir 會 rmtree 未封存的子目錄＝資料遺失
     p = Path(p)
-    return [x for x in p.iterdir() if x.is_file()] if p.is_dir() else []
+    return list(p.iterdir()) if p.is_dir() else []
 
 def main():
     keep_pdfs = "--keep-pdfs" in sys.argv
@@ -61,7 +62,11 @@ def main():
     manifest = [f"# 結案封存 {slug} {date}", ""]
     def archive(srcdir, sub, exts=None, label=""):
         n = 0
-        for f in _files(srcdir):
+        for f in _entries(srcdir):
+            if f.is_dir():   # 子目錄整棵封存（clear_dir 之後會 rmtree 子目錄，未封存即刪＝資料遺失）
+                if not dry:
+                    shutil.copytree(f, arch / sub / f.name, dirs_exist_ok=True)
+                n += 1; continue
             if exts and f.suffix.lower() not in exts:
                 if f.suffix.lower() == ".pdf" and not keep_pdfs:
                     manifest.append(f"[未複製·已刪] {label}/{f.name}（{f.stat().st_size//1024} KB）"); continue
@@ -80,7 +85,11 @@ def main():
     #   ★ 非 PDF 一律封存進 sources/；PDF 僅 --keep-pdfs 時複製，否則只在 MANIFEST 記檔名（版權 PDF 同 reports 處理）。
     #   故「刪除卻未封存」的唯一情形＝版權 PDF 且未 --keep-pdfs（刻意、且已記檔名），不會誤刪其他型別。
     a5 = 0
-    for f in _files(INPUTS):
+    for f in _entries(INPUTS):
+        if f.is_dir():   # 子目錄整棵封存
+            if not dry:
+                shutil.copytree(f, arch / "sources" / f.name, dirs_exist_ok=True)
+            a5 += 1; continue
         if f.suffix.lower() == ".pdf" and not keep_pdfs:
             manifest.append(f"[未複製·已刪] sources/{f.name}（{f.stat().st_size//1024} KB）"); continue
         if not dry:
@@ -89,13 +98,17 @@ def main():
     # 交接資料夾：只存中繼檔（json/txt/md），PDF 依 --keep-pdfs
     a4 = 0
     if ftd:
-        for f in _files(ftd):
-            if f.suffix.lower() in (".json", ".txt", ".md") or keep_pdfs:
+        for f in _entries(ftd):
+            if f.is_dir():   # 子目錄整棵封存
                 if not dry:
-                    (arch / "handoff").mkdir(parents=True, exist_ok=True); shutil.copy2(f, arch / "handoff" / f.name)
-                a4 += 1
-            elif f.suffix.lower() == ".pdf":
-                manifest.append(f"[未複製·已刪] handoff/{f.name}（{f.stat().st_size//1024} KB）")
+                    shutil.copytree(f, arch / "handoff" / f.name, dirs_exist_ok=True)
+                a4 += 1; continue
+            if f.suffix.lower() == ".pdf" and not keep_pdfs:   # 版權 PDF 未 keep：只記檔名（同 reports/inputs）
+                manifest.append(f"[未複製·已刪] handoff/{f.name}（{f.stat().st_size//1024} KB）"); continue
+            # 其餘一律封存（含非白名單的 .csv/.png/.docx 等）——杜絕「沒封存卻被清空」的無聲遺失
+            if not dry:
+                (arch / "handoff").mkdir(parents=True, exist_ok=True); shutil.copy2(f, arch / "handoff" / f.name)
+            a4 += 1
     if not dry:
         arch.mkdir(parents=True, exist_ok=True)
         (arch / "MANIFEST.txt").write_text("\n".join(manifest), encoding="utf-8")

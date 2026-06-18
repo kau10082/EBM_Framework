@@ -107,9 +107,11 @@ def main(argv):
     dn = an = 0
     if OUTPUTS.exists():
         for f in OUTPUTS.iterdir():
-            if not f.is_file() or f.name == ".gitkeep":
+            if f.name == ".gitkeep":
                 continue
-            if f.name in deliver_names or f.name.endswith(".report.md"):
+            if f.is_dir():   # 子目錄整棵入 audit——否則 --clear 的 rmtree 會刪掉未封存的子目錄＝資料遺失
+                shutil.copytree(f, audit / f.name, dirs_exist_ok=True); an += 1
+            elif f.name in deliver_names or f.name.endswith(".report.md"):
                 shutil.copy2(f, deliver / f.name); dn += 1
             else:  # _adversarial_review.md、_stage_* 等 → 審計
                 shutil.copy2(f, audit / f.name); an += 1
@@ -141,6 +143,15 @@ def main(argv):
             tdir.mkdir(exist_ok=True)
             for f in CACHE.glob("*.txt"):
                 shutil.copy2(f, tdir / f.name); an += 1
+        # 其餘 cache 項目（非 .json、非 .txt）與子目錄也要封存——否則 --clear 會無差別刪除未封存者
+        # （無聲資料遺失）。.txt 視為版權抽取全文、仍由上方 --with-text 控管（未加旗標＝刻意不存）。
+        for f in CACHE.iterdir():
+            if f.name == ".gitkeep" or f.suffix.lower() in (".json", ".txt"):
+                continue
+            if f.is_dir():
+                shutil.copytree(f, audit / f.name, dirs_exist_ok=True); an += 1
+            else:
+                shutil.copy2(f, audit / f.name); an += 1
 
     has_src = False if no_sources else gen_sources(deliver)
 
