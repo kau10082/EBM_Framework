@@ -272,7 +272,7 @@ if LIT_ROWS and len(LIT_ROWS) > 1:
               qtable(LIT_ROWS, [74, 44, 52])]), Spacer(1, 3),
               Paragraph('全文取得透明度：「有全文」可線上 OA／PMC 自動取得或由使用者人工補入封閉期刊 PDF；'
                         '「僅 AI 合成摘要」為封閉期刊、僅有二手合成摘要（其判讀確定性較低、並依登錄庫補救）。'
-                        '四項樞紐 RCT 與校準用統合分析均取得全文，故可進行完整 GRADE 評讀。', SMALL), Spacer(1, 10)]
+                        '各篇實際取得狀態見上表「全文取得」欄。', SMALL), Spacer(1, 10)]
 
 story += [Paragraph('二、每篇證據如何評分（GRADE）與品質如何把關', H3),
           Paragraph('每篇文獻依循 GRADE 系統評定「證據確定性」：先依研究設計給一個起始等級（隨機對照試驗起始為高），'
@@ -319,9 +319,8 @@ story += [KeepTogether([Paragraph('<b>1. 納入研究特徵表</b>', BODYB), Spa
                         qtable(CHAR_ROWS, [20, 22, 12, 14, 24, 20, 16, 42])]), Spacer(1, 8),
           KeepTogether([Paragraph('<b>2. 偏誤風險（RoB 2）逐領域摘要</b>', BODYB), Spacer(1, 3),
                         qtable(ROB_ROWS, [15, 15, 15, 15, 15, 17, 15, 63]),
-                        Paragraph('RoB 2 為結果層級評估，上表取各試驗主要惡化終點之判斷；「整體」採最不利領域，'
-                                  '末欄逐筆註明 some concerns 的來源。選擇性報告領域經 ClinicalTrials.gov 註冊'
-                                  '與發表比對（多數一致），故判 low。', NOTE)]), Spacer(1, 8),
+                        Paragraph('RoB 2 為結果層級評估，上表取各試驗主要結局之判斷；「整體」採最不利領域，'
+                                  '末欄逐筆註明 some concerns 的來源。各領域判定（含選擇性報告）以上表逐筆為準。', NOTE)]), Spacer(1, 8),
           Paragraph('<b>3. 發表偏誤／缺失證據聲明</b>', BODYB),
           Paragraph(md2rl(SYN.get('publication_bias', '')), BODY),
           (Paragraph('<b>缺失證據敏感度（ROB-ME）：</b>' + md2rl(SYN.get('missing_evidence_sensitivity') or ''), NOTE)

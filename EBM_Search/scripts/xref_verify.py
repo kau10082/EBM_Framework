@@ -495,7 +495,13 @@ def verify_record(rec, args):
     verdict, reason = classify_reason(rec, sources, verdict)   # P2/P3
     pub = sources.get("pubmed", {})
     lvl, lvl_note = evidence_level(pub.get("pubtypes"), rec.get("title"))   # P5
-    resolved_doi = rec.get("doi") or sources.get("crossref", {}).get("doi") or pub.get("doi")
+    # resolved_doi/pmid 只採信「確實匹配上」的來源（match/retracted）。soft/miss 是未達門檻的候選，
+    # _grade 仍會帶其 doi/pmid（行 394 先填、405 miss 不清），若採信會把『同藥不同篇』的錯誤 ID
+    # 當定案外洩給下游抓全文/去重/匯入。輸入自帶 doi（rec）仍保留（那是被驗證的引用本身）。
+    def _confirmed(src, key):
+        return src.get(key) if isinstance(src, dict) and src.get("status") in ("match", "retracted") else None
+    _cr = sources.get("crossref", {})
+    resolved_doi = rec.get("doi") or _confirmed(_cr, "doi") or _confirmed(pub, "doi")
     return {
         "id": rec.get("id"),
         "input": {"title": rec.get("title"), "year": _year_of(rec.get("year")),
@@ -505,7 +511,7 @@ def verify_record(rec, args):
         "evidence_note": lvl_note,
         "reason": reason,
         "resolved_doi": resolved_doi,
-        "resolved_pmid": pub.get("pmid"),
+        "resolved_pmid": _confirmed(pub, "pmid"),
         "sources": sources,
     }
 

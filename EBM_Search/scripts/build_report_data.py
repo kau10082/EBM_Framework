@@ -63,6 +63,23 @@ def _ft_status(pmid, r=None):
             sys.stderr.write(f"⚠️ _ft_status: Unpaywall 查詢失敗（doi={doi}：{str(e)[:60]}），暫記『僅摘要』待複查\n")
     return "僅摘要"
 
+def _doctype(v):
+    """背景表型態：優先用明確 doctype；缺則從 pubtypes/標題**程式化回推**，
+    避免依賴 LLM 在 g6_verified 手填 doctype 而恆空、SR/MA/指引靜默漏件（外部審查指出的契約破口）。"""
+    dt = v.get("doctype")
+    if dt in ("Meta-Analysis", "Systematic Review", "Guideline"):
+        return dt
+    pts = ((v.get("sources") or {}).get("pubmed") or {}).get("pubtypes") or []
+    blob = (" ".join(str(p) for p in pts) + " " + str((v.get("input") or {}).get("title") or v.get("title") or "")).lower()
+    if "meta-analysis" in blob or "meta analysis" in blob or "統合分析" in blob:
+        return "Meta-Analysis"
+    if "systematic review" in blob or ("系統" in blob and "回顧" in blob):
+        return "Systematic Review"
+    if "guideline" in blob or "指引" in blob:
+        return "Guideline"
+    return dt  # 其餘原樣（None 或原始醫學型態）
+
+
 def build(cache):
     ver = _load(cache, "g6_verified.json") or []
     dec = _load(cache, "g7_final_decision.json") or {}
@@ -72,7 +89,15 @@ def build(cache):
     retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED"}
     ftmap = {}
     for r in aud.get("have", []):
-        if r.get("pmid") is not None: ftmap[str(r["pmid"])] = ("線上" if r.get("status") == "有全文" else "僅摘要")
+        if r.get("pmid") is None:
+            continue
+        st = str(r.get("status") or "")
+        if "有全文" in st:                       # substring：相容「有全文 (PDF)」等措辭，不因尾綴被誤降
+            ftmap[str(r["pmid"])] = "線上"
+        else:
+            if st and st not in ("僅摘要", "摘要", "AI合成摘要", "ai_summary_only"):
+                sys.stderr.write(f"⚠️ g8 have 段 status『{st}』非預期（pmid={r['pmid']}），暫當『僅摘要』——請確認是否其實有全文\n")
+            ftmap[str(r["pmid"])] = "僅摘要"
     for r in aud.get("need", []):
         if r.get("pmid") is not None: ftmap[str(r["pmid"])] = "需補"
 
@@ -94,11 +119,13 @@ def build(cache):
     # 主報告置頂：**資料驅動**——優先讀 g7 提供的 main_reports（study名→主報告 PMID），
     # 否則以該 study 列表首篇為主報告。不再硬編特定主題的 PMID（曾殘留前案 COPD 試驗表，
     # 換主題即全 miss → 主報告排序保護失效、可能漏樞紐主報告）。
-    MAIN = {str(k): str(v) for k, v in (dec.get("main_reports") or {}).items()}
+    # main_reports 的 key 與 study_reports 一樣先正規化（砍括號/NCT），否則 g7 兩處 key 形不一致時
+    # MAIN.get(name) 靜默 miss → 退回「首篇」（g7 不保證首位＝主報告）→ 主報告置頂保護失效。
+    MAIN = {str(k).split("(")[0].strip(): str(v) for k, v in (dec.get("main_reports") or {}).items()}
     studies = []
     for tr, pmids in dec.get("study_reports", {}).items():
         if "PENDING" in tr: continue
-        name = tr.split("(")[0]
+        name = tr.split("(")[0].strip()   # 與 MAIN key 同正規化（砍括號＋strip），確保對得上
         pmids = [str(p) for p in pmids if str(p) not in retr]
         main = MAIN.get(name)
         if not main and pmids:
@@ -114,10 +141,13 @@ def build(cache):
     for v in ver:
         pm = str(v.get("pmid"))
         if pm in retr or pm in prim: continue
-        dt = v.get("doctype")
+        dt = _doctype(v)   # 程式化回推（不單靠手填 doctype）
         if dt in ("Meta-Analysis", "Systematic Review", "Guideline"):
             row = fill_row5(pm)  # [title,pmid,doi,ft,xref]
             background.append([row[0][:78], row[1], row[2], dt, row[3], row[4]])
+    # 背景空表但仍有非主研究的 verified 記錄 → 警告（surface doctype 缺失致漏件，不靜默）
+    if not background and any(str(v.get("pmid")) not in retr and str(v.get("pmid")) not in prim for v in ver if v.get("pmid")):
+        sys.stderr.write("⚠️ 背景表空，但尚有非主研究的 verified 記錄——確認 g6_verified 是否含可辨識型態（SR/MA/指引可能漏件）\n")
 
     # 3. 進行中試驗（CT.gov 招募中/未招募 + 已發表 protocol；登錄號必填）
     ONG = {"RECRUITING", "ACTIVE_NOT_RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION"}
