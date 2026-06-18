@@ -75,6 +75,17 @@ def main():
     a1 = archive(CACHE, "audit", label="cache")
     a2 = archive(OUTPUTS, "deliverables", label="outputs")
     a3 = archive(reports, "deliverables", label="reports") if reports else 0
+    # inputs/ 的全文（使用者手工提供）也要封存——否則 inputs 只被清空、檔案不留存（曾漏）。
+    # 明確規則（不走 archive() 的 exts 旁路，避免日後白名單化時非 PDF 檔被 clear_dir 清空卻沒封存）：
+    #   ★ 非 PDF 一律封存進 sources/；PDF 僅 --keep-pdfs 時複製，否則只在 MANIFEST 記檔名（版權 PDF 同 reports 處理）。
+    #   故「刪除卻未封存」的唯一情形＝版權 PDF 且未 --keep-pdfs（刻意、且已記檔名），不會誤刪其他型別。
+    a5 = 0
+    for f in _files(INPUTS):
+        if f.suffix.lower() == ".pdf" and not keep_pdfs:
+            manifest.append(f"[未複製·已刪] sources/{f.name}（{f.stat().st_size//1024} KB）"); continue
+        if not dry:
+            (arch / "sources").mkdir(parents=True, exist_ok=True); shutil.copy2(f, arch / "sources" / f.name)
+        a5 += 1
     # 交接資料夾：只存中繼檔（json/txt/md），PDF 依 --keep-pdfs
     a4 = 0
     if ftd:
@@ -88,16 +99,21 @@ def main():
     if not dry:
         arch.mkdir(parents=True, exist_ok=True)
         (arch / "MANIFEST.txt").write_text("\n".join(manifest), encoding="utf-8")
-    print(f"  封存：audit {a1}｜deliverables {a2+a3}｜handoff {a4}")
+    print(f"  封存：audit {a1}｜deliverables {a2+a3}｜sources {a5}｜handoff {a4}")
 
     # 2) 清空
+    clear_fails = []   # 收集刪除失敗項（OneDrive 暫鎖或真實權限錯誤）——結尾統一可見回報，不靜默吞
     def clear_dir(p, keep_gitkeep=True):
         if not p or not Path(p).is_dir(): return 0
         n = 0
         for f in Path(p).iterdir():
             if keep_gitkeep and f.name == ".gitkeep": continue
             if not dry:
-                (shutil.rmtree(f) if f.is_dir() else f.unlink())
+                try:
+                    (shutil.rmtree(f) if f.is_dir() else f.unlink())
+                except Exception as e:
+                    # 逐項跳過、別讓單一鎖檔中止整個清空（資料已先封存，安全）；但記錄下來結尾回報
+                    clear_fails.append((str(f), type(e).__name__)); continue
             n += 1
         return n
     c1 = clear_dir(CACHE); c2 = clear_dir(OUTPUTS); c3 = clear_dir(INPUTS); c4 = clear_dir(reports, keep_gitkeep=False)
@@ -113,11 +129,20 @@ def main():
         if not dry:
             for f in Path(ftd).iterdir():
                 try: (shutil.rmtree(f) if f.is_dir() else f.unlink())
-                except Exception: pass
+                except Exception as e: clear_fails.append((str(f), type(e).__name__))
             try: os.rmdir(ftd)
             except Exception: print("  （交接夾內容已清空；空夾被 OneDrive 暫鎖、留著無害）")
     print(f"  清空：cache {c1}｜outputs {c2}｜inputs {c3}｜reports {c4}｜交接夾 {c5}（整夾刪）｜run_state 重設")
+    # 清空失敗一律可見回報（區分 OneDrive 暫鎖空夾 vs 真實刪除失敗，避免殘留靜默污染下一輪）
+    if clear_fails:
+        locks = sum(1 for _, et in clear_fails if et in ("PermissionError", "OSError"))
+        print(f"  ⚠️ 清空未完成 {len(clear_fails)} 項（其中 {locks} 項疑似 OneDrive 暫鎖）。"
+              "若非空夾/暫鎖，請手動確認並清除，以免污染下一輪：")
+        for path, et in clear_fails[:12]:
+            print(f"       - {os.path.basename(path.rstrip('/\\\\')) or path}（{et}）")
     print("✅ 結案完成，下一輪可乾淨開始。" if not dry else "（DRY-RUN：未實際變更）")
+    if clear_fails and not dry:
+        print("   （注意：上方有未清除項，非全乾淨——請依提示處理。）")
     print(f"   這輪記錄保存在：{arch}")
 
 if __name__ == "__main__":

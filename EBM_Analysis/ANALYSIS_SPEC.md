@@ -82,6 +82,14 @@
 | computation_check / output_selfcheck / wording_template | 輸出階段 |
 
 ## 封存／歸檔既有分析
+
+> **結案一鍵流程（「EBM分析結束／結案／清理下一輪」）＝ `end_run.py`**：當使用者說「**EBM分析結束**」「結案」「這輪結束、清理準備下一輪」時，跑
+> `python EBM_Analysis/tools/end_run.py [--keep-pdfs] [--dry-run]`：**先封存**這輪到 `runs/<YYYY-MM>_<slug>/`
+> （`audit/`＝cache JSON、`deliverables/`＝outputs＋reports、`sources/`＝inputs 手工全文、`handoff/`＝交接中繼檔、`MANIFEST.txt`），
+> **再清空** cache／outputs／inputs／reports／交接全文夾／run_state。手工/版權 PDF 預設只記檔名不複製，加 `--keep-pdfs` 連 PDF 一起封存。
+> 先設 `run_state`（slug／date／fulltext_dir／reports_dir）否則封存夾命名/範圍不全；先 `--dry-run` 給使用者看再實跑。
+> （此為整合版；下方 `archive_run.py` 是「只封存、不清空」的較低階工具，需要單獨歸檔某次而不清工作區時用。與 SKILL.md「結案」段為同一真理源。）
+
 當使用者說「封存／歸檔這次分析」「把這次存起來」「歸檔成 XXX」「封存後清空準備下一個主題」時：
 1. **確定主題名稱（slug）**：用使用者給的名字（如 `DPP1-bronchiectasis`）；沒給就依 `cache/_corpus.json` 的 review_question 提一個並請對方確認。
 2. **問兩件事**（用 AskUserQuestion 或直接問，得到答覆才執行）：

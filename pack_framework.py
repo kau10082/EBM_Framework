@@ -27,8 +27,11 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
-EX_DIRS = {".git", "__pycache__", ".venv", "venv", ".claude", "runs", "fulltext", "node_modules"}
-EX_FILES = {"settings.yaml", ".env", "scimago_quartiles.json"}
+EX_DIRS = {".git", "__pycache__", ".venv", "venv", ".claude", ".agents", "runs", "fulltext", "node_modules"}
+# 審查系統三檔（AGENTS.md／review-prompt.md／.agents/handoff.md）與真值設定同理：
+# **可分享版排除**（不外洩個人工作流），**私用版保留**（使用者要帶著完整工作流走）。
+# 皆於 with_secrets(私用版) 時自 ex_dirs/ex_files 移除。
+EX_FILES = {"settings.yaml", ".env", "scimago_quartiles.json", "AGENTS.md", "review-prompt.md"}
 EX_EXT = {".zip", ".pyc", ".pdf"}
 # 這些子資料夾只保留 .gitkeep（版權全文／衍生內容／PHI 不打包）
 KEEPGITKEEP_PREFIXES = ("EBM_Analysis/inputs/", "EBM_Analysis/cache/", "EBM_Analysis/outputs/")
@@ -80,9 +83,13 @@ def main(argv=None):
     with_secrets = "--shareable" not in argv and "--no-secrets" not in argv
 
     ex_files = set(EX_FILES)
+    ex_dirs = set(EX_DIRS)
     if with_secrets:
         ex_files.discard("settings.yaml")     # 允許含真值設定
         ex_files.discard(".env")
+        ex_files.discard("AGENTS.md")         # 私用版帶著審查系統三檔
+        ex_files.discard("review-prompt.md")
+        ex_dirs.discard(".agents")            # 連同 .agents/handoff.md
 
     out_dir = _packaging_dir()
     os.makedirs(out_dir, exist_ok=True)
@@ -94,7 +101,7 @@ def main(argv=None):
     n, skipped = 0, 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for root, dirs, files in os.walk(ROOT):
-            dirs[:] = [d for d in dirs if d not in EX_DIRS and not d.startswith("_")]
+            dirs[:] = [d for d in dirs if d not in ex_dirs and not d.startswith("_")]
             for f in files:
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, ROOT).replace("\\", "/")
