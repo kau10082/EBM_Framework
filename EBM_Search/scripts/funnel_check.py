@@ -29,6 +29,7 @@ def _safe_eval(side):
     s = side.replace(" ", "")
     if not s or not re.fullmatch(r"[0-9+\-*]+", s):
         return None
+    s = re.sub(r"(^|[+\-*])0+(\d)", r"\1\2", s)   # 去多位數前導零（007→7）；否則 eval 拋 SyntaxError 被當解析失敗靜默跳過
     try:
         return eval(s, {"__builtins__": {}}, {})  # noqa: S307 受限字元集
     except Exception:

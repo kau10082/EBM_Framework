@@ -43,7 +43,7 @@ def check(syn=None):
     for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""
         if re.search(r"合併|pooled|池化", rel) and not any(m in rel + (o.get("comment") or "") for m in SRC_MARK):
-            fails.append(f"C3 SoF「{o.get('outcome')[:20]}」relative_effect 標『合併』但未註來源：{rel}")
+            fails.append(f"C3 SoF「{(o.get('outcome') or '')[:20]}」relative_effect 標『合併』但未註來源：{rel}")
     # C4: RoB2『全文依賴性』——僅摘要/AI 合成抽取者，overall 不得 low（最高 some_concerns）
     for r in (syn.get("rob_summary") or []):
         basis = (r.get("evidence_basis") or "full_text")
@@ -54,12 +54,12 @@ def check(syn=None):
     for o in (syn.get("sof") or []):
         ae = (o.get("absolute_effect") or "")
         if harm_kw.search(o.get("outcome") or "") and re.search(r"\bNNH\b", ae):
-            fails.append(f"C5 SoF「{o.get('outcome')[:20]}」危害結果用了 NNH，應改用 NNTH（指明方向、避免誤解）")
+            fails.append(f"C5 SoF「{(o.get('outcome') or '')[:20]}」危害結果用了 NNH，應改用 NNTH（指明方向、避免誤解）")
     # C6: 二分類 SoF（相對效應為 RR/OR）之絕對效應若給 NNT 類，須附 95% CI
     for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         if re.search(r"\b(RR|OR)\b", rel) and re.search(r"NNT[BH]?", ae) and not re.search(r"CI|到|—|–", ae):
-            fails.append(f"C6 SoF「{o.get('outcome')[:20]}」二分類絕對效應給了 NNT 但缺 95% CI（須由相對效應 CI 代入 ACR 回推）")
+            fails.append(f"C6 SoF「{(o.get('outcome') or '')[:20]}」二分類絕對效應給了 NNT 但缺 95% CI（須由相對效應 CI 代入 ACR 回推）")
     # C7: 運算覆驗——由相對效應＋ACR 重算 RD/NNT/CI，與報告所寫比對（不再只信手抄）
     try:
         import absrisk
@@ -82,9 +82,9 @@ def check(syn=None):
             else:
                 continue
             if stated_rd is not None and abs(rd * 100 - stated_rd) > 0.6:
-                fails.append(f"C7 SoF「{o['outcome'][:16]}」風險差重算 {rd*100:+.1f}pp ≠ 報告 {stated_rd:+.1f}pp")
+                fails.append(f"C7 SoF「{(o.get('outcome') or '')[:16]}」風險差重算 {rd*100:+.1f}pp ≠ 報告 {stated_rd:+.1f}pp")
             if stated_nnt is not None and abs(rd) > 1e-9 and abs(1/abs(rd) - stated_nnt) > 1.0:
-                fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT 重算 {1/abs(rd):.0f} ≠ 報告 {stated_nnt:.0f}")
+                fails.append(f"C7 SoF「{(o.get('outcome') or '')[:16]}」NNT 重算 {1/abs(rd):.0f} ≠ 報告 {stated_nnt:.0f}")
             # NNT CI 覆驗
             # CI 分隔符統一支援 –／-／到／to，避免「0.52 to 0.78」「0.52 到 0.78」讓 NNT CI 覆驗靜默跳過
             relci = re.search(r'(?:RR|OR)\s*[\d.]+.{0,14}CI\s*([\d.]+)\s*(?:[–\-到]|\bto\b)\s*([\d.]+)', rel)
@@ -95,7 +95,7 @@ def check(syn=None):
                     ns = sorted(1/d for d in diffs)
                     es = sorted(float(x) for x in aeci.groups())
                     if abs(ns[0]-es[0]) > 1.0 or abs(ns[1]-es[1]) > 1.0:
-                        fails.append(f"C7 SoF「{o['outcome'][:16]}」NNT CI 重算 {ns[0]:.0f}-{ns[1]:.0f} ≠ 報告 {es[0]:.0f}-{es[1]:.0f}")
+                        fails.append(f"C7 SoF「{(o.get('outcome') or '')[:16]}」NNT CI 重算 {ns[0]:.0f}-{ns[1]:.0f} ≠ 報告 {es[0]:.0f}-{es[1]:.0f}")
     except Exception as e:
         # 不靜默吞：C7 是數值覆驗，靜默跳過會放走絕對/相對效應不一致。失敗關閉——
         # 回報為一條 fail 請人工核對（確需略過由 build_reports --skip-consistency 統一處理）。
@@ -105,18 +105,18 @@ def check(syn=None):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         is_cont = re.search(r"\bMD\b|平均差|mL|percentage|百分點變化|分數", ae) and not re.search(r"\b(RR|OR|HR)\b|率比|風險差|NNT", ae)
         if is_cont and not (o.get("mid") or o.get("continuous_reexpression")):
-            fails.append(f"C8 SoF「{o.get('outcome','')[:18]}」為連續結果但缺 MID/可解讀再表達")
+            fails.append(f"C8 SoF「{(o.get('outcome') or '')[:18]}」為連續結果但缺 MID/可解讀再表達")
     # C9: 時間事件(HR)結果 SoF 須有絕對欄（Ch14 §14.1.5.2）
     for o in (syn.get("sof") or []):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         if re.search(r"\bHR\b", rel) and not re.search(r"%|NNT|風險|存活|事件|百分點", ae):
-            fails.append(f"C9 SoF「{o.get('outcome','')[:18]}」為 HR 結果但缺絕對效應欄（須由 absrisk hr 換算）")
+            fails.append(f"C9 SoF「{(o.get('outcome') or '')[:18]}」為 HR 結果但缺絕對效應欄（須由 absrisk hr 換算）")
     # C10: ≥2 試驗時須有證據體 GRADE（Ch14 §14.2.1，非逐篇取均/取最差）
     if len((syn.get("rob_summary") or [])) >= 2 and not syn.get("body_of_evidence"):
         fails.append("C10 證據體 GRADE 缺失：≥2 試驗時 synthesis 須含 body_of_evidence（跨研究逐 outcome 確定性）")
     # C11: critical outcomes 必列 SoF（全因死亡＋SAE，即使罕見/不顯著/不可統合；Ch14 §14.1.6.1，防結果報告偏誤）
     if syn.get("sof"):
-        sof_text = " ".join(o.get("outcome", "") for o in syn["sof"])
+        sof_text = " ".join((o.get("outcome") or "") for o in syn["sof"])
         if not re.search(r"死亡|mortalit", sof_text, re.I):
             fails.append("C11 SoF 缺『全因死亡』critical outcome（即使罕見/不顯著也須列，給低/極低確定性）")
         if not re.search(r"嚴重不良|\bSAE\b|serious adverse", sof_text, re.I):
@@ -132,25 +132,25 @@ def check(syn=None):
     def _cln(s): return re.sub(r"[\s（）()／/、，,。.；;]", "", s or "")
     sof = (syn.get("sof") or [])
     for b in (syn.get("body_of_evidence") or []):
-        bk = _kw(b.get("outcome", ""))
+        bk = _kw((b.get("outcome") or ""))
         best = None; bestov = 0
         for o in sof:
-            ov = len(bk & _kw(o.get("outcome", "")))
+            ov = len(bk & _kw((o.get("outcome") or "")))
             if ov > bestov: bestov, best = ov, o
         # 中文整詞無 token 重疊時的子字串後援（如「死亡」⊂「全因死亡」），避免 C13 漏檢一致性
         if not best or bestov < 2:
-            bc = _cln(b.get("outcome", ""))
+            bc = _cln((b.get("outcome") or ""))
             for o in sof:
-                oc = _cln(o.get("outcome", ""))
+                oc = _cln((o.get("outcome") or ""))
                 if len(bc) >= 2 and len(oc) >= 2 and (bc in oc or oc in bc):
                     best, bestov = o, 2; break
         if best and bestov >= 2 and b.get("certainty") != best.get("certainty"):
-            fails.append(f"C13 證據體 GRADE「{b.get('outcome','')[:14]}」確定性={b.get('certainty')} ≠ SoF「{best.get('outcome','')[:14]}」={best.get('certainty')}（跨呈現飄移）")
+            fails.append(f"C13 證據體 GRADE「{(b.get('outcome') or '')[:14]}」確定性={b.get('certainty')} ≠ SoF「{(best.get('outcome') or '')[:14]}」={best.get('certainty')}（跨呈現飄移）")
     # C14: SoF 任何 NNTB/NNTH 點估計必附 CI 或不確定標記（含危害；防假性精確，Ch15 §15.4.4）
     for o in (syn.get("sof") or []):
         ae = (o.get("absolute_effect") or "") + (o.get("dose_response") or "")
         if re.search(r"NNT[BH]\s*[≈≒=]?\s*\d", ae) and not re.search(r"CI|到|[–-]\s*\d|無限大|不顯著|跨", ae):
-            fails.append(f"C14 SoF「{o.get('outcome','')[:16]}」NNT 點估計缺 CI/不確定標記（假性精確；事件少時 CI 常含無限大）")
+            fails.append(f"C14 SoF「{(o.get('outcome') or '')[:16]}」NNT 點估計缺 CI/不確定標記（假性精確；事件少時 CI 常含無限大）")
     # C15: SoF 受試者數一致性（防『每次報告 N 飄移』）——所有「跨 N 個 RCT 合併」列須用同一個受試者總數；
     #      子比較列(單試驗單劑量 vs 安慰劑)允許不同，但其 N 須等於兩臂和。
     def _ints(s):
@@ -168,7 +168,7 @@ def check(syn=None):
         if re.search(r"RCT|試驗", nps) and not re.search(r"vs|＋|\+|臂|單試驗|單劑量", nps):
             # 視為「跨 RCT 合併」列：取其最大數為該列宣稱的合併總數
             if nums:
-                pooled_totals.setdefault(max(nums), []).append(o.get("outcome", "")[:14])
+                pooled_totals.setdefault(max(nums), []).append((o.get("outcome") or "")[:14])
     if len(pooled_totals) > 1:
         desc = "；".join(f"{n}（{'/'.join(v)}）" for n, v in sorted(pooled_totals.items()))
         fails.append(f"C15 SoF 跨-RCT 合併列出現 {len(pooled_totals)} 個不同受試者總數：{desc} → 須統一(隨機分配總數)，MA分析集差異只在敘述explain、勿混入 SoF 欄")

@@ -28,7 +28,7 @@ def audit(papers, sleep=0.15):
         import unpaywall
     except Exception as e:
         return [f"fulltext_audit 無法載入 unpaywall：{str(e)[:60]}"], []
-    fails, missed = [], []
+    fails, missed, unverifiable = [], [], []
     for p in papers:
         ch = p.get("fulltext_channel"); st = p.get("fulltext_status")
         if ch not in NOT_GOT and st not in NOT_GOT_STATUS:
@@ -37,9 +37,15 @@ def audit(papers, sleep=0.15):
         if not doi:
             continue                                   # 無 DOI 無法 Unpaywall，跳過（非失敗）
         d = unpaywall.lookup(doi); time.sleep(sleep)
+        if "is_oa" not in d:
+            # Unpaywall 沒查成（網路逾時/UA 被擋回 {}，或 import 失敗 _error）——查成功才會有 is_oa 鍵。
+            # 不可把「查失敗」當「非 OA」靜默放行，否則 gate 形同沒跑（機器看守被無聲繞過）。
+            unverifiable.append(doi); continue
         if d.get("is_oa") and (d.get("pdf_url") or d.get("landing_url")):
             missed.append((p, d))
             fails.append(f"[{(p.get('title') or p.get('paper_id') or doi)[:50]}] 判 {ch or st}，但 Unpaywall 找到 OA（{d.get('oa_status')}）：{(d.get('pdf_url') or d.get('landing_url'))[:80]} → 應改 have/online、重讀全文")
+    if unverifiable:
+        fails.append(f"{len(unverifiable)} 筆 Unpaywall 查詢未成功（網路/被擋/email 解析不到），無法判定分類是否誠實——請檢查網路後重跑，勿視為通過：{unverifiable[:5]}{'…' if len(unverifiable) > 5 else ''}")
     return fails, missed
 
 def _load_papers(seed_path):

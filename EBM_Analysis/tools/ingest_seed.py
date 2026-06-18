@@ -124,6 +124,11 @@ def main(argv=None):
     if not papers:
         sys.stderr.write("✗ 交接包 papers 為空\n")
         return 2
+    # 缺 paper_id 給明確錯誤（取代下游 p["paper_id"] 的 bare KeyError；ingest 只驗 schema_version，這層補防呆）
+    missing_pid = [i + 1 for i, p in enumerate(papers) if not p.get("paper_id")]
+    if missing_pid:
+        sys.stderr.write("✗ 交接包第 %s 筆 paper 缺 paper_id（無法建 corpus／分組／複製 PDF）\n" % missing_pid)
+        return 2
 
     ft_dir = _fulltext_dir(seed, seed_path)
     overlap = _build_overlap(papers)
