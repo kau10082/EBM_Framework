@@ -1,31 +1,32 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【本輪性質】**非功能塊**；設定檔引號樣式調整 ＋ 對「這到底是不是真 bug」的**更正紀錄**。
+【本輪性質】**【初審】** — 新增機器守門，根治「擅自偏離核准檢索策略（私自加未核准過濾器）無人攔」的 bug。
 
-**本輪審查範圍：**
-- `config/settings.yaml` —— ⚠️ gitignored、不在版控，審查端 clone 看不到。
-- `EBM_Search/scripts/xref_verify.py`（`load_settings`／`_coerce`／`default_settings_path`）—— 版控內，本輪未改動，僅供查證「設定實際怎麼被讀取」。
-- `config/settings.example.yaml` —— 版控內，本輪未改動，僅對照。
+**本輪審查範圍：僅以下檔（版控內）：**
+- `EBM_Search/scripts/strategy_adherence_check.py`（**新增**）
+- `EBM_Search/scripts/gate_guard.py`（接線：新增 `check_strategy_adherence`，併入 `_all_checks` 的 Gate ① 群）
+- `EBM_Search/scripts/selftest_guards.py`（補一個會 FAIL 的 fixture）
 
-**⚠️ 更正（重要，repo 為唯一真相、以實跑為證）：**
-先前我把這件事描述成「會讓 `yaml.safe_load` 的 helper crash、整條管線無法啟動的 bug」——**這個描述不正確**。
-- 實跑查證：全 repo **無任何 `.py` 以 `yaml.safe_load`／`yaml.load` 讀 settings**（grep 0 命中）。
-- settings 一律由 `xref_verify.load_settings`（自製零相依解析器）讀取；`_coerce` 會剝除單／雙引號、且**保留反斜線字面值**。
-- 實測：`load_settings(default_settings_path())` 正確讀回 `'C:\Users\kau10\OneDrive\…\reports'`；`_coerce` 對雙引號版與單引號版回傳**完全相同**字串。
-- 結論：settings.yaml 用雙引號包 Windows 路徑，**對本 repo 的實際讀取器不是 bug、不會 crash**。我先前看到的 crash 來自我自己臨時用 PyYAML 寫的診斷腳本，並非 repo 的程式路徑。
+**這塊在解什麼（bug）：**
+- Stage A ① 廣蒐時，核准策略（「PubMed 套 Cochrane RCT 過濾器；**其餘腿不設計型限制以求 recall**」）只存在於對話／記性，**無任何機器關卡比對「實際送出的 query」vs「核准策略」**，導致我擅自在 OpenAlex／Europe PMC 加設計過濾、把 PubMed 過濾器擴大，無人攔下（已即時 revert）。
 
-**本輪實際改動：**
-- `config/settings.yaml` 5 個路徑值由雙引號改單引號 —— **功能中立**（自製解析器兩者讀法相同、路徑內容不變），純樣式、非修復性、非載入必要。保留即可，亦可還原，無差。
+**修法（已實作）：**
+- `strategy_adherence_check.check(manifest, strategy)`：讀 `g1_legs_manifest.json`（每腿須含實際 `query`）＋ `g0_strategy.json`（逐腿 `design_filter_allowed`）。被核准為 `design_filter_allowed=false` 的腿，其 query 若出現設計／品質過濾特徵（`[pt]`/`[ptyp]`、`systematic[sb]`、`PUB_TYPE:`、`randomi*`、`placebo[tiab]`、`meta-analysis`、`systematic review`、`controlled clinical trial`、`sjr`/`quartile`）→ FAIL；缺記 query、或腿不在 g0 → 亦 FAIL。
+- 併入 `gate_guard`（Stop hook 自動跑）：只在 cache 有哨兵旗標時生效。
+- `g0_strategy.json` 與每腿 `query` 由 ⓪ 核准／Stage A 廣蒐寫出（run-local `_fetch_legs.py` 已備妥，不在版控）。
+
+**想被重點看 / 我不確定的點：**
+1. `DESIGN_FILTER_PATTERNS` 是否漏列某種「設計／品質過濾」寫法（如其他登錄庫/平台的過濾語法），或是否可能**誤觸**正當的疾病/介入詞（目前測試：disease∧triple 分子名不誤觸）。
+2. 「腿不在 g0_strategy.json 即 FAIL」是否過嚴（會擋掉 g0 未涵蓋的新腿——刻意如此，逼策略先落地；請確認此嚴格度可接受）。
+3. gate_guard 對「manifest 在、g0 不在」會 FAIL：是否應放行為「尚未到此關」？（目前刻意 FAIL，逼 ⓪ 必寫 g0。）
+
+**自測：**
+- `python EBM_Search/scripts/selftest_guards.py` → 全部守門（含新守門）皆「會 FAIL（守門有效）」、總結「全部守門有效」。
+- 正向測試：核准策略相容的 manifest（PubMed 帶 RCT 過濾＝allowed、其餘腿無過濾）→ 無誤報。
+- fresh-clone 實跑結果見對話回報。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
-
-- ❓ **存疑**：審查 🟡「範本反斜線路徑易誘使用者用雙引號填入而 crash → 建議預防①範本加註、預防②解析處 try/except 友善錯誤」。
-  **存疑理由（已實跑查證，非臆測）：** 本 repo 設定**從不經 PyYAML 解析**（全 repo `yaml.safe_load`／`load` 0 命中），而是走 `xref_verify.load_settings` 自製解析器；`_coerce` 對單／雙引號處理相同並保留反斜線 → 雙引號 Windows 路徑**不會 crash**（已用真實 `load_settings` 實讀證明）。因此：
-  - 預防②「在 YAML 解析失敗處 try/except 給友善錯誤」**無對應程式點可加**：repo 沒有 settings 的 yaml 解析；自製 `load_settings` 讀不到檔回 `{}`、對無法解析的行靜默 `continue`，本就不丟例外 → 硬加即死碼／過度工程（違反核心原則）。
-  - 預防①「範本加註：Windows 路徑要用單引號否則 crash」基於同一錯誤前提；若照此措辭加註，等於在版控範本寫進一句**不正確**的警告。
-  此 🟡 的根因是我上一輪交班把影響**誤述**為「yaml.safe_load 會 crash 管線」，誤導了審查端；已於本輪「待審查」區更正。
-  **我的建議：①②皆不納入**（對應 repo 不存在該失效模式、且 ② 無落點）。若使用者仍想要文件防呆，最多加一句**正確**版註解（如「本檔由自製解析器讀取，單／雙引號皆可、反斜線會原樣保留」）。**交使用者裁決。**
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

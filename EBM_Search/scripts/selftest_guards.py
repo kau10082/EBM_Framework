@@ -30,6 +30,15 @@ def main():
                                  {"leg":"EuropePMC","hitCount":6252,"fetched":6252,"exhaustible":True},
                                  {"leg":"ClinicalTrials.gov","hitCount":137,"fetched":137,"exhaustible":True}]))
 
+    import strategy_adherence_check
+    # 不准加過濾的腿（OpenAlex）卻在 query 出現設計過濾特徵 → 必須 FAIL
+    allok &= _assert_fires("Gate① 策略遵從（OpenAlex 擅自加 RCT/meta-analysis 過濾）",
+        strategy_adherence_check.check(
+            [{"leg":"PubMed","query":"COPD AND triple therapy AND randomized[tiab]","hitCount":1,"fetched":1,"exhaustible":True},
+             {"leg":"OpenAlex","query":'"triple therapy" AND COPD AND (randomized OR "meta-analysis")',"hitCount":1,"fetched":1,"exhaustible":True}],
+            {"legs":[{"leg":"PubMed","design_filter_allowed":True},
+                     {"leg":"OpenAlex","design_filter_allowed":False}]}))
+
     import report_check
     bad = {"funnel":[{"step":"③ 嚴格篩","remain":"待覆核 73"}],
            "studies":[{"study":"待確認對照臂","reports":[["",  "", "10.x","線上","○"]]}],

@@ -241,6 +241,18 @@ def check_exhaust(cache):
     except Exception as e:
         return [f"leg_exhaust_check 載入失敗：{str(e)[:80]}"]
 
+def check_strategy_adherence(cache):
+    """Gate ①：每腿『實際送出的 query』不得偏離 ⓪ 核准策略（反擅自加未核准的設計/品質過濾）。"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None
+    strat = _load(cache / "g0_strategy.json")
+    try:
+        import strategy_adherence_check
+        return strategy_adherence_check.check(man, strat)
+    except Exception as e:
+        return [f"strategy_adherence_check 載入失敗：{str(e)[:80]}"]
+
 def _safe(name, fn, cache):
     """呼叫單一守門：例外一律視為未通過(fail-closed)。
     避免某個 check 自身拋例外（型態異常的 cache 等）讓 run_hook 以未捕捉例外退出 exit 1——
@@ -255,6 +267,7 @@ def _all_checks(cache):
     return [_safe("有全文須實抓驗證", check_have_verified, cache),
             _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
+            _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
             _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
             _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
