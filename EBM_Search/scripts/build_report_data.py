@@ -91,14 +91,19 @@ def build(cache):
         return [title[:95], str(pm), doi, ft, xref(pm)]
 
     # 1. 核心 Study 表（排除撤稿；保持 g7 的 study 分組與順序）
-    MAIN = {"IMPACT": "29668352", "ETHOS": "32579807", "KRONOS": "30232048",
-            "TRIBUTE": "29429593", "SUNSET": "29779416"}
+    # 主報告置頂：**資料驅動**——優先讀 g7 提供的 main_reports（study名→主報告 PMID），
+    # 否則以該 study 列表首篇為主報告。不再硬編特定主題的 PMID（曾殘留前案 COPD 試驗表，
+    # 換主題即全 miss → 主報告排序保護失效、可能漏樞紐主報告）。
+    MAIN = {str(k): str(v) for k, v in (dec.get("main_reports") or {}).items()}
     studies = []
     for tr, pmids in dec.get("study_reports", {}).items():
         if "PENDING" in tr: continue
         name = tr.split("(")[0]
         pmids = [str(p) for p in pmids if str(p) not in retr]
         main = MAIN.get(name)
+        if not main and pmids:
+            main = pmids[0]  # fallback：列表首篇；但 g7 未保證首位＝主報告，故出警告供複查
+            sys.stderr.write(f"⚠️ study「{name}」未在 g7.main_reports 指定主報告，暫取列表首篇 {main} 置頂——請確認是否為主報告\n")
         if main and main in pmids: pmids = [main] + [p for p in pmids if p != main]
         if pmids:
             studies.append({"study": name, "reports": [fill_row5(p) for p in pmids]})
@@ -118,12 +123,11 @@ def build(cache):
     ONG = {"RECRUITING", "ACTIVE_NOT_RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION"}
     ongoing = []
     for s in ctg:
-        if s.get("status") in ONG:
+        # 主題無關：g1_ctgov 已是本主題 CT.gov 檢索腿的結果（已被搜尋字串範圍化），此處只按狀態收，
+        # 不再硬編特定藥物正則（曾寫死 COPD triple/dual 字串，換主題即全 miss→空表→下游驗證 crash）。
+        if s.get("status") in ONG and str(s.get("nct") or "").strip():
             intr = ", ".join((s.get("intr") or [])[:3]); t = s.get("title") or ""
-            blob = (t + " " + intr).lower()
-            if re.search(r"triple|ics.{0,5}laba.{0,5}lama|fluticasone furoate|budesonide.{0,15}glycopyrr|beclomet", blob) \
-               and re.search(r"dual|laba/lama|lama/laba|vilanterol|olodaterol|umeclidinium|glycopyrr", blob):
-                ongoing.append([s["nct"], (t[:70] + " ｜ " + intr[:40]), s.get("status")])
+            ongoing.append([s["nct"], (t[:70] + " ｜ " + intr[:40]), s.get("status")])
     # 額外進行中（已發表 protocol/他庫登錄，如 TRACK；登錄號必填）— 讀 cache 的 g_extra_ongoing.json
     extra = _load(cache, "g_extra_ongoing.json") or []
     for e in extra:
@@ -147,7 +151,9 @@ def validate(data):
             if val in (None, "", "?", "？"): fails.append(f"背景『{col}』空（pmid={r[1]}）")
         if r[4] not in FT_ENUM: fails.append(f"背景全文狀態非法『{r[4]}』（pmid={r[1]}）")
         if r[5] not in XREF_ENUM: fails.append(f"背景檢核非法『{r[5]}』（須∈{sorted(XREF_ENUM)}；pmid={r[1]}）")
-    if not data.get("ongoing_trials"): fails.append("進行中試驗表空")
+    if not data.get("ongoing_trials"):
+        # 空表降為警告（非阻擋）：有些主題 CT.gov 確實無招募中/進行中試驗，不該讓整個驗證 crash
+        sys.stderr.write("⚠️ 進行中試驗表空——該主題 CT.gov 無招募中/進行中試驗，或未檢索到；請確認是否合理\n")
     for o in data.get("ongoing_trials", []):
         if not str(o[0]).strip() or str(o[0]) in ("—", "-"): fails.append(f"進行中缺登錄號：{str(o[1])[:40]}")
     return fails

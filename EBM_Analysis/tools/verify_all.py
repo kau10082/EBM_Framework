@@ -40,10 +40,7 @@ def _run(name, argv):
 def main():
     no_quotes = "--no-quotes" in sys.argv
     print("== verify_all：定稿前統一驗證 ==")
-    # 1) schema + 算術（逐階段）
-    phase_map = {"phase0_corpus.json": "p0?", "Chalmers2025_ASPEN.p1.json": "p1",
-                 "SYNTHESIS_DPP1_bronchiectasis.p3.json": "p3", "_synthesis.json": "synthesis"}
-    # 用 validate.py 對 p1/p2/p3（p3 含 GRADE 算術重算）
+    # 1) schema + 算術（逐階段）：phase 由檔名後綴動態判（不硬編特定檔名，避免前案殘留誤導）
     for f in sorted(CACHE.glob("*.json")):
         nm = f.name
         phase = ("p1" if nm.endswith(".p1.json") else

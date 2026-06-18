@@ -60,13 +60,17 @@ def _norm_doi(d):
     d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
 
 def check_unpaywall_coverage(cache):
-    """Gate ②c：每筆『非全文且有 DOI』必須已過 Unpaywall，且不得其實是 OA 卻判成取不到。"""
+    """Gate ②c：每筆『非全文且有 DOI』必須已過 Unpaywall（**只做覆蓋稽核**）。
+    註：是否『其實有 OA 卻誤判取不到』屬全文取得性判定——OA 旗標 ≠ 抓得到（IMPACT/ETHOS 旗標 OA 卻 403）。
+    本關在『內容階段』無從得知實抓結果（fetch_failed/fulltext_verified 是後段 verify_have_fetchable 才寫進
+    seed.json 的欄位、g2c_FINAL_content.json 沒有），故不在此用 OA 旗標反推分類對錯——那是 check_have_verified
+    /verify_have_fetchable 實抓蓋章的職責。②c 只查『Unpaywall 有沒有跑』，避免關責外溢、與 have 守門打架。"""
     content = _load(cache / "g2c_FINAL_content.json")
     if content is None:
         return None  # 此關尚未到
     up = _load(cache / "g2c_unpaywall.json") or {}
     fails = []
-    not_checked = []; misclassified = []
+    not_checked = []
     for c in content:
         cls = c.get("class") or ""
         if cls.startswith("有全文"):
@@ -74,15 +78,10 @@ def check_unpaywall_coverage(cache):
         doi = _norm_doi(c.get("doi"))
         if not doi:
             continue  # 無 DOI 無法 Unpaywall（非失敗）
-        u = up.get(doi)
-        if u is None:
+        if up.get(doi) is None:
             not_checked.append(doi)
-        elif u.get("is_oa") and (u.get("pdf") or u.get("url")):
-            misclassified.append((c.get("title") or doi)[:50])
     if not_checked:
         fails.append(f"②c 有 {len(not_checked)} 筆『非全文且有 DOI』未過 Unpaywall（漏跑）：{not_checked[:5]}{'…' if len(not_checked)>5 else ''}")
-    if misclassified:
-        fails.append(f"②c 有 {len(misclassified)} 筆 Unpaywall 其實有 OA 卻判取不到（誤分類）：{misclassified[:5]}")
     return fails
 
 def check_waiting_fulltext(cache):
