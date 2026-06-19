@@ -182,13 +182,15 @@ description: |
 
 **誠實覆蓋限制(報告開頭必載)**:本管線可及 ＝ MEDLINE(PubMed) ＋ Consensus ＋ OpenEvidence ＋ ClinicalTrials.gov ＋ **OpenAlex** ＋ **Europe PMC** ＋ **Epistemonikos**(有 token 時);**未覆蓋 ＝ Embase、CENTRAL、CINAHL、區域庫(LILACS)、法規(FDA／EMA)／CSR**(需機構訂閱／圖書館員,無免費 API);**WHO ICTRP 僅能手動入口匯出**(實測無免費即時 API,bulk 須申請、web service 付費)。**篩選為單一 AI 演算法、未達 MECIR C39「≥2 人獨立篩選」→ 自動結果定位「初篩」,最終納入/排除建議人工覆核。**故本管線產出定位為 **rapid-review(快速回顧)等級的「系統性回顧輔助」,非可直接發表的完整 Cochrane 檢索**(此處「rapid review」指方法學產出等級,與已移除的『快速模式』無關)。Consensus／OE 是 AI 合成層、**不可替代** MEDLINE／Embase／CENTRAL。
 
-**PubMed 官方 Cochrane 高敏感 RCT 過濾器**(sensitivity-maximizing 版,SR 模式取代 v0.10 自製 pubtype 收窄):
+**PubMed 官方 Cochrane 高敏感 RCT 過濾器（HSSS *sensitivity-maximizing* 版,2008 revision；v0.21 校正）**:
 ```
-(randomized controlled trial[pt] OR controlled clinical trial[pt] OR randomized[tiab]
- OR placebo[tiab] OR clinical trials as topic[mesh:noexp] OR randomly[tiab] OR trial[ti])
-NOT (animals[mh] NOT humans[mh])
+((randomized controlled trial[pt] OR controlled clinical trial[pt] OR randomized[tiab]
+  OR placebo[tiab] OR drug therapy[sh] OR randomly[tiab] OR trial[tiab] OR groups[tiab])
+ NOT (animals[mh] NOT humans[mh]))
 ```
-> 源自 Cochrane Handbook box 4.4.b。**非僅 RCT 的題**(觀察性／診斷準確度)改用對應過濾器,或**不套設計過濾器**以最大化 recall。**勿在已預過濾庫(如 CENTRAL)套過濾器**(本管線無 CENTRAL,記原則)。
+> 源自 **Cochrane Handbook Box 6.4.a（Handbook 5.1）/ Box 4.4.b 的 sensitivity-maximizing 版**——Cochrane 建議檢索試驗「先以本敏感度最大化版起手」。
+> **v0.21 校正**:先前此處誤標「sensitivity-maximizing」卻貼成 *sensitivity- and precision-maximizing* 變體（`clinical trials as topic[mesh:noexp]`＋`trial[ti]`，無 `drug therapy[sh]`/`groups[tiab]`/`trial[tiab]`）;現更正為**真正的 sensitivity-maximizing 版**（更廣、recall 更高，契合 SR 敏感度優先）。需要更精確版（precision 取捨）時才改用 sens+precision 變體。
+> **只套在 PubMed 腿**（`g0_strategy.json` 的 `design_filter_allowed:true`）;其餘腿維持無設計過濾以保 recall。**非僅 RCT 的題**(觀察性／診斷準確度)改用對應過濾器,或**不套設計過濾器**。**勿在已預過濾庫(如 CENTRAL)套過濾器**(本管線無 CENTRAL,記原則)。
 
 **ClinicalTrials.gov 試驗註冊腿(SR 模式新增,來源標 `CT`)**:以 API v2 查未發表／進行中試驗——`https://clinicaltrials.gov/api/v2/studies?query.cond=<疾病>&query.intr=<介入>&pageSize=…`;抽 **NCT 號／狀態／有無結果**,併入聯集。NCT 以**註冊號本身為憑**(不走 Crossref／PubMed 驗證)。WHO ICTRP **實測無免費自動化**(即時 API 404;官方 bulk 須填表經 SharePoint 核准、web service 付費)→ **不建自動腿**,列「人工補檢」缺口(可從 trialsearch.who.int 手動匯出),涵蓋非美國登錄庫由人工補。
 
