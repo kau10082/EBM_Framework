@@ -3,6 +3,7 @@
 gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 Stop hook 自動跑）
 ================================================================================
 依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
+  • g1_legs_manifest.json + g0_strategy.json → check_strategy_approved（Gate ⓪ 策略須先經使用者核准才可檢索，防搶跑）
   • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
   • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
   • _search_report.json             → funnel_check（流程數字閉合）
@@ -177,6 +178,24 @@ def check_have_verified(cache):
                          "假 have 改 need-supplement" % (p.get("paper_id") or p.get("pmid")))
     return fails
 
+def check_strategy_approved(cache):
+    """防『搶跑』（Gate ⓪→①）：Stage A 廣蒐（g1_legs_manifest.json）只能在
+    『檢索策略已向使用者報告並取得確認』後才執行。
+    落地：使用者確認策略後，才在 g0_strategy.json 設 approved_by_user=true。
+    g1 已產出但 g0 未核准＝在使用者確認策略前就動手檢索＝搶跑 → FAIL。
+    （2026-06 使用者糾正：曾未報告策略、未等確認即執行檢索，且擅自縮放範圍；此 gate 即為此而立。）"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None  # 尚未廣蒐：此關不適用
+    strat = _load(cache / "g0_strategy.json")
+    if not strat:
+        return ["g1_legs_manifest.json 已產出但無 g0_strategy.json：廣蒐前須先寫出檢索策略並經使用者確認（防搶跑）"]
+    if not strat.get("approved_by_user"):
+        return ["Stage A 廣蒐（g1_legs_manifest.json 已產出）但 g0_strategy.json 未標記 approved_by_user=true："
+                "檢索策略必須先報告並經使用者確認後才可執行檢索（防『搶跑』、防擅自縮放範圍；"
+                "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
+    return []
+
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
     man = _load(cache / "g1_legs_manifest.json")
@@ -343,7 +362,8 @@ def _safe(name, fn, cache):
 
 
 def _all_checks(cache):
-    return [_safe("有全文須實抓驗證", check_have_verified, cache),
+    return [_safe("Gate⓪ 策略經使用者核准才可檢索(防搶跑)", check_strategy_approved, cache),
+            _safe("有全文須實抓驗證", check_have_verified, cache),
             _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),

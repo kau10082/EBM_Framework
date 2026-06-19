@@ -23,6 +23,21 @@ def main():
     allok = True
     print("守門自我驗證（餵壞資料，應全部 FAIL）：")
 
+    import gate_guard as _gg_strat, tempfile as _tf_s, json as _js_s, io as _io_s, shutil as _sh_s
+    # Gate ⓪ 防搶跑：g1 已產出但 g0 未核准 → 必須 FAIL
+    _tmps = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"leg":"PubMed","query":"COPD AND triple therapy","hitCount":1,"fetched":1,"exhaustible":True}],
+               _io_s.open(_tmps/"g1_legs_manifest.json","w",encoding="utf-8"))
+    _js_s.dump({"topic":"x","axes":{}}, _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ 搶跑（g1 已產出但策略未經使用者核准）",
+        _gg_strat.check_strategy_approved(_tmps))
+    # 正向：g0 標 approved_by_user=true → 應通過（防誤報）
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True}, _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    _sok = _gg_strat.check_strategy_approved(_tmps)
+    print(("  ✅" if not _sok else "  ❌") + " 策略已核准應通過（防誤報）：" + ("通過" if not _sok else str(_sok)))
+    allok &= (not _sok)
+    _sh_s.rmtree(_tmps, ignore_errors=True)
+
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
         leg_exhaust_check.check([{"leg":"PubMed","hitCount":218,"fetched":218,"exhaustible":True},
