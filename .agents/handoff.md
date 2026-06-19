@@ -73,14 +73,17 @@
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
-- ✅ **已確認（無需改動）**：針對你不確定的第 1 點：完全同意 Stop hook 使用輕量 `analysis_gate` 而非完整 `verify_all` 的取捨。Stop hook 必須滿足極高的穩定性與極低的延遲，若掛載網路呼叫與渲染程序，極易導致 agent 操作卡頓甚至 timeout。將重量級驗證移交給 SKILL 內的硬步驟（定稿前自跑 `verify_all`），而 Stop hook 只做「有無最終產出」的輕量快篩，這是非常成熟且正確的系統設計。
-- ⚪ **可選優化**：針對你不確定的第 2 點：`check_pdf_at_finalize` 的「定稿」判定排除了 `done` 以避免誤殺 `phase3_done`，這確實排除了 mid-analysis 誤擋（False Positive）的風險。但這也意味著若 AI 僅將 stage 標為 `done`（而未包含 `phase4` 或 `final`），可能會發生漏擋（False Negative）。考慮到這只是最後一道防線，且寧可漏擋也不可誤擋干擾中途分析（fail-open 原則），目前的 `FINAL_MARKERS` 設計是合理且安全的。
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+【貫穿項初審 — 全數通過（無需改動）】
+- ✅ 已確認：SKILL.md 新增硬步驟與 SEARCH_SPEC「機器守門優先於記性」一致、無矛盾。
+- ✅ 已確認：指令路徑/腳本名正確（gate_guard.py、selftest_guards.py 均存在可用）。
+- ✅ 已確認：⚪ 防禦性設計，彌補遠端/手機無法觸發專案 Stop hook 的盲區。
 
 【Batch-3 初審 — 全數通過（無需改動）】
 - ✅ 已確認：⚪ Stop hook 用輕量 analysis_gate 而非完整 verify_all 的取捨正確（穩定/低延遲；重驗交 SKILL 自跑）。
 - ✅ 已確認：⚪ 「定稿」判定排除 `done`、寧漏擋不誤擋（fail-open）合理且安全。
 - ✅ 已確認：⚪ `analysis_gate --auto` 非 EBM 環境靜默退出、Stop hook 串接無誤。
-（三批守門 commit 6b2071f／25476e6／aeb5c37 與計畫初審 ac5deef 已保存處理歷史。）
+（三批守門 commit 6b2071f／25476e6／aeb5c37、計畫初審 ac5deef、貫穿項 7f0b812 已保存處理歷史。）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
