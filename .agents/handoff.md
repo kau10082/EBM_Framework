@@ -19,6 +19,7 @@
 5. `selftest_guards.py`：為 (1)(2)(3)(4) 各加 FAIL fixture＋正向控制，全綠。
 6. `SEARCH_SPEC.md`：四條 gate 都寫進「機器守門」段落。
 7. `.gitignore`：補上 `cache/`（先前漏列，14MB 可重生檢索中間檔成 untracked）。
+8. **軸比對品質守則（SEARCH_SPEC，非 gate 而是 guidance）**：③ 同義詞比對須(a)正規化分隔符(slash/hyphen/en-dash/逗號/and)＋詞幹；(b)C 軸禁用「會成為三合一名稱子字串的藥對」(umeclidinium vilanterol⊂FF/UMEC/VI 等)與「two long-acting bronchodilators」(描述三合一組成)當訊號；(c)對照臂精判屬 ⑦。緣由：實跑時 ETHOS/KRONOS 因 en-dash／複數被誤判離題、FULFIL/TRILOGY 因藥對子字串被誤判切題。此屬 per-run 篩選器的同義詞品質問題（不是結構不變量），故落為 SPEC guidance 而非機器 gate；篩選器本體在 gitignored cache、不進 repo。
 
 **fresh-clone／實跑結果**（守門變更的有意義證據＝自含的 selftest）
 - `python EBM_Search/scripts/selftest_guards.py` → 全綠，含本輪新增 fixture（防搶跑、防兩者皆無、防有 OA 不抓皆會 FAIL；正向控制通過）。
