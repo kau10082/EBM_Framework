@@ -1,23 +1,25 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【本輪性質】**【初審】第一批守門已實作**（改善計畫第一批；計畫本身已過審，見下「已處理」）。
+【本輪性質】**【初審】第二批守門已實作**（Bug1 四軸覆蓋＋Bug5 嚴格篩逐軸核對＋SPEC ③ 通則改 per-topic）。
+（第一批已結案、審查全數通過，commit `6b2071f`。）
 
 **本輪審查範圍：僅以下檔（版控內）：**
-- `EBM_Search/scripts/gate_guard.py`（新增 3 個 check＋接線：`check_screen_order`/`check_verification_coverage`/`check_pdf_emitted`）
-- `EBM_Search/scripts/report_check.py`（新增第 8 項：PRISMA `prisma_flow` 必存在且含 identification/screening/included）
-- `EBM_Search/scripts/stage1_check.py`（新增：candidate `abstract_status=have` 但摘要內容空 → FAIL）
-- `EBM_Search/scripts/selftest_guards.py`（補 5 個 fixture＋1 個防誤報正向測試）
-- （`_fetch_legs.py` 摘要回填屬 run-local、不在版控，僅備妥供檢索恢復用。）
+- `EBM_Search/scripts/axis_coverage_check.py`（**新增**，Bug1）：每腿 query 對每條 `in_query` 必含軸 ≥1 同義詞命中，否則 FAIL（採審查建議：≥1 存在性、不要求塞滿）。
+- `EBM_Search/scripts/strict_screen_check.py`（**新增**，Bug5）：切題須**所有** mandatory_screen 必含軸命中（缺即放水 FAIL）；離題須至少一軸『確認缺』並標明（否則 FAIL）；P∧I 命中而 C 僅 unknown → 應移待評估，逕判離題即 FAIL。
+- `EBM_Search/scripts/gate_guard.py`（接線 `check_axis_coverage`/`check_strict_screen` 進 `_all_checks`）。
+- `EBM_Search/scripts/selftest_guards.py`（補 4 個 fixture：2 FAIL＋2 正向防誤報）。
+- `EBM_Search/SEARCH_SPEC.md`（★第③關通則：「兩軸」改「必含軸由 g0 per-topic 宣告、比較型含 C」＋ P∧I 見、C 未見→待評估配套）。
+- （`_fetch_legs.py` g0 寫出 `axes`（P/I/C 同義詞＋in_query/mandatory_screen）屬 run-local、不在版控。）
 
-**第一批對應 bug：** Bug3（②c→③ 順序）、Bug6（⑥驗證覆蓋）、Bug7（PRISMA＋PDF 實體）、Bug2（摘要內容非空）。
-**第二/三批（未做）：** axis_coverage_check＋strict_screen_check（含 SPEC ③ 改 per-topic 必含軸）、分析端 Bug8。
+**契約（g0_strategy.json.axes）：** `{軸:{synonyms:[...],in_query:bool,mandatory_screen:bool}}`。`in_query` 軸＝axis_coverage 在 query 查存在；`mandatory_screen` 軸＝strict_screen 在 ③ 逐軸核對。比較型題 C＝`in_query:false`（搜尋不放入求 recall）但 `mandatory_screen:true`（③ 必核）。
 
 **想被重點看：**
-1. `check_verification_coverage` 以 (pmid|doi) 比對 g6_verified.json 是否足夠（會不會因 ID 缺漏誤判未驗證）。
-2. `check_pdf_emitted` 依賴產生器把 settings 解析後的實際 PDF 路徑寫進 `_search_report.json.pdf_path`——此契約是否清楚（守門本身不解析路徑、不寫死，符合審查 ⚪ 建議）。
-3. `check_screen_order` 以「g3 在、g2c/_stage1 不在」判順序顛倒，是否有誤判情境。
+1. `strict_screen_check._state()` 對 axis_hits 值的判讀（present/absent/unknown）是否穩健、會不會把「非空證據字串」誤當命中而漏掉該抓的放水。
+2. 離題分支「無任一軸 absent → FAIL」是否過嚴（grossly off-topic 但未逐軸標 no 的紀錄會被要求補標缺哪軸——刻意如此，對齊 SPEC「標明缺哪軸」）。
+3. axis_coverage 對 `in_query=false` 的 C 軸不查 query，是否與「比較型題」意圖一致。
 
-**自測：** `python EBM_Search/scripts/selftest_guards.py` → 13 項全綠（含新 5 項 FAIL＋1 項正向防誤報通過）；fresh-clone 結果見對話回報。
+**自測：** `python EBM_Search/scripts/selftest_guards.py` → 21 項全綠（含本批新增 2 FAIL＋2 正向防誤報）；fresh-clone 結果見對話回報。
+**第三批（未做）：** 分析端 Bug8。貫穿項：SKILL 啟動器「每關自跑 gate 貼 PASS」硬步驟。
 
 ---
 
@@ -82,20 +84,8 @@
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
-（Batch-1 無待修問題，全數通過。）
-
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
-【Batch-1 複審（commit 待補）】
-- ✅ 已修：🔴 check_verification_coverage 對「無 PMID 也無 DOI」(如 NCT 登錄)誤報 FAIL 卡流程 → 加 `if not pid and not doi: continue`（無 ID 者依 SPEC 不走 Crossref/PubMed、不在此關稽核）。+selftest 正向回歸。
-- ✅ 已修：🟡 report_check PRISMA `in (None,"",0)` 誤擋合法 `included:0`（零納入報告）→ 改 `in (None,"")`。+selftest 正向回歸（included:0 應通過）。
-- ✅ 已確認（無需改動）：⚪ check_pdf_emitted 解耦設計（路徑交產生器、不寫死）符合標準。
-- ✅ 已確認（無需改動）：⚪ check_screen_order「g3 在、g2c/_stage1 不在」判順序穩健，無誤判疑慮。
-
-【計畫初審】
-- ✅ 已採納（修訂計畫）：🟡 Bug1 axis_coverage_check「≥N 同義詞」有誤殺風險（精準 MeSH／CT.gov 字數限制）→ 改為「每必含軸 ≥1 命中（存在性），0 命中才 FAIL」。已改 Bug1 計畫段。
-- ✅ 已採納（修訂計畫）：⚪ Bug5 配套——摘要見 P∧I 但看不出 C 不得直接判離題、應移 awaiting 待看全文（短摘要常省略對照）。已加進 Bug5 計畫段。
-- ✅ 已採納（修訂計畫）：⚪ Bug7 pdf_emitted_check 路徑須沿用報告產生器邏輯（讀 settings 的 pdf_output_dir、留空回退文件夾）、不得寫死。已加進 Bug7 計畫段。
-- ✅ 已確認（無需改動）：⚪ 整體 8 項診斷／守門對應正確、防線改「SKILL 顯式自跑 gate 貼 PASS」、三批順序合理、可放心實作（審查端背書）。
+（Batch-2 初審待回；Batch-1 與計畫初審之處理歷史已隨 commit 6b2071f／ac5deef 保存。）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

@@ -39,6 +39,28 @@ def main():
             {"legs":[{"leg":"PubMed","design_filter_allowed":True},
                      {"leg":"OpenAlex","design_filter_allowed":False}]}))
 
+    import axis_coverage_check
+    _ax_strat = {"axes":{"P":{"synonyms":["COPD","chronic obstructive pulmonary disease"],"in_query":True,"mandatory_screen":True},
+                         "I":{"synonyms":["triple therapy","ICS/LABA/LAMA","Trelegy"],"in_query":True,"mandatory_screen":True},
+                         "C":{"synonyms":["LABA/LAMA","umeclidinium/vilanterol"],"in_query":False,"mandatory_screen":True}}}
+    # 某腿 query 缺 P 軸同義詞 → 四軸沒展開 → FAIL
+    allok &= _assert_fires("Gate① 四軸覆蓋（OpenAlex query 缺疾病軸）",
+        axis_coverage_check.check([{"leg":"OpenAlex","query":"triple therapy single inhaler"}], _ax_strat))
+    _axok = axis_coverage_check.check([{"leg":"PubMed","query":'COPD AND "triple therapy"'}], _ax_strat)
+    print(("  ✅" if not _axok else "  ❌") + " 四軸覆蓋 query 含 P+I 應通過（防誤報）：" + ("通過" if not _axok else str(_axok)))
+    allok &= (not _axok)
+
+    import strict_screen_check
+    # 切題卻缺 C 軸證據（C=unknown）→ 放水 → FAIL
+    allok &= _assert_fires("Gate③ 切題卻缺 C 軸（放水）",
+        strict_screen_check.check([{"uid":"u1","verdict":"切題","axis_hits":{"P":"yes","I":"yes","C":"unknown"}}], _ax_strat))
+    # 離題卻無任何軸確認缺（P,I 命中、C 僅 unknown）→ 應移待評估 → FAIL
+    allok &= _assert_fires("Gate③ 離題卻無確認缺軸（應移待評估）",
+        strict_screen_check.check([{"uid":"u2","verdict":"離題","axis_hits":{"P":"yes","I":"yes","C":"unknown"}}], _ax_strat))
+    _ssok = strict_screen_check.check([{"uid":"u3","verdict":"切題","axis_hits":{"P":"COPD patients","I":"FF/UMEC/VI","C":"vs UMEC/VI"}}], _ax_strat)
+    print(("  ✅" if not _ssok else "  ❌") + " 嚴格篩切題全軸命中應通過（防誤報）：" + ("通過" if not _ssok else str(_ssok)))
+    allok &= (not _ssok)
+
     import report_check
     bad = {"funnel":[{"step":"③ 嚴格篩","remain":"待覆核 73"}],
            "studies":[{"study":"待確認對照臂","reports":[["",  "", "10.x","線上","○"]]}],

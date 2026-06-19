@@ -177,6 +177,30 @@ def check_have_verified(cache):
                          "假 have 改 need-supplement" % (p.get("paper_id") or p.get("pmid")))
     return fails
 
+def check_axis_coverage(cache):
+    """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None
+    strat = _load(cache / "g0_strategy.json")
+    try:
+        import axis_coverage_check
+        return axis_coverage_check.check(man, strat)
+    except Exception as e:
+        return [f"axis_coverage_check 載入失敗：{str(e)[:80]}"]
+
+def check_strict_screen(cache):
+    """Gate ③：嚴格篩逐軸核對——切題須全必含軸命中、離題須標明缺軸（反放水）。"""
+    scr = _load(cache / "g3_FINAL_screen.json")
+    if scr is None:
+        return None
+    strat = _load(cache / "g0_strategy.json")
+    try:
+        import strict_screen_check
+        return strict_screen_check.check(scr, strat)
+    except Exception as e:
+        return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
+
 def check_screen_order(cache):
     """Bug3：③嚴格篩(g3)不得早於②c全文取得(g2c)與 Stage A 交接(_stage1_corpus)。
     見 g3_FINAL_screen.json 卻缺前置產物＝順序顛倒。"""
@@ -323,6 +347,8 @@ def _all_checks(cache):
             _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
+            _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
+            _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
