@@ -209,6 +209,8 @@ def check_verification_coverage(cache):
         if p.get("verdict") not in ("included", "background"):
             continue
         pid = p.get("pmid"); doi = _norm_doi(p.get("doi"))
+        if not pid and not doi:
+            continue  # 無 PMID 也無 DOI（如 CT.gov NCT 登錄紀錄）：依 SPEC 以註冊號為憑、不走 Crossref/PubMed → 不在此關稽核
         ok = (pid and ("pmid", str(pid)) in vids) or (doi and ("doi", doi) in vids)
         if not ok:
             fails.append(f"{p.get('paper_id') or pid or doi}（verdict={p.get('verdict')}）未在 g6_verified.json："

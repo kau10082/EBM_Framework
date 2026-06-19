@@ -82,9 +82,9 @@ def check(data):
     if not pf:
         fails.append("缺 PRISMA 流程圖資料（prisma_flow）：Phase1 PDF 須含 PRISMA 2020 流程（辨識→去重→篩選→納入）")
     elif isinstance(pf, dict):
-        miss = [k for k in ("identification", "screening", "included") if pf.get(k) in (None, "", 0)]
+        miss = [k for k in ("identification", "screening", "included") if pf.get(k) in (None, "")]
         if miss:
-            fails.append(f"prisma_flow 缺/空欄位 {miss}：須含 identification/screening/included 計數")
+            fails.append(f"prisma_flow 缺/空欄位 {miss}：須含 identification/screening/included 計數（0 為合法值）")
     return fails
 
 def main():

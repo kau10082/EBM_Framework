@@ -58,6 +58,11 @@ def main():
     _vp = report_check.check(valid)
     print(("  ✅" if not _vp else "  ❌") + " 報告合規 fixture 應通過（防誤報）：" + ("通過" if not _vp else str(_vp)))
     allok &= (not _vp)
+    # 修正回歸：included:0（零納入報告）為合法，prisma 檢查不得誤擋
+    zero_inc = dict(valid); zero_inc["prisma_flow"] = {"identification":50,"screening":40,"included":0}
+    _z = [f for f in report_check.check(zero_inc) if "prisma_flow" in f]
+    print(("  ✅" if not _z else "  ❌") + " PRISMA included:0 應合法（防誤擋）：" + ("通過" if not _z else str(_z)))
+    allok &= (not _z)
 
     import stage1_check
     allok &= _assert_fires("Stage A→B 邊界（無內容混入候選）",
@@ -96,6 +101,12 @@ def main():
     # Bug7 PDF 實體：_search_report.json 無 pdf_path
     json.dump({"studies":[],"pdf_path":""}, io.open(tmp2/"_search_report.json","w",encoding="utf-8"))
     allok &= _assert_fires("Phase1 PDF 未產出/未登記", gate_guard.check_pdf_emitted(tmp2))
+    # 修正回歸：無 PMID/DOI（NCT 登錄）的 included 不得被驗證覆蓋守門誤判
+    json.dump({"papers":[{"paper_id":"NCTonly","verdict":"background","nct":"NCT01"}]}, io.open(tmp2/"_corpus_seed.json","w",encoding="utf-8"))
+    json.dump([], io.open(tmp2/"g6_verified.json","w",encoding="utf-8"))
+    _nv = gate_guard.check_verification_coverage(tmp2)
+    print(("  ✅" if not _nv else "  ❌") + " 無 ID(NCT) 文獻不被驗證覆蓋誤判（防誤報）：" + ("通過" if not _nv else str(_nv)))
+    allok &= (not _nv)
     shutil.rmtree(tmp2, ignore_errors=True)
 
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))

@@ -84,6 +84,13 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
+【Batch-1 複審（commit 待補）】
+- ✅ 已修：🔴 check_verification_coverage 對「無 PMID 也無 DOI」(如 NCT 登錄)誤報 FAIL 卡流程 → 加 `if not pid and not doi: continue`（無 ID 者依 SPEC 不走 Crossref/PubMed、不在此關稽核）。+selftest 正向回歸。
+- ✅ 已修：🟡 report_check PRISMA `in (None,"",0)` 誤擋合法 `included:0`（零納入報告）→ 改 `in (None,"")`。+selftest 正向回歸（included:0 應通過）。
+- ✅ 已確認（無需改動）：⚪ check_pdf_emitted 解耦設計（路徑交產生器、不寫死）符合標準。
+- ✅ 已確認（無需改動）：⚪ check_screen_order「g3 在、g2c/_stage1 不在」判順序穩健，無誤判疑慮。
+
+【計畫初審】
 - ✅ 已採納（修訂計畫）：🟡 Bug1 axis_coverage_check「≥N 同義詞」有誤殺風險（精準 MeSH／CT.gov 字數限制）→ 改為「每必含軸 ≥1 命中（存在性），0 命中才 FAIL」。已改 Bug1 計畫段。
 - ✅ 已採納（修訂計畫）：⚪ Bug5 配套——摘要見 P∧I 但看不出 C 不得直接判離題、應移 awaiting 待看全文（短摘要常省略對照）。已加進 Bug5 計畫段。
 - ✅ 已採納（修訂計畫）：⚪ Bug7 pdf_emitted_check 路徑須沿用報告產生器邏輯（讀 settings 的 pdf_output_dir、留空回退文件夾）、不得寫死。已加進 Bug7 計畫段。
