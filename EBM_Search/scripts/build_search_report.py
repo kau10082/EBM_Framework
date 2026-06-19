@@ -32,12 +32,39 @@ _SAFE_TR = str.maketrans({'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', 
 def safe(t): return (t or '').translate(_SAFE_TR)
 
 def _font():
-    for p in (r"C:/Windows/Fonts/msjh.ttc", r"C:/Windows/Fonts/msjh.ttf"):
-        if os.path.exists(p):
-            try: pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=0)); return
-            except Exception: pdfmetrics.registerFont(TTFont("CJK", p)); return
+    # 依序找可用 CJK 字型，一律註冊為 "CJK"（樣式皆引用此名）。
+    # Windows msjh → 常見 Linux/Mac CJK TTF（含本容器的文泉驛）→ 最後退 Adobe CID STSong-Light（別名 CJK）。
+    cand = [(r"C:/Windows/Fonts/msjh.ttc", 0), (r"C:/Windows/Fonts/msjh.ttf", None),
+            ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
+            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+            ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0),
+            ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", None),
+            ("/System/Library/Fonts/PingFang.ttc", 0)]
+    # 也納入 settings.yaml 的 analysis.cjk_font（若可解析）
+    try:
+        import yaml  # 選用
+        base = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
+        if base.exists():
+            cf = ((yaml.safe_load(base.read_text(encoding="utf-8")) or {}).get("analysis") or {}).get("cjk_font")
+            if cf: cand.insert(0, (cf, 0 if str(cf).lower().endswith(".ttc") else None))
+    except Exception:
+        pass
+    for p, idx in cand:
+        if p and os.path.exists(p):
+            try:
+                pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=idx) if idx is not None else TTFont("CJK", p))
+                return
+            except Exception:
+                continue
+    # 最後退路：Adobe CID 內建中文字型，並以別名註冊成 "CJK"（避免樣式引用 CJK 時找不到→崩潰）
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    try:
+        pdfmetrics.registerFontFamily("CJK", normal="STSong-Light")
+        from reportlab.lib.fonts import addMapping
+        addMapping("CJK", 0, 0, "STSong-Light")
+    except Exception:
+        pass
 
 def _resolve_in(arg):
     if arg: return arg
