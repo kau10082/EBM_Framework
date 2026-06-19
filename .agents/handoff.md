@@ -86,6 +86,12 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
-（Batch-2 初審待回；Batch-1 與計畫初審之處理歷史已隨 commit 6b2071f／ac5deef 保存。）
+【Batch-2 複審（commit 待補）】
+- ✅ 已修：🟡 strict_screen_check `_state()` fallback「非空字串→present」放水漏洞——AI 填自然語言（如「未提及對照組」）會被誤判命中→假切題。**改：不認得的自由文字一律 `unknown`（不得 present）**，並支援 `{status,evidence}` 結構；契約寫進 SPEC③（值須明確 token 或 {status,evidence}）。+selftest 補回歸（自由文字當證據→FAIL）＋正向改用明確 token。比 SKILL 提醒更硬（機器擋）。
+- ✅ 已確認（無需改動）：⚪ 離題分支「至少一軸 absent」對齊 SR「剔除原因＝第一個不符 PICO 軸」，不過嚴。
+- ✅ 已確認（無需改動）：⚪ `in_query` 與 `mandatory_screen` 脫鉤設計契合真實 EBM 檢索意圖（C 軸不入 query、留 ③ 核對）。
+- ✅ 已確認（無需改動）：⚪ Batch-2 實作完整、edge case 處理精細、selftest 有效，可進 Batch 3。
+
+（Batch-1 與計畫初審之處理歷史已隨 commit 6b2071f／ac5deef 保存。）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

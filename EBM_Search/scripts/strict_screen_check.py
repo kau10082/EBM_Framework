@@ -13,8 +13,9 @@ strict_screen_check.py — Gate ③『嚴格篩逐軸核對、不放水』硬 ga
    若無任何軸確認缺（例如 P∧I 命中、C 僅 unknown）→ FAIL（應移『待評估』而非離題）。
  • 待評估/awaiting：放行（Stage A 待全文）。
 
-axis_hits 值判讀：present＝True/"yes"/任何非空證據字串；absent＝False/"no"；
-unknown＝None/缺/"unknown"/"?"。
+axis_hits 值契約：明確 token —— present＝True/"yes"；absent＝False/"no"；
+unknown＝None/""/"?"/任何不認得的自由文字（**自然語言說明一律當 unknown、不得當 present**，防放水）。
+要附佐證請用結構 `{"status":"yes","evidence":"原文片段"}`。
 
 用法：python strict_screen_check.py --screen g3_FINAL_screen.json --strategy g0_strategy.json
 程式內：import strict_screen_check; fails = strict_screen_check.check(screen, strategy)
@@ -28,15 +29,19 @@ INCLUDE = {"切題", "included", "include", "納入候選", "候選"}
 EXCLUDE = {"離題", "excluded", "exclude", "剔除"}
 
 def _state(v):
-    """present / absent / unknown。"""
+    """present / absent / unknown。
+    contract：axis_hits 值須為明確 token（yes/no/unknown）或 {"status":<token>,"evidence":...}。
+    **不認得的自由文字一律當 unknown、不得當 present**——否則 AI 填「未提及對照組」「無 COPD 證據」
+    這類自然語言說明會被誤判命中→假切題放水（2026-06 審查 🟡）。要附證據請用 {status,evidence} 結構。"""
+    if isinstance(v, dict):          # {status, evidence} 形式：以 status 為準
+        v = v.get("status")
     if v is True: return "present"
     if v is False: return "absent"
     if v is None: return "unknown"
     s = str(v).strip().lower()
     if s in ("yes", "y", "present", "命中", "現", "✓", "true"): return "present"
     if s in ("no", "n", "absent", "缺", "✗", "false"): return "absent"
-    if s in ("", "unknown", "unk", "?", "？", "na", "n/a", "待確認"): return "unknown"
-    return "present"  # 非空且非否定字串＝視為提供了證據（命中）
+    return "unknown"  # 空字串/?/未確認/任何不認得的自由文字 → unknown（安全：不放水）
 
 def check(screen, strategy):
     fails = []

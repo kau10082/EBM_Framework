@@ -57,9 +57,14 @@ def main():
     # 離題卻無任何軸確認缺（P,I 命中、C 僅 unknown）→ 應移待評估 → FAIL
     allok &= _assert_fires("Gate③ 離題卻無確認缺軸（應移待評估）",
         strict_screen_check.check([{"uid":"u2","verdict":"離題","axis_hits":{"P":"yes","I":"yes","C":"unknown"}}], _ax_strat))
-    _ssok = strict_screen_check.check([{"uid":"u3","verdict":"切題","axis_hits":{"P":"COPD patients","I":"FF/UMEC/VI","C":"vs UMEC/VI"}}], _ax_strat)
+    # 正向：用明確 token / {status,evidence} 結構標全軸命中 → 應通過
+    _ssok = strict_screen_check.check([{"uid":"u3","verdict":"切題","axis_hits":{
+        "P":"yes","I":{"status":"yes","evidence":"FF/UMEC/VI"},"C":{"status":"yes","evidence":"vs UMEC/VI"}}}], _ax_strat)
     print(("  ✅" if not _ssok else "  ❌") + " 嚴格篩切題全軸命中應通過（防誤報）：" + ("通過" if not _ssok else str(_ssok)))
     allok &= (not _ssok)
+    # 放水漏洞修正回歸：切題卻把自由文字當證據（「未提及對照」）→ 應被當 unknown → FAIL
+    allok &= _assert_fires("Gate③ 切題填自由文字(未提及對照)不得當命中",
+        strict_screen_check.check([{"uid":"u4","verdict":"切題","axis_hits":{"P":"yes","I":"yes","C":"未提及對照組"}}], _ax_strat))
 
     import report_check
     bad = {"funnel":[{"step":"③ 嚴格篩","remain":"待覆核 73"}],
