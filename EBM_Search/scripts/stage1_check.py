@@ -68,6 +68,12 @@ def check(data):
             fails.append("awaiting[%d](%s) 標『兩者皆無』但有 doi/pmid（有識別碼＝有全文路徑）："
                          "須先查 Unpaywall/PMC，改判『待人工補全文』(channels_exhausted=true)或補回內容"
                          "（『兩者皆無』僅限完全無 ID／無路徑者）" % (i, a.get("paper_id")))
+        # 防『有 OA 連結卻不抓就丟待評估』漏洞（2026-06 使用者糾正）：OA 全文是可抓取管道，
+        # 不可只記 URL 就掛待評估；必須實際抓取/解析 OA 全文，取不到內容(oa_fetch_attempted=true)才可掛。
+        if a.get("reason") == "待人工補全文" and a.get("oa_url") and not a.get("oa_fetch_attempted"):
+            fails.append("awaiting[%d](%s) 有 oa_url（OA 全文可得）卻未標 oa_fetch_attempted=true："
+                         "OA 為可抓取管道，須先實際抓取並嘗試解析 OA 全文，取不到內容才可掛待評估"
+                         "（防『有 OA 卻不抓就丟待評估』；能 trace 到全文/摘要者一律進下一關）" % (i, a.get("paper_id")))
     # 分割互斥
     cs = {c.get("paper_id") for c in cands}; as2 = {a.get("paper_id") for a in awas}
     ov = cs & as2

@@ -121,10 +121,18 @@ def main():
     allok &= _assert_fires("Stage A 待評估『兩者皆無』卻有 pmid（未查全文）",
         [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
           "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無","pmid":"12345678"}]}) if "兩者皆無" in f])
-    # 正向：兩者皆無但無任何 ID → 合法；有 ID 者標待人工補全文+channels_exhausted → 合法（防誤報）
+    # 防『有 OA 卻不抓就丟待評估』：待人工補全文帶 oa_url 卻未實際抓取 → 須 FAIL
+    allok &= _assert_fires("Stage A 待評估有 oa_url 卻未抓 OA 全文",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
+                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf"}]}) if "oa_url" in f])
+    # 正向：兩者皆無無 ID 合法；有 ID＋待人工補全文＋channels_exhausted 合法；
+    #       有 oa_url 但已標 oa_fetch_attempted（抓過取不到）合法（防誤報）
     _wok=stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
           "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無"},
-                      {"paper_id":"A2","title":"z","reason":"待人工補全文","channels_exhausted":True,"doi":"10.1/x"}]})
+                      {"paper_id":"A2","title":"z","reason":"待人工補全文","channels_exhausted":True,"doi":"10.1/x"},
+                      {"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
+                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf","oa_fetch_attempted":True}]})
     print(("  ✅" if not _wok else "  ❌") + " Stage A 待評估合法分類應通過（防誤報）：" + ("通過" if not _wok else str(_wok)))
     allok &= (not _wok)
 
