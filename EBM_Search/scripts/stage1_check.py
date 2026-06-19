@@ -62,6 +62,12 @@ def check(data):
             fails.append("awaiting[%d](%s) reason 非法：%r" % (i, a.get("paper_id"), a.get("reason")))
         if a.get("reason") == "待人工補全文" and not a.get("channels_exhausted"):
             fails.append("awaiting[%d](%s) 待人工補全文須 channels_exhausted=true（單次失敗≠窮盡）" % (i, a.get("paper_id")))
+        # 防『未查全文就丟兩者皆無』漏洞（2026-06 使用者糾正）：有 DOI/PMID＝有全文路徑，
+        # 不得逕判『兩者皆無』；須先查 Unpaywall/PMC，改判『待人工補全文』(channels_exhausted)或補回內容。
+        if a.get("reason") == "兩者皆無" and (a.get("doi") or a.get("pmid")):
+            fails.append("awaiting[%d](%s) 標『兩者皆無』但有 doi/pmid（有識別碼＝有全文路徑）："
+                         "須先查 Unpaywall/PMC，改判『待人工補全文』(channels_exhausted=true)或補回內容"
+                         "（『兩者皆無』僅限完全無 ID／無路徑者）" % (i, a.get("paper_id")))
     # 分割互斥
     cs = {c.get("paper_id") for c in cands}; as2 = {a.get("paper_id") for a in awas}
     ov = cs & as2
