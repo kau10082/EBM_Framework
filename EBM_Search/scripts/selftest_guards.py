@@ -153,6 +153,18 @@ def main():
     allok &= _assert_fires("撤稿殘留 Zotero payload", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
 
+    # ③待評估須先核對全文：g2c_awaiting_classification 有 doi/pmid 卻無全文核對證明 → FAIL
+    tmp3 = Path(tempfile.mkdtemp())
+    json.dump([{"paper_id":"W1","title":"x","pmid":"123","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate③ 待評估只憑摘要 punt（未核對全文）", gate_guard.check_screen_awaiting_resolved(tmp3))
+    # 正向：抓過全文仍無法核對(oa_fetch_attempted)→合法；無 ID→合法（防誤報）
+    json.dump([{"paper_id":"W2","title":"y","pmid":"123","reason":"待全文","oa_fetch_attempted":True},
+               {"paper_id":"W3","title":"z","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    _aw=gate_guard.check_screen_awaiting_resolved(tmp3)
+    print(("  ✅" if not _aw else "  ❌") + " Gate③ 待評估已核對全文應通過（防誤報）：" + ("通過" if not _aw else str(_aw)))
+    allok &= (not _aw)
+    shutil.rmtree(tmp3, ignore_errors=True)
+
     # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
     tmp2 = Path(tempfile.mkdtemp())
     json.dump([{"uid":"u1","verdict":"切題"}], io.open(tmp2/"g3_FINAL_screen.json","w",encoding="utf-8"))

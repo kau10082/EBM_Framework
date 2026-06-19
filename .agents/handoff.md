@@ -9,15 +9,16 @@
 - `EBM_Search/SEARCH_SPEC.md`
 - `EBM_Search/.gitignore`
 
-**背景／動機**：實跑 triple-vs-dual COPD 檢索時，使用者連續抓到數個「靠記性、無機器守門」的漏洞——(1) 未先報告檢索策略、未等確認就檢索；(2) 檢索時自行縮放範圍；(3) 把缺摘要的記錄逕判「兩者皆無」待評估，根本沒查 Unpaywall/PMC；(4) 有 OA 全文連結卻只記 URL、沒實際抓取就掛待評估。依 AGENTS.md「機器守門優先於記性／把使用者抓到的缺失轉成 gate」，逐一落為機器 gate。
+**背景／動機**：實跑 triple-vs-dual COPD 檢索時，使用者連續抓到數個「靠記性、無機器守門」的漏洞——(1) 未先報告檢索策略、未等確認就檢索；(2) 檢索時自行縮放範圍；(3) 把缺摘要的記錄逕判「兩者皆無」待評估，根本沒查 Unpaywall/PMC；(4) 有 OA 全文連結卻只記 URL、沒實際抓取就掛待評估；(5) ③嚴格篩只憑摘要把對照 C 看不出者 punt 成「待評估」，沒去抓全文核對（③候選明明都已有內容）。依 AGENTS.md「機器守門優先於記性／把使用者抓到的缺失轉成 gate」，逐一落為機器 gate。
 
 **這輪改了什麼（累積）**
 1. **防搶跑** `gate_guard.check_strategy_approved`：廣蒐產物 `g1_legs_manifest.json` 存在時，`g0_strategy.json` 必須帶 `approved_by_user:true`（使用者確認策略後才設），否則 FAIL。已 wire 進 `_all_checks`（最前）＋ Stop hook（exit 2 擋回合）＋模組 docstring。任何範圍變更須回此停頓點重新核准。
 2. **防『未查全文就丟兩者皆無』** `stage1_check`（併入 gate_guard Stage A→B 邊界）：awaiting 標 `兩者皆無` 卻帶 `doi/pmid` → FAIL。`兩者皆無` 僅限完全無 ID／無路徑者；有 ID＝有路徑，須先查 Unpaywall/PMC，取不到內容則改判 `待人工補全文`(`channels_exhausted=true`)。
 3. **防『有 OA 連結卻不抓就丟待評估』** `stage1_check`：原則＝能 trace 到全文/摘要者一律進下一關。awaiting 帶 `oa_url` 卻無 `oa_fetch_attempted=true` → FAIL；OA 是可抓取管道，必須實際下載並嘗試解析（PDF/HTML），取得內容→升回候選，解析失敗才掛待評估並標 `oa_fetch_attempted`。
-4. `selftest_guards.py`：為 (1)(2)(3) 各加 FAIL fixture＋正向控制，全綠。
-5. `SEARCH_SPEC.md`：三條 gate 都寫進「機器守門」段落。
-6. `.gitignore`：補上 `cache/`（先前漏列，14MB 可重生檢索中間檔成 untracked）。
+4. **防『③ 只憑摘要 punt 成待評估』** `gate_guard.check_screen_awaiting_resolved`：③候選都已有內容，須用全文/摘要做出切題/離題二元判定；`g2c_awaiting_classification.json` 內有 doi/pmid 卻無 `fulltext_checked/oa_fetch_attempted/channels_exhausted` 證明 → FAIL（不得只憑摘要把對照 C 看不出者掛待評估，須先抓全文核對）。
+5. `selftest_guards.py`：為 (1)(2)(3)(4) 各加 FAIL fixture＋正向控制，全綠。
+6. `SEARCH_SPEC.md`：四條 gate 都寫進「機器守門」段落。
+7. `.gitignore`：補上 `cache/`（先前漏列，14MB 可重生檢索中間檔成 untracked）。
 
 **fresh-clone／實跑結果**（守門變更的有意義證據＝自含的 selftest）
 - `python EBM_Search/scripts/selftest_guards.py` → 全綠，含本輪新增 fixture（防搶跑、防兩者皆無、防有 OA 不抓皆會 FAIL；正向控制通過）。
