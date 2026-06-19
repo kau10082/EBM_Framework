@@ -45,11 +45,29 @@ def main():
            "background":[["t","","10.x","SR"]], "ongoing_trials":[], "funnel_closure":""}
     allok &= _assert_fires("報告版型/內容（佔位名/空標題/缺PMID/背景欄/無進行中表）",
         report_check.check(bad))
+    # PRISMA 流程圖缺失（Bug7）：其餘合規、僅缺 prisma_flow → 須 FAIL 且指名 prisma_flow
+    valid = {"funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
+             "studies":[{"study":"IMPACT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","線上","C+PM"]]}],
+             "background":[["Some SR","12345678","10.1/x","SR-MA","線上","PM"]],
+             "ongoing_trials":[["NCT00000000","recruiting"]],
+             "funnel_closure":"切題 5 + 離題 3 = 8",
+             "prisma_flow":{"identification":100,"screening":80,"included":5}}
+    no_prisma = dict(valid); no_prisma.pop("prisma_flow")
+    allok &= _assert_fires("報告缺 PRISMA 流程圖（prisma_flow）",
+        [f for f in report_check.check(no_prisma) if "prisma_flow" in f])
+    _vp = report_check.check(valid)
+    print(("  ✅" if not _vp else "  ❌") + " 報告合規 fixture 應通過（防誤報）：" + ("通過" if not _vp else str(_vp)))
+    allok &= (not _vp)
 
     import stage1_check
     allok &= _assert_fires("Stage A→B 邊界（無內容混入候選）",
         stage1_check.check({"schema_version":"stage1-1.0","legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
           "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"none","abstract_status":"none"}],"awaiting":[]}))
+    # Bug2：候選宣稱 abstract_status=have 卻無摘要內容 → 須 FAIL（只能憑標題篩）
+    allok &= _assert_fires("Stage A 候選 abstract_status=have 但摘要內容空",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0",
+          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
+          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"ai_summary_only","abstract_status":"have","abstract":""}],"awaiting":[]}) if "abstract" in f])
 
     import gate_guard, tempfile, json, io, shutil, os
     # 反坍縮：偽造一筆無內容卻在 screened
@@ -67,6 +85,18 @@ def main():
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
     allok &= _assert_fires("撤稿殘留 Zotero payload", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
+
+    # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
+    tmp2 = Path(tempfile.mkdtemp())
+    json.dump([{"uid":"u1","verdict":"切題"}], io.open(tmp2/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("②c→③ 順序（③早於②c）", gate_guard.check_screen_order(tmp2))
+    # Bug6 驗證覆蓋：交接包有 included 但無 g6_verified
+    json.dump({"papers":[{"paper_id":"P1","verdict":"included","pmid":"123"}]}, io.open(tmp2/"_corpus_seed.json","w",encoding="utf-8"))
+    allok &= _assert_fires("⑥驗證覆蓋（included 未驗證）", gate_guard.check_verification_coverage(tmp2))
+    # Bug7 PDF 實體：_search_report.json 無 pdf_path
+    json.dump({"studies":[],"pdf_path":""}, io.open(tmp2/"_search_report.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Phase1 PDF 未產出/未登記", gate_guard.check_pdf_emitted(tmp2))
+    shutil.rmtree(tmp2, ignore_errors=True)
 
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))
     sys.exit(0 if allok else 1)

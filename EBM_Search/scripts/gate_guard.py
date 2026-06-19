@@ -177,6 +177,59 @@ def check_have_verified(cache):
                          "假 have 改 need-supplement" % (p.get("paper_id") or p.get("pmid")))
     return fails
 
+def check_screen_order(cache):
+    """Bug3：③嚴格篩(g3)不得早於②c全文取得(g2c)與 Stage A 交接(_stage1_corpus)。
+    見 g3_FINAL_screen.json 卻缺前置產物＝順序顛倒。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None
+    fails = []
+    if _load(cache / "g2c_FINAL_content.json") is None:
+        fails.append("③嚴格篩產物存在，但②c全文取得產物 g2c_FINAL_content.json 不存在：③不得早於②c（順序顛倒）")
+    if _load(cache / "_stage1_corpus.json") is None:
+        fails.append("③嚴格篩產物存在，但 Stage A 交接 _stage1_corpus.json 不存在：須先過 Stage A→B 邊界才可③")
+    return fails
+
+def check_verification_coverage(cache):
+    """Bug6：⑦交接/報告前，included＋background 每筆都必須過⑥交叉驗證（在 g6_verified.json 有紀錄）。"""
+    seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
+    if seed is None:
+        return None
+    ver = _load(cache / "g6_verified.json")
+    if ver is None:
+        return ["交接包存在但 g6_verified.json 不存在：included/background 未經⑥ Crossref+PubMed 交叉驗證"
+                "（未驗證不得進交接/Zotero/報告表二三）"]
+    vids = set()
+    for v in ver:
+        if v.get("pmid"): vids.add(("pmid", str(v.get("pmid"))))
+        if v.get("doi"): vids.add(("doi", _norm_doi(v.get("doi"))))
+    papers = seed.get("papers", []) if isinstance(seed, dict) else seed
+    fails = []
+    for p in papers:
+        if p.get("verdict") not in ("included", "background"):
+            continue
+        pid = p.get("pmid"); doi = _norm_doi(p.get("doi"))
+        ok = (pid and ("pmid", str(pid)) in vids) or (doi and ("doi", doi) in vids)
+        if not ok:
+            fails.append(f"{p.get('paper_id') or pid or doi}（verdict={p.get('verdict')}）未在 g6_verified.json："
+                         "⑥交叉驗證未覆蓋（每筆 included/background 必須經 Crossref+PubMed 驗證）")
+    return fails
+
+def check_pdf_emitted(cache):
+    """Bug7：宣稱 Phase1 完成（_search_report.json 存在）前，報告 PDF 須實際產出且非空。
+    路徑不寫死——由報告產生器以 settings 解析後寫入 _search_report.json 的 `pdf_path`；本守門只驗該檔存在。"""
+    rep = _load(cache / "_search_report.json")
+    if rep is None:
+        return None
+    pdf = rep.get("pdf_path")
+    if not pdf:
+        return ["_search_report.json 無 pdf_path：Phase1 PDF 未產出/未登記（無 PDF 不算 Phase1 完成；"
+                "路徑須由產生器以 settings.report.pdf_output_dir 解析後登記，勿寫死）"]
+    p = Path(pdf)
+    if not p.exists() or p.stat().st_size < 1024:
+        return [f"登記的 Phase1 PDF 不存在或過小(<1KB)：{pdf}"]
+    return []
+
 def check_stage1(cache):
     """Stage A→B 邊界守門：對 _stage1_corpus.json 跑 stage1_check（全文狀態resolved/待評估不混入候選/取盡/互斥）。"""
     data = _load(cache / "_stage1_corpus.json")
@@ -268,6 +321,9 @@ def _all_checks(cache):
             _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
+            _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
+            _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
+            _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
             _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
             _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),

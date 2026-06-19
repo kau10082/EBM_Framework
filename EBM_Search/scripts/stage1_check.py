@@ -50,6 +50,9 @@ def check(data):
             fails.append("%s fulltext_status 非法/未 resolved：%r（不得留空/?）" % (tag, fs))
         if as_ not in AB:
             fails.append("%s abstract_status 非法/未 resolved：%r" % (tag, as_))
+        if as_ == "have" and not str(c.get("abstract") or "").strip():
+            fails.append("%s abstract_status=have 但 abstract 內容空（Bug2：②b 須對標題+摘要篩，"
+                         "標記有摘要卻無實體內容＝只能憑標題；應實際回填摘要或改判 none→awaiting）" % tag)
         if fs == "none" and as_ == "none":
             fails.append("%s 無全文又無摘要卻列 candidate：應移 awaiting（待評估屬 Stage A，不進 Stage B 篩選）" % tag)
         if c.get("verdict") != "candidate":

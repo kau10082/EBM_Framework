@@ -13,6 +13,7 @@ report_check.py — SR 檢索報告『版型/內容』硬 gate（反這輪人工
  5. 背景表：每筆 6 欄(含 pmid 與檢核 xref)；pmid 非空。
  6. 進行中/待結果試驗表必須存在且非空（ongoing_trials）。
  7. funnel_closure 要含『嚴格篩二分』算式（切題+離題=內容可篩數）。
+ 8. PRISMA 2020 流程圖（prisma_flow）必存在且含 identification/screening/included 計數。
 
 用法：python report_check.py --in _search_report.json
 程式內：import report_check; fails = report_check.check(data)
@@ -76,6 +77,14 @@ def check(data):
     fc = data.get("funnel_closure", "")
     if not re.search(r"切題.*離題|\d+\s*\+\s*\d+\s*=\s*\d+", fc):
         fails.append("funnel_closure 缺『嚴格篩二分』算式（切題+離題=內容可篩數）")
+    # 8. PRISMA 2020 流程圖（Bug7）：Phase1 PDF 必含，且須有 identification/screening/included 數
+    pf = data.get("prisma_flow")
+    if not pf:
+        fails.append("缺 PRISMA 流程圖資料（prisma_flow）：Phase1 PDF 須含 PRISMA 2020 流程（辨識→去重→篩選→納入）")
+    elif isinstance(pf, dict):
+        miss = [k for k in ("identification", "screening", "included") if pf.get(k) in (None, "", 0)]
+        if miss:
+            fails.append(f"prisma_flow 缺/空欄位 {miss}：須含 identification/screening/included 計數")
     return fails
 
 def main():
