@@ -22,6 +22,10 @@ verified.json
 verified.md
 consensus.json
 
+# 執行期工作資料夾（每次檢索的 cache：策略/腿產物/去重聯集等中間檔，可由腳本重建）
+# 與 EBM_Analysis/cache 一致：屬本機暫存、不進版控（CLAUDE.md：各子計畫 cache/ 已 gitignored）
+cache/
+
 # Phase 3 全文下載輸出(PDF/ manifest;勿進版控、勿進打包)
 fulltext/
 *.pdf

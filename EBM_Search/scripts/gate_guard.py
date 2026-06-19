@@ -3,6 +3,7 @@
 gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 Stop hook 自動跑）
 ================================================================================
 依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
+  • g1_legs_manifest.json + g0_strategy.json → check_strategy_approved（Gate ⓪ 策略須先經使用者核准才可檢索，防搶跑）
   • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
   • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
   • _search_report.json             → funnel_check（流程數字閉合）
@@ -108,6 +109,25 @@ def check_waiting_fulltext(cache):
         fails.append(f"③ 有 {len(leaked)} 筆有全文路徑(PMC/OA/Unpaywall)卻丟待評估、未窮盡抓取：{leaked[:5]}{'…' if len(leaked)>5 else ''}（單次抓取失敗≠無內容；須重試 EuropePMC→NCBI→Unpaywall→人工，或明標 channels_exhausted/待人工補全文）")
     return fails
 
+def check_screen_awaiting_resolved(cache):
+    """Gate ③『待評估須先核對全文、不得只憑摘要』（2026-06 使用者糾正）：
+    進 ③ 的候選都已有內容（摘要，且多數有全文），③ 必須用全文/摘要做出『切題/離題』二元判定；
+    僅當『實際抓過全文仍無法核對』才可掛 ③待評估。故 g2c_awaiting_classification.json 內每筆
+    若有 doi/pmid（有全文路徑）卻無 fulltext_checked／oa_fetch_attempted／channels_exhausted 證明
+    → FAIL（代表只憑摘要就punt成待評估，沒去抓全文核對對照 C）。"""
+    aw = _load(cache / "g2c_awaiting_classification.json")
+    if aw is None:
+        return None
+    fails = []
+    for a in aw:
+        has_path = a.get("doi") or a.get("pmid")
+        attempted = a.get("fulltext_checked") or a.get("oa_fetch_attempted") or a.get("channels_exhausted")
+        if has_path and not attempted:
+            fails.append("%s 列 ③待評估但有 doi/pmid 卻無全文核對證明(fulltext_checked/oa_fetch_attempted)："
+                         "③候選已有內容，須抓全文核對對照 C 後做出切題/離題，不得只憑摘要 punt 成待評估"
+                         % (a.get("paper_id") or a.get("uid") or a.get("title")))
+    return fails
+
 def check_partition_provenance(cache):
     """Gate ③ 反坍縮：以 uid 獨立重算，抓 key-collision 造成的污染/漏失。
     (1) 分割閉合：screened ⊎ awaiting 的 uid 必須『無重複、互斥、恰覆蓋』base 全部 uid。
@@ -176,6 +196,24 @@ def check_have_verified(cache):
                          "——只信 OA 旗標易高估；請跑 `verify_have_fetchable.py --in seed.json --only-included`，"
                          "假 have 改 need-supplement" % (p.get("paper_id") or p.get("pmid")))
     return fails
+
+def check_strategy_approved(cache):
+    """防『搶跑』（Gate ⓪→①）：Stage A 廣蒐（g1_legs_manifest.json）只能在
+    『檢索策略已向使用者報告並取得確認』後才執行。
+    落地：使用者確認策略後，才在 g0_strategy.json 設 approved_by_user=true。
+    g1 已產出但 g0 未核准＝在使用者確認策略前就動手檢索＝搶跑 → FAIL。
+    （2026-06 使用者糾正：曾未報告策略、未等確認即執行檢索，且擅自縮放範圍；此 gate 即為此而立。）"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None  # 尚未廣蒐：此關不適用
+    strat = _load(cache / "g0_strategy.json")
+    if not strat:
+        return ["g1_legs_manifest.json 已產出但無 g0_strategy.json：廣蒐前須先寫出檢索策略並經使用者確認（防搶跑）"]
+    if not strat.get("approved_by_user"):
+        return ["Stage A 廣蒐（g1_legs_manifest.json 已產出）但 g0_strategy.json 未標記 approved_by_user=true："
+                "檢索策略必須先報告並經使用者確認後才可執行檢索（防『搶跑』、防擅自縮放範圍；"
+                "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
+    return []
 
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
@@ -343,7 +381,8 @@ def _safe(name, fn, cache):
 
 
 def _all_checks(cache):
-    return [_safe("有全文須實抓驗證", check_have_verified, cache),
+    return [_safe("Gate⓪ 策略經使用者核准才可檢索(防搶跑)", check_strategy_approved, cache),
+            _safe("有全文須實抓驗證", check_have_verified, cache),
             _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
@@ -355,6 +394,7 @@ def _all_checks(cache):
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
             _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
             _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
+            _safe("Gate③ 待評估須先核對全文(不得只憑摘要punt)", check_screen_awaiting_resolved, cache),
             _safe("報告版型/內容", check_report, cache),
             _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache)]
 

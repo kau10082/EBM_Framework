@@ -23,6 +23,21 @@ def main():
     allok = True
     print("守門自我驗證（餵壞資料，應全部 FAIL）：")
 
+    import gate_guard as _gg_strat, tempfile as _tf_s, json as _js_s, io as _io_s, shutil as _sh_s
+    # Gate ⓪ 防搶跑：g1 已產出但 g0 未核准 → 必須 FAIL
+    _tmps = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"leg":"PubMed","query":"COPD AND triple therapy","hitCount":1,"fetched":1,"exhaustible":True}],
+               _io_s.open(_tmps/"g1_legs_manifest.json","w",encoding="utf-8"))
+    _js_s.dump({"topic":"x","axes":{}}, _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ 搶跑（g1 已產出但策略未經使用者核准）",
+        _gg_strat.check_strategy_approved(_tmps))
+    # 正向：g0 標 approved_by_user=true → 應通過（防誤報）
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True}, _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    _sok = _gg_strat.check_strategy_approved(_tmps)
+    print(("  ✅" if not _sok else "  ❌") + " 策略已核准應通過（防誤報）：" + ("通過" if not _sok else str(_sok)))
+    allok &= (not _sok)
+    _sh_s.rmtree(_tmps, ignore_errors=True)
+
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
         leg_exhaust_check.check([{"leg":"PubMed","hitCount":218,"fetched":218,"exhaustible":True},
@@ -100,6 +115,26 @@ def main():
         [f for f in stage1_check.check({"schema_version":"stage1-1.0",
           "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
           "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"ai_summary_only","abstract_status":"have","abstract":""}],"awaiting":[]}) if "abstract" in f])
+    # 防『未查全文就丟兩者皆無』：awaiting 標兩者皆無卻有 pmid → 須 FAIL
+    _legs4=[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}]
+    _ok_cand=[{"paper_id":"C1","title":"t","verdict":"candidate","fulltext_status":"none","abstract_status":"have","abstract":"real abstract"}]
+    allok &= _assert_fires("Stage A 待評估『兩者皆無』卻有 pmid（未查全文）",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無","pmid":"12345678"}]}) if "兩者皆無" in f])
+    # 防『有 OA 卻不抓就丟待評估』：待人工補全文帶 oa_url 卻未實際抓取 → 須 FAIL
+    allok &= _assert_fires("Stage A 待評估有 oa_url 卻未抓 OA 全文",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
+                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf"}]}) if "oa_url" in f])
+    # 正向：兩者皆無無 ID 合法；有 ID＋待人工補全文＋channels_exhausted 合法；
+    #       有 oa_url 但已標 oa_fetch_attempted（抓過取不到）合法（防誤報）
+    _wok=stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無"},
+                      {"paper_id":"A2","title":"z","reason":"待人工補全文","channels_exhausted":True,"doi":"10.1/x"},
+                      {"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
+                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf","oa_fetch_attempted":True}]})
+    print(("  ✅" if not _wok else "  ❌") + " Stage A 待評估合法分類應通過（防誤報）：" + ("通過" if not _wok else str(_wok)))
+    allok &= (not _wok)
 
     import gate_guard, tempfile, json, io, shutil, os
     # 反坍縮：偽造一筆無內容卻在 screened
@@ -117,6 +152,18 @@ def main():
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
     allok &= _assert_fires("撤稿殘留 Zotero payload", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
+
+    # ③待評估須先核對全文：g2c_awaiting_classification 有 doi/pmid 卻無全文核對證明 → FAIL
+    tmp3 = Path(tempfile.mkdtemp())
+    json.dump([{"paper_id":"W1","title":"x","pmid":"123","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate③ 待評估只憑摘要 punt（未核對全文）", gate_guard.check_screen_awaiting_resolved(tmp3))
+    # 正向：抓過全文仍無法核對(oa_fetch_attempted)→合法；無 ID→合法（防誤報）
+    json.dump([{"paper_id":"W2","title":"y","pmid":"123","reason":"待全文","oa_fetch_attempted":True},
+               {"paper_id":"W3","title":"z","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    _aw=gate_guard.check_screen_awaiting_resolved(tmp3)
+    print(("  ✅" if not _aw else "  ❌") + " Gate③ 待評估已核對全文應通過（防誤報）：" + ("通過" if not _aw else str(_aw)))
+    allok &= (not _aw)
+    shutil.rmtree(tmp3, ignore_errors=True)
 
     # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
     tmp2 = Path(tempfile.mkdtemp())
