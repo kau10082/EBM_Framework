@@ -1,25 +1,20 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【本輪性質】**【初審】第二批守門已實作**（Bug1 四軸覆蓋＋Bug5 嚴格篩逐軸核對＋SPEC ③ 通則改 per-topic）。
-（第一批已結案、審查全數通過，commit `6b2071f`。）
+【本輪性質】**【初審】第三批（分析端 Bug8）已實作**——分析端最終 PDF 不照規範/沒產出，於手機/遠端無守門。
+（第一批 commit `6b2071f`、第二批 commit `25476e6` 均已結案、審查全數通過。）
 
 **本輪審查範圍：僅以下檔（版控內）：**
-- `EBM_Search/scripts/axis_coverage_check.py`（**新增**，Bug1）：每腿 query 對每條 `in_query` 必含軸 ≥1 同義詞命中，否則 FAIL（採審查建議：≥1 存在性、不要求塞滿）。
-- `EBM_Search/scripts/strict_screen_check.py`（**新增**，Bug5）：切題須**所有** mandatory_screen 必含軸命中（缺即放水 FAIL）；離題須至少一軸『確認缺』並標明（否則 FAIL）；P∧I 命中而 C 僅 unknown → 應移待評估，逕判離題即 FAIL。
-- `EBM_Search/scripts/gate_guard.py`（接線 `check_axis_coverage`/`check_strict_screen` 進 `_all_checks`）。
-- `EBM_Search/scripts/selftest_guards.py`（補 4 個 fixture：2 FAIL＋2 正向防誤報）。
-- `EBM_Search/SEARCH_SPEC.md`（★第③關通則：「兩軸」改「必含軸由 g0 per-topic 宣告、比較型含 C」＋ P∧I 見、C 未見→待評估配套）。
-- （`_fetch_legs.py` g0 寫出 `axes`（P/I/C 同義詞＋in_query/mandatory_screen）屬 run-local、不在版控。）
+- `EBM_Analysis/tools/analysis_gate.py`（**新增**）：輕量 Stop-hook 守門，**刻意不跑網路/渲染子程序**；唯一檢查＝`check_pdf_at_finalize`——`run_state.stage` 含 phase4/final/render/定稿、且 `_synthesis.json` 已存在，卻無合規 PDF（`grade_pdf` 或 `outputs/FINAL_REPORT.pdf`，存在且 ≥10KB）→ FAIL。`--auto`（非分析中靜默 exit 0）／`--hook`（FAIL→stderr＋exit 2）／`--selftest`。未到定稿一律放行，不擾 mid-analysis。
+- `.claude/settings.json`（Stop hook 加第二命令：`analysis_gate.py --auto --hook`，與既有 search `gate_guard` 並列）。
+- `EBM_Analysis/ANALYSIS_SPEC.md`（加兩條硬規：①每關尤其定稿前**自跑 `verify_all.py` 貼 PASS** 才算過關、`analysis_gate` 不能取代它；②**無合規 PDF 不算完成**）。
 
-**契約（g0_strategy.json.axes）：** `{軸:{synonyms:[...],in_query:bool,mandatory_screen:bool}}`。`in_query` 軸＝axis_coverage 在 query 查存在；`mandatory_screen` 軸＝strict_screen 在 ③ 逐軸核對。比較型題 C＝`in_query:false`（搜尋不放入求 recall）但 `mandatory_screen:true`（③ 必核）。
+**設計取捨（想被重點看）：**
+1. 為何 Stop hook 用輕量 `analysis_gate` 而非完整 `verify_all`：後者含 `quote_verify` 網路呼叫＋渲染子程序，掛每次 Stop 太重/可能 hang；完整驗證改由 SKILL「定稿前自跑 verify_all 貼 PASS」強制。此取捨是否同意？
+2. `check_pdf_at_finalize` 的「定稿」判定＝stage 含 `phase4/final/render/定稿`（**刻意不含 `done`**，免誤判 `phase3_done`）＋ `_synthesis.json` 存在。會不會仍有 mid-analysis 誤擋或定稿漏擋的情境？
+3. `analysis_gate --auto` 在**非 EBM/fresh-clone（無 config）**環境：workdir 回退、run_state 預設、無 `_synthesis.json` → 應靜默 exit 0（已驗）。Stop hook 兩命令在當前狀態均 exit 0（已驗）。
 
-**想被重點看：**
-1. `strict_screen_check._state()` 對 axis_hits 值的判讀（present/absent/unknown）是否穩健、會不會把「非空證據字串」誤當命中而漏掉該抓的放水。
-2. 離題分支「無任一軸 absent → FAIL」是否過嚴（grossly off-topic 但未逐軸標 no 的紀錄會被要求補標缺哪軸——刻意如此，對齊 SPEC「標明缺哪軸」）。
-3. axis_coverage 對 `in_query=false` 的 C 軸不查 query，是否與「比較型題」意圖一致。
-
-**自測：** `python EBM_Search/scripts/selftest_guards.py` → 21 項全綠（含本批新增 2 FAIL＋2 正向防誤報）；fresh-clone 結果見對話回報。
-**第三批（未做）：** 分析端 Bug8。貫穿項：SKILL 啟動器「每關自跑 gate 貼 PASS」硬步驟。
+**自測：** `python EBM_Analysis/tools/analysis_gate.py --selftest` → 定稿無 PDF 會 FAIL、未到定稿放行；兩個 Stop-hook 命令當前狀態 exit 0；fresh-clone 結果見對話回報。
+**剩餘（未做）：** 貫穿項已部分落地（ANALYSIS_SPEC 自跑 verify_all 硬規）；search 端 SKILL 啟動器「每關自跑 gate_guard 貼 PASS」硬步驟尚未寫入 `.claude/skills/ebm-search`。原始任務：六腿檢索（triple vs dual COPD）仍暫停。
 
 ---
 
@@ -88,12 +83,6 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
-【Batch-2 複審（commit 待補）】
-- ✅ 已修：🟡 strict_screen_check `_state()` fallback「非空字串→present」放水漏洞——AI 填自然語言（如「未提及對照組」）會被誤判命中→假切題。**改：不認得的自由文字一律 `unknown`（不得 present）**，並支援 `{status,evidence}` 結構；契約寫進 SPEC③（值須明確 token 或 {status,evidence}）。+selftest 補回歸（自由文字當證據→FAIL）＋正向改用明確 token。比 SKILL 提醒更硬（機器擋）。
-- ✅ 已確認（無需改動）：⚪ 離題分支「至少一軸 absent」對齊 SR「剔除原因＝第一個不符 PICO 軸」，不過嚴。
-- ✅ 已確認（無需改動）：⚪ `in_query` 與 `mandatory_screen` 脫鉤設計契合真實 EBM 檢索意圖（C 軸不入 query、留 ③ 核對）。
-- ✅ 已確認（無需改動）：⚪ Batch-2 實作完整、edge case 處理精細、selftest 有效，可進 Batch 3。
-
-（Batch-1 與計畫初審之處理歷史已隨 commit 6b2071f／ac5deef 保存。）
+（Batch-3 初審待回；Batch-1/計畫初審 commit 6b2071f／ac5deef、Batch-2 commit 25476e6 已保存處理歷史。）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

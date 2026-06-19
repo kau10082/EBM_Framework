@@ -61,6 +61,7 @@
 - **phase3 最關鍵**：對**每個 outcome**，五下調（偏誤風險／不一致性／間接性／不精確／發表偏誤）＋三上調領域**逐一**給 `verdict`＋`rationale`，缺一即 schema 驗證失敗 → 補齊。
 - 觸發到的護欄一定要在輸出留下結果，不可省略。各護欄觸發條件見 `manifest.yaml` 的 `guardrails:` 區。
 - 報告一律由 JSON 渲染，不憑印象寫。
+- **★ 每關自跑守門、貼 PASS 才往下（可攜強制，v0.21；手機/遠端亦同）**：本框架的機器守門在**手機/遠端/打包模式下專案 Stop hook 不一定觸發**，故**不可只靠 hook**。每完成一階段、尤其**定稿/產 PDF 前**，必須**自己**跑 `python EBM_Analysis/tools/verify_all.py`（完整：schema／selfcheck C1-C15／SoF／PRISMA 27 項／渲染煙霧測試）並**把 PASS 結果貼出**才算過關；FAIL 未清不得宣稱完成。`analysis_gate.py`（輕量、已掛 Stop hook）只是最後一道便宜防線，**不能取代**自跑 `verify_all`。
 
 ## 護欄速查（全文見 guardrails/，此處僅觸發提示）
 | 護欄 | 觸發 |
@@ -109,6 +110,7 @@
 - 要表達警示／提示 → 改用**文字標記**（如「【注意】」「※」）或彩色底框，不要用 emoji。
 - 安全可用（微軟正黑有）：`● ○ • → ① ② ③ ≈ – —`、GRADE 用「高確定性 ●●●●／●●●○／●●○○／●○○○」。
 - 產出後務必把頁面渲染成圖目視，確認無方格再交付。
+- **★ 無合規 PDF 不算完成（v0.21，Bug8）**：宣稱評讀完成（`run_state.stage` 到 phase4/定稿、`_synthesis.json` 已在）就**必須**有合規 PDF（`grade_pdf` 或 `outputs/FINAL_REPORT.pdf`，存在且非過小）並通過 `render_smoketest`。否則 `analysis_gate.py`（Stop hook）會擋下、`verify_all` 的渲染煙霧測試亦會 FAIL。手機/遠端「沒產 PDF 就說做完」即由此攔截。
 
 ## 機敏
 `inputs/`、`cache/`、`outputs/` 已被 `.gitignore`（版權 PDF／可能 PHI），不進公開 repo。

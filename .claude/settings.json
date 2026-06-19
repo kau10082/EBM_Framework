@@ -6,6 +6,10 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PROJECT_DIR}/EBM_Search/scripts/gate_guard.py\" --auto --hook"
+          },
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/EBM_Analysis/tools/analysis_gate.py\" --auto --hook"
           }
         ]
       }
