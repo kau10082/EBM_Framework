@@ -82,6 +82,8 @@
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
+（Batch-1 無待修問題，全數通過。）
+
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
 【Batch-1 複審（commit 待補）】
