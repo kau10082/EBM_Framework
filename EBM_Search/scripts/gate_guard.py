@@ -227,6 +227,18 @@ def check_axis_coverage(cache):
     except Exception as e:
         return [f"axis_coverage_check 載入失敗：{str(e)[:80]}"]
 
+def check_axis_expansion(cache):
+    """Gate ⓪：四軸展開必須真的做——g0.axes 每條 in_query/mandatory_screen 軸的同義詞庫須實際展開
+    （≥3 別名且含全文形式），反『裸詞稀疏策略也通過』。g0 存在即稽核（策略階段就生效）。"""
+    strat = _load(cache / "g0_strategy.json")
+    if strat is None:
+        return None
+    try:
+        import axis_expansion_check
+        return axis_expansion_check.check(strat)
+    except Exception as e:
+        return [f"axis_expansion_check 載入失敗：{str(e)[:80]}"]
+
 def check_comparator_purity(cache):
     """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
     manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
@@ -406,6 +418,7 @@ def _all_checks(cache):
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
+            _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),

@@ -65,6 +65,21 @@ def main():
     print(("  ✅" if not _axok else "  ❌") + " 四軸覆蓋 query 含 P+I 應通過（防誤報）：" + ("通過" if not _axok else str(_axok)))
     allok &= (not _axok)
 
+    import axis_expansion_check
+    # 稀疏策略：P 只有 1 個裸詞 COPD → 四軸沒展開 → FAIL
+    allok &= _assert_fires("Gate⓪ 四軸展開（P 軸只有裸詞 COPD，未展開）",
+        axis_expansion_check.check({"axes":{"P":{"synonyms":["COPD"],"in_query":True,"mandatory_screen":True},
+                                            "I":{"synonyms":["triple therapy","ICS/LABA/LAMA","Trelegy"],"in_query":True}}}))
+    # 純縮寫/代號、無全文形式 → 缺『縮寫↔全文』展開 → FAIL
+    allok &= _assert_fires("Gate⓪ 四軸展開（I 軸只有縮寫/代號，無全文形式）",
+        axis_expansion_check.check({"axes":{"P":{"synonyms":["COPD","chronic obstructive pulmonary disease","emphysema"],"in_query":True},
+                                            "I":{"synonyms":["SITT","FF/UMEC/VI","BGF"],"in_query":True}}}))
+    # 防誤報：兩軸都真的展開（≥3 且含全文形式）→ PASS
+    _aeok = axis_expansion_check.check({"axes":{"P":{"synonyms":["COPD","chronic obstructive pulmonary disease","emphysema"],"in_query":True},
+                                                "I":{"synonyms":["triple therapy","single-inhaler triple therapy","Trelegy"],"in_query":True}}})
+    print(("  ✅" if not _aeok else "  ❌") + " 四軸展開：兩軸已展開應通過（防誤報）：" + ("通過" if not _aeok else str(_aeok)))
+    allok &= (not _aeok)
+
     import comparator_purity_check
     # query 摻入 C 軸（in_query=false）同義詞『LABA/LAMA』（standalone）→ FAIL
     allok &= _assert_fires("Gate⓪／① 對照軸純度（query 摻入 C 軸 LABA/LAMA）",
