@@ -36,10 +36,34 @@ def _active(cache):
     """檢索是否進行中：唯有哨兵旗標存在才讓 Stop hook 生效（避免全域每回合打擾）。"""
     return cache is not None and (cache / ACTIVE_FLAG).exists()
 
+def _find_active_cache_by_flag(roots=None):
+    """掃描 repo 內 EBM_Search/cache/*/ 找帶哨兵旗標 _search_active.flag 的『進行中』檢索 cache。
+    這是 Stop hook（無 --cache）最可攜、最可靠的發現方式：哨兵旗標本身就是『此 cache 有檢索進行中』
+    的地真值，與 run_state／env／OneDrive 路徑無關（後三者在 fresh-clone／手機／非 Windows 常常解析不到，
+    會讓 hook 找不到 cache → 靜默 exit 0 → 守門等同失效）。多個進行中時取最近修改者（最可能是當前這輪）。"""
+    if roots is None:
+        here = Path(__file__).resolve().parent          # EBM_Search/scripts
+        roots = [here.parent / "cache"]                 # EBM_Search/cache
+    cands = []
+    for root in roots:
+        try:
+            if Path(root).is_dir():
+                for f in Path(root).glob("*/" + ACTIVE_FLAG):
+                    cands.append(f.parent)
+        except Exception:
+            pass
+    if not cands:
+        return None
+    return max(cands, key=lambda d: (d / ACTIVE_FLAG).stat().st_mtime)
+
 def _find_cache(explicit=None):
     if explicit and Path(explicit).exists():
         return Path(explicit)
-    # 從 EBM run_state 解析 cache_dir
+    # 優先：掃哨兵旗標找『進行中』cache（可攜、不依賴 run_state/env/OneDrive；Stop hook 無 --cache 時的主幹）
+    flagged = _find_active_cache_by_flag()
+    if flagged is not None:
+        return flagged
+    # 其次：從 EBM run_state 解析 cache_dir
     try:
         import run_state
         st = run_state.load() or {}
@@ -48,7 +72,7 @@ def _find_cache(explicit=None):
             return Path(cd)
     except Exception:
         pass
-    # 退而求其次：env / 預設 OneDrive 文件
+    # 再退而求其次：env / 預設 OneDrive 文件
     for cand in [os.environ.get("EBM_CACHE_DIR"),
                  os.path.expanduser(r"~/OneDrive/文件/EBM_Framework/work/cache")]:
         if cand and Path(cand).exists():
@@ -76,6 +100,8 @@ def check_unpaywall_coverage(cache):
         cls = c.get("class") or ""
         if cls.startswith("有全文"):
             continue
+        if (c.get("abstract") or "").strip():
+            continue  # 有摘要＝已有可篩內容（abstract-first）：②c 不在此抓全文，亦無『宣稱無全文』之虞→不強制 Unpaywall（全文留待 ③ 後納入集 verify_have_fetchable）
         doi = _norm_doi(c.get("doi"))
         if not doi:
             continue  # 無 DOI 無法 Unpaywall（非失敗）
@@ -114,18 +140,36 @@ def check_screen_awaiting_resolved(cache):
     進 ③ 的候選都已有內容（摘要，且多數有全文），③ 必須用全文/摘要做出『切題/離題』二元判定；
     僅當『實際抓過全文仍無法核對』才可掛 ③待評估。故 g2c_awaiting_classification.json 內每筆
     若有 doi/pmid/oa_url（有全文路徑）卻無 fulltext_checked／oa_fetch_attempted／channels_exhausted 證明
-    → FAIL（代表只憑摘要就punt成待評估，沒去抓全文核對對照 C）。"""
+    → FAIL（代表只憑摘要就punt成待評估，沒去抓全文核對對照 C）。
+    另（2026-06 使用者再糾正，兩段式）：判準＝『**我能否線上閱讀到全文**』（只要沒有防爬蟲，理論上 PMC/EPMC
+    fullTextXML、OA HTML 都讀得到）——
+      (a)『摘要或線上全文任一可讀取 → 必進③』；只有『摘要與線上全文都讀不到』才 awaiting。
+      (b) 故 awaiting 若帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa)，
+          必須附『**實際嘗試線上閱讀且失敗**』的證明 `online_read_attempted=true`（防爬蟲/僅PDF無HTML/非OA-PMC
+          citation-only 等真讀不到）——否則＝沒真的去讀就 punt → FAIL。
+          （先前 check 容許 channels_exhausted 一律豁免，正是這個漏洞讓 596 筆有線上全文者被誤丟 awaiting；
+            但反過來『有 OA 旗標就強迫進③』又會把防爬蟲擋住、真讀不到者硬塞進③——故以實際讀取嘗試為準。）"""
     aw = _load(cache / "g2c_awaiting_classification.json")
     if aw is None:
         return None
+    def _yes(v): return str(v if v is not None else "").strip().lower() in ("y", "yes", "true", "1")
     fails = []
     for a in aw:
+        tag = a.get("paper_id") or a.get("uid") or a.get("title")
         has_path = a.get("doi") or a.get("pmid") or a.get("oa_url") or a.get("pmcid")  # 全文路徑：ID/OA/PMC（審查 🔴🟡 補強）
         attempted = a.get("fulltext_checked") or a.get("oa_fetch_attempted") or a.get("channels_exhausted")
         if has_path and not attempted:
             fails.append("%s 列 ③待評估但有 doi/pmid/oa_url 卻無全文核對證明(fulltext_checked/oa_fetch_attempted)："
-                         "③候選已有內容，須抓全文核對對照 C 後做出切題/離題，不得只憑摘要 punt 成待評估"
-                         % (a.get("paper_id") or a.get("uid") or a.get("title")))
+                         "③候選已有內容，須抓全文核對對照 C 後做出切題/離題，不得只憑摘要 punt 成待評估" % tag)
+        # ★ 線上全文可得者不得列 awaiting，除非『實際嘗試線上閱讀且失敗』(防爬蟲/僅PDF/非OA-PMC)。
+        confirmed_online = (a.get("pmcid") or a.get("oa_url") or _yes(a.get("inEPMC"))
+                            or _yes(a.get("isOpenAccess")) or _yes(a.get("hasPDF")) or a.get("is_oa") is True)
+        read_failed = _yes(a.get("online_read_attempted")) or _yes(a.get("online_fulltext_unreadable")) \
+                      or _yes(a.get("fulltext_read_failed"))
+        if confirmed_online and not read_failed:
+            fails.append("%s 列待評估卻帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url) 卻無"
+                         "『實際嘗試線上閱讀且失敗』證明(online_read_attempted)：判準是『我能否線上讀到全文』——"
+                         "讀得到就進③，讀不到(防爬蟲/僅PDF/非OA)須真的試過才可列待評估，不得只憑旗標 punt" % tag)
     return fails
 
 def check_partition_provenance(cache):
@@ -227,6 +271,32 @@ def check_axis_coverage(cache):
     except Exception as e:
         return [f"axis_coverage_check 載入失敗：{str(e)[:80]}"]
 
+def check_axis_expansion(cache):
+    """Gate ⓪：四軸展開必須真的做——g0.axes 每條 in_query/mandatory_screen 軸的同義詞庫須實際展開
+    （≥3 別名且含全文形式），反『裸詞稀疏策略也通過』。g0 存在即稽核（策略階段就生效）。"""
+    strat = _load(cache / "g0_strategy.json")
+    if strat is None:
+        return None
+    try:
+        import axis_expansion_check
+        return axis_expansion_check.check(strat)
+    except Exception as e:
+        return [f"axis_expansion_check 載入失敗：{str(e)[:80]}"]
+
+def check_comparator_purity(cache):
+    """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
+    manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
+    strat = _load(cache / "g0_strategy.json")
+    man = _load(cache / "g1_legs_manifest.json")
+    legs = man if man is not None else (strat.get("legs") if isinstance(strat, dict) else None)
+    if legs is None:
+        return None
+    try:
+        import comparator_purity_check
+        return comparator_purity_check.check(legs, strat)
+    except Exception as e:
+        return [f"comparator_purity_check 載入失敗：{str(e)[:80]}"]
+
 def check_strict_screen(cache):
     """Gate ③：嚴格篩逐軸核對——切題須全必含軸命中、離題須標明缺軸（反放水）。"""
     scr = _load(cache / "g3_FINAL_screen.json")
@@ -238,6 +308,39 @@ def check_strict_screen(cache):
         return strict_screen_check.check(scr, strat)
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
+
+def check_citation_screen(cache):
+    """鐵律：④ 引文追蹤新候選須批次抓摘要、以『標題＋摘要』高敏初篩，嚴禁只憑標題丟（Cochrane 紅線）。"""
+    g4 = _load(cache / "g4_citation_tracking.json")
+    if g4 is None:
+        return None
+    try:
+        import citation_screen_check
+        return citation_screen_check.check(g4)
+    except Exception as e:
+        return [f"citation_screen_check 載入失敗：{str(e)[:80]}"]
+
+def check_awaiting_channels(cache):
+    """鐵律：待評估＝摘要／線上全文(PMC/EPMC)／Unpaywall 三管道全失敗才成立（②c）。"""
+    aw = _load(cache / "g2c_awaiting_classification.json")
+    if aw is None:
+        return None
+    try:
+        import awaiting_channels_check
+        return awaiting_channels_check.check(aw)
+    except Exception as e:
+        return [f"awaiting_channels_check 載入失敗：{str(e)[:80]}"]
+
+def check_awaiting_stage(cache):
+    """鐵律：待評估只在 ②c(Stage A)產生；③(g3_FINAL_screen) 必須切題/離題二元，不得誤生待評估。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None
+    try:
+        import awaiting_stage_check
+        return awaiting_stage_check.check(g3)
+    except Exception as e:
+        return [f"awaiting_stage_check 載入失敗：{str(e)[:80]}"]
 
 def check_screen_order(cache):
     """Bug3：③嚴格篩(g3)不得早於②c全文取得(g2c)與 Stage A 交接(_stage1_corpus)。
@@ -392,11 +495,16 @@ def _all_checks(cache):
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
+            _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
+            _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
+            _safe("待評估只在②c(③不得誤生待評估)", check_awaiting_stage, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
+            _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
+            _safe("待評估三管道全失敗才成立(摘要/線上全文/Unpaywall)", check_awaiting_channels, cache),
             _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
             _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
             _safe("Gate③ 待評估須先核對全文(不得只憑摘要punt)", check_screen_awaiting_resolved, cache),

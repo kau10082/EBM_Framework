@@ -85,6 +85,11 @@ def md2rl(s):
     s = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
     return s.replace('\n', '<br/>')
 
+def _esc_cell(c):
+    """表格儲存格安全送進 Paragraph：跳脫 & < >（資料常含 'P<0.001'、'<MCID'、'CI 0.7–0.8' 等），
+    換行→<br/>。**過去 sof_table/qtable 未跳脫 → 任何含 < 的儲存格會讓 reportlab 解析成標籤而整份 PDF 渲染失敗。**"""
+    return str(c).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br/>')
+
 def S(name, size, leading=None, color=black, bold=False, align=TA_LEFT, sp=4, left=0):
     return ParagraphStyle(name, fontName=FONTB if bold else FONT, fontSize=size,
                           leading=leading or size*1.45, textColor=color, alignment=align,
@@ -180,7 +185,8 @@ def sof_table():
     for r, row in enumerate(SOF):
         cells = []
         for ci, c in enumerate(row):
-            txt = G.get(c, c).replace('\n', '<br/>') if (r > 0 and ci == 6) else str(c)
+            raw = G.get(c, c) if (r > 0 and ci == 6) else c
+            txt = _esc_cell(raw)
             st = CELLB if (r == 0 or (r > 0 and ci == 6)) else CELL
             cells.append(Paragraph(txt, st))
         data.append(cells)
@@ -200,7 +206,7 @@ def bullet(text):
     return Paragraph('•&nbsp;&nbsp;' + text, LI)
 
 def qtable(rows, cw):
-    data = [[Paragraph(str(c), CELLB if r == 0 else CELL) for c in row] for r, row in enumerate(rows)]
+    data = [[Paragraph(_esc_cell(c), CELLB if r == 0 else CELL) for c in row] for r, row in enumerate(rows)]
     t = Table(data, colWidths=[w * mm for w in cw], repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), NAVY), ('TEXTCOLOR', (0, 0), (-1, 0), white),
