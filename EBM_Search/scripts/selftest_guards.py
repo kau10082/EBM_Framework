@@ -106,20 +106,26 @@ def main():
         strict_screen_check.check([{"uid":"u4","verdict":"切題","axis_hits":{"P":"yes","I":"yes","C":"未提及對照組"}}], _ax_strat))
 
     import report_check
-    bad = {"funnel":[{"step":"③ 嚴格篩","remain":"待覆核 73"}],
-           "studies":[{"study":"待確認對照臂","reports":[["",  "", "10.x","線上","○"]]}],
-           "background":[["t","","10.x","SR"]], "ongoing_trials":[], "funnel_closure":""}
-    allok &= _assert_fires("報告版型/內容（佔位名/空標題/缺PMID/背景欄/無進行中表）",
+    # 5 段制（v0.22）：缺日期到日/缺真實字串/佔位名/空標題/缺進行中表 → 須 FAIL
+    bad = {"search_date":"2026","pico":{},"databases":[],"limits":"",
+           "search_strategy":[{"leg":"PubMed","query":"copd triple therapy"}],
+           "funnel":[{"step":"③ 嚴格篩","remain":"切題 5"}],
+           "included_studies":[{"study":"待確認對照臂","reports":[["", "", "10.x","○"]]}],
+           "ongoing_trials":[], "funnel_closure":""}
+    allok &= _assert_fires("報告版型/內容（日期非到日/無真實字串/佔位名/空標題/無進行中表）",
         report_check.check(bad))
-    # PRISMA 流程圖缺失（Bug7）：其餘合規、僅缺 prisma_flow → 須 FAIL 且指名 prisma_flow
-    valid = {"funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
-             "studies":[{"study":"IMPACT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","線上","C+PM"]]}],
-             "background":[["Some SR","12345678","10.1/x","SR-MA","線上","PM"]],
-             "ongoing_trials":[["NCT00000000","recruiting"]],
+    # 合規 5 段 fixture：須通過（防誤報）
+    valid = {"search_date":"2026-06-20","pico":{"P":"COPD","I":"triple","C":"LABA/LAMA"},
+             "databases":["PubMed","Europe PMC","ClinicalTrials.gov"],
+             "limits":"未加 RCT filter；無語言/年份限制",
+             "search_strategy":[{"leg":"PubMed","query":"(COPD[tiab] OR emphysema[tiab]) AND (\"triple therapy\"[tiab] OR Trelegy[tiab])"}],
+             "funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
+             "included_studies":[{"study":"IMPACT","type":"RCT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","PubMed○/Crossref○"]]}],
+             "ongoing_trials":[["NCT00000000","A triple therapy trial"]],
              "funnel_closure":"切題 5 + 離題 3 = 8",
              "prisma_flow":{"identification":100,"screening":80,"included":5}}
     no_prisma = dict(valid); no_prisma.pop("prisma_flow")
-    allok &= _assert_fires("報告缺 PRISMA 流程圖（prisma_flow）",
+    allok &= _assert_fires("報告缺 PRISMA 流程數據（prisma_flow）",
         [f for f in report_check.check(no_prisma) if "prisma_flow" in f])
     _vp = report_check.check(valid)
     print(("  ✅" if not _vp else "  ❌") + " 報告合規 fixture 應通過（防誤報）：" + ("通過" if not _vp else str(_vp)))
