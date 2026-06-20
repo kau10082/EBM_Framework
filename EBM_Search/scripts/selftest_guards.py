@@ -135,6 +135,20 @@ def main():
     _z = [f for f in report_check.check(zero_inc) if "prisma_flow" in f]
     print(("  ✅" if not _z else "  ❌") + " PRISMA included:0 應合法（防誤擋）：" + ("通過" if not _z else str(_z)))
     allok &= (not _z)
+    # (M2) 欄位檢核機制：曖昧『缺』/空欄 → FAIL
+    amb = dict(valid); amb["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","缺","缺","PubMed○/Crossref未索引"]]}]
+    allok &= _assert_fires("段4 欄位曖昧『缺』空欄", [f for f in report_check.check(amb) if "每格須填滿" in f])
+    # (M2) 驗證欄無 ○（無任何索引確認存在性）→ FAIL
+    nover = dict(valid); nover["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","無","無","PubMed未索引／Crossref未索引"]]}]
+    allok &= _assert_fires("段4 無索引驗證存在性(無○)", [f for f in report_check.check(nover) if "未經任何索引驗證" in f])
+    # (M2) fetch_failed 殘留 → FAIL
+    ff = dict(valid); ff["id_backfill"]={"fetch_failed":3}
+    allok &= _assert_fires("段4 識別碼 fetch_failed 殘留", [f for f in report_check.check(ff) if "fetch_failed" in f])
+    # (M2) 正向：缺值用明確『無』+ 驗證欄有 ○ → 通過（防誤報）
+    okmark = dict(valid); okmark["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","無","10.1/x","PubMed未索引／Crossref○"]]}]; okmark["id_backfill"]={"fetch_failed":0}
+    _om = report_check.check(okmark)
+    print(("  ✅" if not _om else "  ❌") + " 段4 缺值標『無』+驗證有○ 應通過（防誤報）：" + ("通過" if not _om else str(_om)))
+    allok &= (not _om)
 
     import stage1_check
     allok &= _assert_fires("Stage A→B 邊界（無內容混入候選）",

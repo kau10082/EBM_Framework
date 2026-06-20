@@ -60,6 +60,10 @@ def check(data):
     inc = data.get("included_studies", [])
     if not inc:
         fails.append("段4 缺最終納入證據清單（included_studies 空）")
+    # ★ 欄位檢核機制（2026-06 使用者要求：欄位不得空缺、缺值須明確標記並可驗）：
+    #   每格不得為空/?/曖昧『缺』——缺值一律寫明確標記『無』(來源確無)；
+    #   每筆須由真實索引確認存在性（驗證欄含 ○，即 PubMed/Crossref/OpenAlex/EuropePMC 至少一個命中）。
+    AMBIG = ("", "?", "？", "缺", "待補", "(標題待補)", "（標題待補）", "n/a", "na", "tbd", "—")
     for grp in inc:
         name = str(grp.get("study", ""))
         if any(p in name.lower() for p in PLACEHOLDER_STUDY):
@@ -68,16 +72,26 @@ def check(data):
             if not isinstance(rep, (list, tuple)) or len(rep) != 4:
                 fails.append(f"[{name}] 報告元組須 4 欄(title,pmid,doi,verified)，實得 {len(rep) if hasattr(rep,'__len__') else '?'}")
                 continue
-            title, pmid, doi, ver = rep
-            if not str(title).strip() or str(title).strip().lower() in PLACEHOLDER_TITLE:
+            title, pmid, doi, ver = (str(x).strip() for x in rep)
+            cols = {"標題": title, "PMID": pmid, "DOI": doi, "驗證": ver}
+            for col, val in cols.items():
+                if val.lower() in AMBIG:
+                    fails.append(f"[{name}] 段4『{col}』欄空/曖昧『{val}』（title={title[:28]}）："
+                                 f"每格須填滿；缺值須明確標記『無』(來源確無，非抓取失敗)，不得留空/缺/?")
+            if title.lower() in PLACEHOLDER_TITLE:
                 fails.append(f"[{name}] 報告標題空/佔位（pmid={pmid}）")
-            if not str(pmid).strip() and not str(doi).strip():
-                fails.append(f"[{name}] 報告無 PMID 也無 DOI（title={str(title)[:30]}）：識別碼至少一個；皆無須顯式『缺』")
-            if not str(ver).strip() or str(ver).strip() in ("?", "？"):
-                fails.append(f"[{name}] 缺 PubMed/Crossref 驗證欄（pmid={pmid}）")
+            # 存在性：驗證欄須有 ○（≥1 真實索引確認），否則該筆無法驗證（可能幻覺）→ FAIL
+            if "○" not in ver:
+                fails.append(f"[{name}] 段4 報告未經任何索引驗證存在性（驗證欄無 ○：{ver}）"
+                             f"（title={title[:28]}）：須有 PubMed/Crossref/OpenAlex/EuropePMC 至少一個命中")
     blob = json.dumps(inc, ensure_ascii=False)
     if re.search(r"另含\s*\d+\s*篇|以下略|共\s*\d+\s*篇\)", blob):
         fails.append("段4 出現『另含 N 篇/以下略』省略：納入報告須逐筆列全")
+    # 抓取失敗不得殘留（區分『來源確無』vs『抓取失敗』；後者須先解析再定稿）
+    bf = data.get("id_backfill") or {}
+    if bf.get("fetch_failed"):
+        fails.append(f"段4 有 {bf['fetch_failed']} 筆識別碼『抓取失敗(fetch_failed)』未解析："
+                     f"須重試 OpenAlex/PubMed/Crossref 補齊或確認來源確無(source_none)，不得以 fetch_failed 定稿")
     # ── 段5 進行中試驗 ──
     ot = data.get("ongoing_trials")
     if not ot:
