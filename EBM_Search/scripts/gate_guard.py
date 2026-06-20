@@ -141,9 +141,14 @@ def check_screen_awaiting_resolved(cache):
     僅當『實際抓過全文仍無法核對』才可掛 ③待評估。故 g2c_awaiting_classification.json 內每筆
     若有 doi/pmid/oa_url（有全文路徑）卻無 fulltext_checked／oa_fetch_attempted／channels_exhausted 證明
     → FAIL（代表只憑摘要就punt成待評估，沒去抓全文核對對照 C）。
-    另（2026-06 使用者再糾正）：『摘要或線上全文任一可取得 → 必進③；只有兩者皆無法取得才 awaiting』，
-    故 awaiting 不得帶『已確認可取得的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa)
-    → FAIL（channels_exhausted 標記不能把『可得的線上全文』掩蓋成待評估）。"""
+    另（2026-06 使用者再糾正，兩段式）：判準＝『**我能否線上閱讀到全文**』（只要沒有防爬蟲，理論上 PMC/EPMC
+    fullTextXML、OA HTML 都讀得到）——
+      (a)『摘要或線上全文任一可讀取 → 必進③』；只有『摘要與線上全文都讀不到』才 awaiting。
+      (b) 故 awaiting 若帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa)，
+          必須附『**實際嘗試線上閱讀且失敗**』的證明 `online_read_attempted=true`（防爬蟲/僅PDF無HTML/非OA-PMC
+          citation-only 等真讀不到）——否則＝沒真的去讀就 punt → FAIL。
+          （先前 check 容許 channels_exhausted 一律豁免，正是這個漏洞讓 596 筆有線上全文者被誤丟 awaiting；
+            但反過來『有 OA 旗標就強迫進③』又會把防爬蟲擋住、真讀不到者硬塞進③——故以實際讀取嘗試為準。）"""
     aw = _load(cache / "g2c_awaiting_classification.json")
     if aw is None:
         return None
@@ -156,13 +161,15 @@ def check_screen_awaiting_resolved(cache):
         if has_path and not attempted:
             fails.append("%s 列 ③待評估但有 doi/pmid/oa_url 卻無全文核對證明(fulltext_checked/oa_fetch_attempted)："
                          "③候選已有內容，須抓全文核對對照 C 後做出切題/離題，不得只憑摘要 punt 成待評估" % tag)
-        # ★ 線上全文可得者不得列 awaiting：先前 check 容許 channels_exhausted 一律豁免，正是這個漏洞
-        # 讓 596 筆『有線上全文/OA 但無自由文字摘要』者被誤丟 awaiting（本應進③嚴格篩）。
+        # ★ 線上全文可得者不得列 awaiting，除非『實際嘗試線上閱讀且失敗』(防爬蟲/僅PDF/非OA-PMC)。
         confirmed_online = (a.get("pmcid") or a.get("oa_url") or _yes(a.get("inEPMC"))
                             or _yes(a.get("isOpenAccess")) or _yes(a.get("hasPDF")) or a.get("is_oa") is True)
-        if confirmed_online:
-            fails.append("%s 列待評估卻帶『已確認可取得的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url)："
-                         "摘要或線上全文任一可得即須進③嚴格篩，不得列待評估（channels_exhausted 不能掩蓋可得的線上全文）" % tag)
+        read_failed = _yes(a.get("online_read_attempted")) or _yes(a.get("online_fulltext_unreadable")) \
+                      or _yes(a.get("fulltext_read_failed"))
+        if confirmed_online and not read_failed:
+            fails.append("%s 列待評估卻帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url) 卻無"
+                         "『實際嘗試線上閱讀且失敗』證明(online_read_attempted)：判準是『我能否線上讀到全文』——"
+                         "讀得到就進③，讀不到(防爬蟲/僅PDF/非OA)須真的試過才可列待評估，不得只憑旗標 punt" % tag)
     return fails
 
 def check_partition_provenance(cache):

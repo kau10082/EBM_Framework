@@ -202,16 +202,23 @@ def main():
     _aw=gate_guard.check_screen_awaiting_resolved(tmp3)
     print(("  ✅" if not _aw else "  ❌") + " Gate③ 待評估已核對全文應通過（防誤報）：" + ("通過" if not _aw else str(_aw)))
     allok &= (not _aw)
-    # 2026-06 使用者再糾正：線上全文可得(pmcid/inEPMC/isOpenAccess/oa_url)者不得列待評估，
-    # 即使標 channels_exhausted（先前漏洞：channels_exhausted 一律豁免→596 筆有線上全文者被誤丟 awaiting）
+    # 2026-06 使用者再糾正（兩段式）：判準＝『我能否線上讀到全文』。
+    # (a) 線上全文可得(pmcid/inEPMC)卻列待評估、又無『實際嘗試線上閱讀失敗』證明→FAIL（光標 channels_exhausted 不夠）
     json.dump([{"paper_id":"W5","title":"pmc","pmid":"9","pmcid":"PMC123","reason":"待人工補全文","channels_exhausted":True}],
               io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 線上全文可得(pmcid)卻列待評估(即使 channels_exhausted)",
-        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上全文" in f])
+    allok &= _assert_fires("Gate③ 線上全文可得(pmcid)列待評估但未實際嘗試線上閱讀",
+        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上" in f])
     json.dump([{"paper_id":"W6","title":"epmc","reason":"待人工補全文","channels_exhausted":True,"inEPMC":"Y"}],
               io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 線上全文可得(inEPMC=Y)卻列待評估",
-        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上全文" in f])
+    allok &= _assert_fires("Gate③ 線上全文可得(inEPMC=Y)列待評估但未實際嘗試線上閱讀",
+        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上" in f])
+    # (b) 正向：線上全文路徑存在但『實際嘗試線上閱讀失敗』(防爬蟲/僅PDF/非OA-PMC)→合法 awaiting（防誤報）
+    json.dump([{"paper_id":"W5b","title":"pmc-blocked","pmid":"9","pmcid":"PMC123","reason":"待人工補全文",
+                "channels_exhausted":True,"online_read_attempted":True}],
+              io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    _aw3=gate_guard.check_screen_awaiting_resolved(tmp3)
+    print(("  ✅" if not _aw3 else "  ❌") + " Gate③ 線上全文真讀不到(已嘗試)應通過（防誤報）：" + ("通過" if not _aw3 else str(_aw3)))
+    allok &= (not _aw3)
     # 正向防誤報：待人工補全文只有 ID（doi/pmid）但無任何 OA/線上全文路徑→合法 awaiting
     json.dump([{"paper_id":"W7","title":"paywalled","pmid":"7","doi":"10.1/x","reason":"待人工補全文",
                 "abstract_checked":True,"online_fulltext_checked":True,"unpaywall_checked":True,
