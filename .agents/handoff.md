@@ -30,7 +30,7 @@
 
 ✅ 已修：四軸展開（鐵律）第一版沒做、且既有 `axis_coverage_check` 只驗「query ≥1 同義詞」攔不到稀疏同義詞庫的 bug。本輪修改：(1) 把該案 g0_strategy.json 各軸同義詞補成完整四軸展開（成分 INN／開發代號／品牌／疾病別名）；(2) 新增 `axis_expansion_check.py` 直接稽核 g0.axes 同義詞庫「真的展開」（≥3 別名且含全文形式），掛進 gate_guard 於 ⓪ 策略階段生效；(3) selftest 加三條自測（兩 FAIL＋一防誤報）；(4) SEARCH_SPEC 補「四軸展開必須真的做」鐵律對齊。
 
-✅ 已修：待評估關責——澄清並機器化「待評估只在 ②c 產生、③ 必須二元」。本輪修改：(1) 新增 `awaiting_stage_check.py`＋`check_awaiting_stage`：③(g3) 出現待評估類字樣＝FAIL；(2) ②c 採「先摘要後全文」效率序，無全文且無摘要才路由待評估；(3) selftest 加「③誤生待評估→FAIL／③全二元→通過」；(4) SEARCH_SPEC 補鐵律並聲明取代先前散見「③待評估」寬鬆措辭。
+✅ 已修：待評估關責——澄清並機器化「待評估只在 ②c 產生、③ 必須二元」。本輪修改：(1) 新增 `awaiting_stage_check.py`＋`check_awaiting_stage`：③(g3) 出現待評估類字樣＝FAIL；(2) ②c 採「先摘要後全文」效率序，無全文且無摘要才路由待評估；(3) selftest 加「③誤生待評估→FAIL／③全二元→通過」；(4) SEARCH_SPEC 補鐵律並聲明取代先前散見「③待評估」寬鬆措辭；(5) 配合 abstract-first：`check_unpaywall_coverage` 加「有摘要即跳過」（有摘要＝已有可篩內容、②c 不在此抓全文、無『宣稱無全文』之虞；全文留待 ③ 後納入集 verify_have_fetchable），避免與「不對有摘要者抓全文」directive 打架。
 
 ✅ 已修（嚴重）：Stop hook 自動守門靜默失效——`gate_guard.py --auto --hook` 無 `--cache` 時 `_find_cache(None)` 在本環境（cache 在 `EBM_Search/cache/<topic>/`、無 run_state、非 Windows，硬編 OneDrive 路徑不存在）一律回 `None` → hook exit 0 dormant，整輪檢索自動守門等同未啟用（gates 僅靠人工 `--cache` 跑到）。這正是使用者觀察到「過程中斷」追查時發現的真 bug（中斷現象本身＝harness context 自動摘要，非 repo bug）。本輪修改：(1) 新增 `_find_active_cache_by_flag()` 掃 `EBM_Search/cache/*/_search_active.flag` 找進行中 cache，插為 `_find_cache` 首要發現法（哨兵旗標＝地真值，不依賴 run_state/env/OneDrive）；(2) selftest 加「旗標 cache 找得到／無旗標回 None 休眠」回歸；(3) 實證修復後 hook 對帶旗標＋壞 g0 的 cache 正確 exit 2、對本案通過的 cache exit 0；(4) SEARCH_SPEC 補「Stop hook 必須找得到 cache」鐵律。
 

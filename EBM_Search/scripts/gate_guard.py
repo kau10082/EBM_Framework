@@ -100,6 +100,8 @@ def check_unpaywall_coverage(cache):
         cls = c.get("class") or ""
         if cls.startswith("有全文"):
             continue
+        if (c.get("abstract") or "").strip():
+            continue  # 有摘要＝已有可篩內容（abstract-first）：②c 不在此抓全文，亦無『宣稱無全文』之虞→不強制 Unpaywall（全文留待 ③ 後納入集 verify_have_fetchable）
         doi = _norm_doi(c.get("doi"))
         if not doi:
             continue  # 無 DOI 無法 Unpaywall（非失敗）
