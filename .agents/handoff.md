@@ -28,12 +28,19 @@
 
 ---
 
-**建議結論：** 只採 **A1**（同檔字形表去重，做完用渲染煙霧測試驗證）。**B、C 全部維持現狀**——它們是低風險樣板或刻意的韌性設計，依「不分心/不漂移/改動最小化」原則不動最安全。
+**建議結論：** 只採 **A1**（同檔字形表去重，做完用渲染煙霧測試驗證）。**B、C 全部維持現狀**。
 
-**想被重點看：** (1) A1 兩份字形表是否真的可安全合併（請覆核 `_build_pdf.py` 兩段）；(2) 是否同意「B 類跨檔抽共用模組弊大於利、維持現狀」這個保守判斷，或某幾項你認為值得抽。
+**【結案狀態，2026-06】審查核可：只做 A1、B/C 擱置。A1 已實作並驗證：**
+- 動到的檔（唯一）：`EBM_Analysis/_build_pdf.py`——把同檔重複的 `_GLYPH_TR0`/`_strip_bricks`（早期 load-time 用）與 `_GLYPH_SAFE`/`_GLYPH_TR`/`safe_glyphs`（後段 render 用）**合併為單一 `_GLYPH_SAFE`＋`_GLYPH_TR`＋`safe_glyphs`**（保留 `(s or '')` 空值保護），`_deep_safe` 改呼叫 `safe_glyphs`。淨刪 6 行。
+- 驗證：`py_compile` OK；**行為等價證明**——對同一批輸入（全部 9 個字形＋emoji＋GRADE 符號 ●●●○/①②③＋None＋混合文字）跑「舊邏輯 vs 新合併邏輯」輸出**逐筆完全相同**（emoji 一律剔除、字形正確替換、`None`→`''` 更安全）。
+- 渲染煙霧測試說明：完整 GRADE PDF 需有效 `_synthesis.json`（目前無分析 run、無此 cache），故無法現render；惟 (a) 行為與現行可正常出 PDF 的程式**逐位元相同**＝不可能產生新磚塊；(b) `_build_pdf.py` 自帶磚塊稽核（line 395-401）＋`analysis_gate`/`verify_all` 會在**下次真實分析 run 自動 smoke-test**。
+- B/C：依審查「強烈同意維持現狀」，未動任何一處。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+- ✅ 已執行：A1 `_build_pdf.py` 同檔重複字形表/函式合併（審查核可）。py_compile＋行為等價證明（舊≡新，逐筆相同）通過；完整 render 待下次真實分析 run 自動 smoke-test（無 synthesis cache 無法現render，已誠實說明）。
+- ✅ 已確認（維持現狀）：B 類（UTF-8 樣板／`_load`／`_norm_doi`／settings 載入器／pdf 路徑解析跨檔小重複）與 C 類（gate_guard 重讀小 JSON／enrichment·schema fallback 鏈）——審查「強烈同意維持現狀」，依不過度工程/改動最小化全部不動。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

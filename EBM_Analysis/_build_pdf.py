@@ -48,15 +48,16 @@ try:
 except Exception:
     _CACHE = Path(__file__).resolve().parent / 'cache'; _OUTPUTS = Path(__file__).resolve().parent / 'outputs'
 # 字形淨化（微軟正黑體缺字形 → 等義有字形符號），於『載入時』遞迴套用整個 cache，避免任何渲染路徑漏網。
-_GLYPH_TR0 = str.maketrans({'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○',
-                            '↔': '／', '⇔': '／', '▸': '•', '►': '•'})
+_GLYPH_SAFE = {'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○',
+               '↔': '／', '⇔': '／', '▸': '•', '►': '•'}  # msjh 缺字形 → 等義有字形
+_GLYPH_TR = str.maketrans(_GLYPH_SAFE)
 # emoji／dingbat／variation-selector（微軟正黑無字形→磚塊□/NULL）一律剔除；保留 ● ○ • → – — ① ② ③ ≈（不在這些區段）
 _EMOJI_RE = re.compile('[\U0001F000-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF'
                        '\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U0001F1E6-\U0001F1FF]')
-def _strip_bricks(s):
-    return _EMOJI_RE.sub('', s).translate(_GLYPH_TR0)
+def safe_glyphs(s):
+    return _EMOJI_RE.sub('', (s or '')).translate(_GLYPH_TR)
 def _deep_safe(o):
-    if isinstance(o, str):  return _strip_bricks(o)
+    if isinstance(o, str):  return safe_glyphs(o)
     if isinstance(o, list): return [_deep_safe(x) for x in o]
     if isinstance(o, dict): return {k: _deep_safe(v) for k, v in o.items()}
     return o
@@ -77,13 +78,6 @@ N_LIGHT = sum(1 for p in _PP if p.get('grade_track') == 'light_summary')
 N_EXCL = sum(1 for p in _PP if p.get('grade_track') == 'none')
 N_RCT = sum(1 for p in _PP if p.get('grade_track') == 'full' and p.get('role') == 'pivotal_efficacy')
 N_MA = sum(1 for p in _PP if p.get('grade_track') == 'full' and p.get('role') == 'meta_analysis')
-
-# 字形淨化：微軟正黑體缺字形者 → 有字形之等義符號，避免 PDF 出現磚塊（□）。
-_GLYPH_SAFE = {'≈': '≒', '≥': '≧', '≤': '≦', '−': '-', '◯': '○',
-               '↔': '／', '⇔': '／', '▸': '•', '►': '•'}  # msjh 缺字形 → 等義有字形
-_GLYPH_TR = str.maketrans(_GLYPH_SAFE)
-def safe_glyphs(s):
-    return _EMOJI_RE.sub('', (s or '')).translate(_GLYPH_TR)
 
 def md2rl(s):
     """把 JSON 內的純文字安全送進 reportlab Paragraph：跳脫 & < >，**粗體**→<b>，換行→<br/>，淨化缺字形符號。"""
