@@ -121,6 +121,10 @@ def main():
     allok &= _assert_fires("Stage A 待評估『兩者皆無』卻有 pmid（未查全文）",
         [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
           "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無","pmid":"12345678"}]}) if "兩者皆無" in f])
+    # 審查 🔴 補強回歸：只有 oa_url（無 doi/pmid）也是全文路徑 → 兩者皆無 須 FAIL
+    allok &= _assert_fires("Stage A 待評估『兩者皆無』只有 oa_url（無ID但有OA路徑）",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A4","title":"oa","reason":"兩者皆無","oa_url":"https://oa.example/y.pdf"}]}) if "oa_url" in f])
     # 防『有 OA 卻不抓就丟待評估』：待人工補全文帶 oa_url 卻未實際抓取 → 須 FAIL
     allok &= _assert_fires("Stage A 待評估有 oa_url 卻未抓 OA 全文",
         [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
@@ -157,6 +161,9 @@ def main():
     tmp3 = Path(tempfile.mkdtemp())
     json.dump([{"paper_id":"W1","title":"x","pmid":"123","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
     allok &= _assert_fires("Gate③ 待評估只憑摘要 punt（未核對全文）", gate_guard.check_screen_awaiting_resolved(tmp3))
+    # 審查 🔴 補強回歸：只有 oa_url（無 doi/pmid）也須核對全文 → FAIL
+    json.dump([{"paper_id":"W4","title":"oa","oa_url":"https://oa.example/z.pdf","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate③ 待評估只有 oa_url（無ID）也須核對全文", gate_guard.check_screen_awaiting_resolved(tmp3))
     # 正向：抓過全文仍無法核對(oa_fetch_attempted)→合法；無 ID→合法（防誤報）
     json.dump([{"paper_id":"W2","title":"y","pmid":"123","reason":"待全文","oa_fetch_attempted":True},
                {"paper_id":"W3","title":"z","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))

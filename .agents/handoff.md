@@ -36,4 +36,9 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
+- ✅ 已修：🔴 stage1_check「兩者皆無」漏判 oa_url-only（只有 oa_url、無 doi/pmid 會被當兩者皆無漏掉）→ 條件加 `or a.get("oa_url")`、訊息同步。+selftest 回歸（oa_url-only 兩者皆無 → FAIL）。
+- ✅ 已修：🔴 gate_guard `check_screen_awaiting_resolved` 的 `has_path` 同樣漏 oa_url → 加 `or a.get("oa_url")`、docstring 同步。+selftest 回歸（oa_url-only 待評估未核對 → FAIL）。
+- ✅ 已確認（暫不改）：🟡 gate 多處 hardcode 檔名（g1_legs_manifest.json/g0_strategy.json）。審查端亦認「目前架構可接受」。依「改動最小化」暫不重構成常數；若未來改檔名再集中定義。
+- ✅ 已確認（無需改動）：⚪ approved_by_user 自證機制足夠（卡點價值已達成，幻覺亂填才需 approval_note）；⚪「兩者皆無僅限無 ID/路徑」限制合理。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

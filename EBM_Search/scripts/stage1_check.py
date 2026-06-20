@@ -62,12 +62,12 @@ def check(data):
             fails.append("awaiting[%d](%s) reason 非法：%r" % (i, a.get("paper_id"), a.get("reason")))
         if a.get("reason") == "待人工補全文" and not a.get("channels_exhausted"):
             fails.append("awaiting[%d](%s) 待人工補全文須 channels_exhausted=true（單次失敗≠窮盡）" % (i, a.get("paper_id")))
-        # 防『未查全文就丟兩者皆無』漏洞（2026-06 使用者糾正）：有 DOI/PMID＝有全文路徑，
-        # 不得逕判『兩者皆無』；須先查 Unpaywall/PMC，改判『待人工補全文』(channels_exhausted)或補回內容。
-        if a.get("reason") == "兩者皆無" and (a.get("doi") or a.get("pmid")):
-            fails.append("awaiting[%d](%s) 標『兩者皆無』但有 doi/pmid（有識別碼＝有全文路徑）："
-                         "須先查 Unpaywall/PMC，改判『待人工補全文』(channels_exhausted=true)或補回內容"
-                         "（『兩者皆無』僅限完全無 ID／無路徑者）" % (i, a.get("paper_id")))
+        # 防『未查全文就丟兩者皆無』漏洞（2026-06 使用者糾正；oa_url 補強）：有 DOI/PMID/oa_url＝有全文路徑，
+        # 不得逕判『兩者皆無』；須先查 Unpaywall/PMC/抓 OA，改判『待人工補全文』(channels_exhausted)或補回內容。
+        if a.get("reason") == "兩者皆無" and (a.get("doi") or a.get("pmid") or a.get("oa_url")):
+            fails.append("awaiting[%d](%s) 標『兩者皆無』但有 doi/pmid/oa_url（有識別碼或 OA 連結＝有全文路徑）："
+                         "須先查 Unpaywall/PMC/抓 OA，改判『待人工補全文』(channels_exhausted=true)或補回內容"
+                         "（『兩者皆無』僅限完全無 ID／無 OA 連結／無路徑者）" % (i, a.get("paper_id")))
         # 防『有 OA 連結卻不抓就丟待評估』漏洞（2026-06 使用者糾正）：OA 全文是可抓取管道，
         # 不可只記 URL 就掛待評估；必須實際抓取/解析 OA 全文，取不到內容(oa_fetch_attempted=true)才可掛。
         if a.get("reason") == "待人工補全文" and a.get("oa_url") and not a.get("oa_fetch_attempted"):
