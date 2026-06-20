@@ -227,6 +227,20 @@ def check_axis_coverage(cache):
     except Exception as e:
         return [f"axis_coverage_check 載入失敗：{str(e)[:80]}"]
 
+def check_comparator_purity(cache):
+    """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
+    manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
+    strat = _load(cache / "g0_strategy.json")
+    man = _load(cache / "g1_legs_manifest.json")
+    legs = man if man is not None else (strat.get("legs") if isinstance(strat, dict) else None)
+    if legs is None:
+        return None
+    try:
+        import comparator_purity_check
+        return comparator_purity_check.check(legs, strat)
+    except Exception as e:
+        return [f"comparator_purity_check 載入失敗：{str(e)[:80]}"]
+
 def check_strict_screen(cache):
     """Gate ③：嚴格篩逐軸核對——切題須全必含軸命中、離題須標明缺軸（反放水）。"""
     scr = _load(cache / "g3_FINAL_screen.json")
@@ -392,6 +406,7 @@ def _all_checks(cache):
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
+            _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),

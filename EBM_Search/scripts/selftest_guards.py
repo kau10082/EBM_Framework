@@ -65,6 +65,15 @@ def main():
     print(("  ✅" if not _axok else "  ❌") + " 四軸覆蓋 query 含 P+I 應通過（防誤報）：" + ("通過" if not _axok else str(_axok)))
     allok &= (not _axok)
 
+    import comparator_purity_check
+    # query 摻入 C 軸（in_query=false）同義詞『LABA/LAMA』（standalone）→ FAIL
+    allok &= _assert_fires("Gate⓪／① 對照軸純度（query 摻入 C 軸 LABA/LAMA）",
+        comparator_purity_check.check([{"leg":"OpenAlex","query":"COPD triple therapy versus LABA/LAMA"}], _ax_strat))
+    # 防誤報：I 軸『ICS/LABA/LAMA』內含 C 軸子字串『LABA/LAMA』，遮蔽 I 軸後不應誤判 → PASS
+    _cpok = comparator_purity_check.check([{"leg":"PubMed","query":'COPD AND "ICS/LABA/LAMA"'}], _ax_strat)
+    print(("  ✅" if not _cpok else "  ❌") + " 對照軸純度：I 軸含 C 子字串不誤判（防誤報）：" + ("通過" if not _cpok else str(_cpok)))
+    allok &= (not _cpok)
+
     import strict_screen_check
     # 切題卻缺 C 軸證據（C=unknown）→ 放水 → FAIL
     allok &= _assert_fires("Gate③ 切題卻缺 C 軸（放水）",
