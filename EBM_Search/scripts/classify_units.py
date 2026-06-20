@@ -139,8 +139,8 @@ def classify(cache, out="g7_units.json"):
         if design=="原始研究:RCT":
             trip=bool(R_TRIP.search(text)); dual=bool(R_DUAL.search(text))
             trial,key=detect_trial(text,nct,names)
-            if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 剔出核心
-                design="排除:非三合一介入RCT(他藥/雙合一)"; row["design"]=design
+            if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 歸背景（非核心），不丟棄
+                design="背景:非核心RCT(非三合一vs雙合一介入)"; row["design"]=design
                 row["trial"]=trial; row["nct"]=key; buckets[design]+=1; rows.append(row); continue
             if not trial:  # 無 NCT/縮寫上下文 → 試『縮寫(摘要)＋樣本數特徵』保守連結
                 sl=sig_link(text)
