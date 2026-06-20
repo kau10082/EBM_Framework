@@ -98,7 +98,7 @@ def check_waiting_fulltext(cache):
         if not v.startswith("待評估"):
             continue
         # 仍有全文路徑卻判待評估＝漏抓
-        if r.get("pmcid") or r.get("inPMC") or r.get("oa_pdf") or r.get("isOA") == "Y" \
+        if r.get("pmcid") or r.get("inPMC") or r.get("oa_pdf") or r.get("oa_url") or r.get("isOA") == "Y" \
            or str(r.get("class") or "").startswith("有全文"):
             # 唯一放行：已『窮盡所有管道』或『待人工補全文』的明確標記；
             # 單純一次『抓取失敗(404/逾時/403)』不算——有路徑就要重試(EuropePMC→NCBI→Unpaywall→人工)
@@ -120,7 +120,7 @@ def check_screen_awaiting_resolved(cache):
         return None
     fails = []
     for a in aw:
-        has_path = a.get("doi") or a.get("pmid") or a.get("oa_url")  # oa_url 也是全文路徑（審查 🔴 補強）
+        has_path = a.get("doi") or a.get("pmid") or a.get("oa_url") or a.get("pmcid")  # 全文路徑：ID/OA/PMC（審查 🔴🟡 補強）
         attempted = a.get("fulltext_checked") or a.get("oa_fetch_attempted") or a.get("channels_exhausted")
         if has_path and not attempted:
             fails.append("%s 列 ③待評估但有 doi/pmid/oa_url 卻無全文核對證明(fulltext_checked/oa_fetch_attempted)："
@@ -313,28 +313,33 @@ def check_no_retracted(cache):
     if ver is None:
         return None
     retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED" and v.get("pmid")}
-    if not retr:
+    # Crossref is-retracted 多以 DOI 為憑——撤稿文獻可能無 PMID，須一併以 DOI 比對（審查 🔴 補強）
+    retr_dois = {_norm_doi(v.get("doi")) for v in ver if v.get("verdict") == "RETRACTED" and v.get("doi")}
+    retr_dois.discard(None)
+    if not retr and not retr_dois:
         return []
+    def _hp(x): return bool(x) and str(x) in retr                 # pmid 命中
+    def _hd(x): return bool(_norm_doi(x)) and _norm_doi(x) in retr_dois  # doi 命中
     fails = []
     rep = _load(cache / "_search_report.json")
     if rep:
         for grp in rep.get("studies", []):
-            for r in grp.get("reports", []):
-                if len(r) >= 2 and str(r[1]) in retr:
-                    fails.append(f"撤稿 {r[1]} 出現在核心 Study 表（{grp.get('study')}）：須剔除、改列待評估/排除")
-        for r in rep.get("background", []):
-            if len(r) >= 2 and str(r[1]) in retr:
-                fails.append(f"撤稿 {r[1]} 出現在背景表：須剔除")
+            for r in grp.get("reports", []):  # 元組 [title, pmid, doi, ft, xref]
+                if (len(r) >= 2 and _hp(r[1])) or (len(r) >= 3 and _hd(r[2])):
+                    fails.append(f"撤稿 {r[1] if len(r)>1 and _hp(r[1]) else (r[2] if len(r)>2 else '?')} 出現在核心 Study 表（{grp.get('study')}）：須剔除、改列待評估/排除")
+        for r in rep.get("background", []):  # 元組 [title, pmid, doi, type, ft, xref]
+            if (len(r) >= 2 and _hp(r[1])) or (len(r) >= 3 and _hd(r[2])):
+                fails.append(f"撤稿 {r[1] if len(r)>1 and _hp(r[1]) else (r[2] if len(r)>2 else '?')} 出現在背景表：須剔除")
     pay = _load(cache / "g8_zotero_payload.json")
     if pay:
         for p in pay:
-            if str(p.get("pmid")) in retr:
-                fails.append(f"撤稿 {p.get('pmid')} 在 Zotero payload：禁匯入（須先剔除再 commit）")
+            if _hp(p.get("pmid")) or _hd(p.get("doi")):
+                fails.append(f"撤稿 {p.get('pmid') or p.get('doi')} 在 Zotero payload：禁匯入（須先剔除再 commit）")
     seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
     if seed:
         for p in (seed.get("papers", []) if isinstance(seed, dict) else seed):  # seed 可能是 bare list（同 check_have_verified）
-            if str(p.get("pmid")) in retr:
-                fails.append(f"撤稿 {p.get('pmid')} 在交接包 papers：禁進 GRADE 證據體")
+            if _hp(p.get("pmid")) or _hd(p.get("doi")):
+                fails.append(f"撤稿 {p.get('pmid') or p.get('doi')} 在交接包 papers：禁進 GRADE 證據體")
     return fails
 
 def check_report(cache):

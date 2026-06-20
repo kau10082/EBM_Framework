@@ -36,6 +36,10 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
+- ✅ 已修：🔴 check_no_retracted 漏判「僅有 DOI 的撤稿」（Crossref is-retracted 多以 DOI 為憑、撤稿文獻可能無 PMID）→ 新增 `retr_dois` 集合，下游 報告/背景/Zotero/交接包 一律同時比對 pmid 與 `_norm_doi(doi)`。+selftest 回歸（DOI-only 撤稿須擋；含大小寫正規化驗證 10.1/retracted vs 10.1/RETRACTED）。
+- ✅ 已修：🔴 check_waiting_fulltext 全文路徑漏 `oa_url` → 條件加 `or r.get("oa_url")`，與前關一致。+selftest 回歸。
+- ✅ 已修：🟡 stage1_check「兩者皆無」再補 `pmcid`（Europe PMC 常只有 pmcid）；並同步把 `pmcid` 加進 check_screen_awaiting_resolved 的 has_path（兩 awaiting 關保持對稱）。+selftest 回歸（pmcid-only 兩者皆無 須 FAIL）。
+
 - ✅ 已修：🔴 stage1_check「兩者皆無」漏判 oa_url-only（只有 oa_url、無 doi/pmid 會被當兩者皆無漏掉）→ 條件加 `or a.get("oa_url")`、訊息同步。+selftest 回歸（oa_url-only 兩者皆無 → FAIL）。
 - ✅ 已修：🔴 gate_guard `check_screen_awaiting_resolved` 的 `has_path` 同樣漏 oa_url → 加 `or a.get("oa_url")`、docstring 同步。+selftest 回歸（oa_url-only 待評估未核對 → FAIL）。
 - ✅ 已確認（暫不改）：🟡 gate 多處 hardcode 檔名（g1_legs_manifest.json/g0_strategy.json）。審查端亦認「目前架構可接受」。依「改動最小化」暫不重構成常數；若未來改檔名再集中定義。

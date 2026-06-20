@@ -125,6 +125,10 @@ def main():
     allok &= _assert_fires("Stage A 待評估『兩者皆無』只有 oa_url（無ID但有OA路徑）",
         [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
           "awaiting":[{"paper_id":"A4","title":"oa","reason":"兩者皆無","oa_url":"https://oa.example/y.pdf"}]}) if "oa_url" in f])
+    # 審查 🟡 補強回歸：只有 pmcid（Europe PMC 常見）也是全文路徑 → 兩者皆無 須 FAIL
+    allok &= _assert_fires("Stage A 待評估『兩者皆無』只有 pmcid（無其他ID）",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
+          "awaiting":[{"paper_id":"A5","title":"pmc","reason":"兩者皆無","pmcid":"PMC123456"}]}) if "pmcid" in f])
     # 防『有 OA 卻不抓就丟待評估』：待人工補全文帶 oa_url 卻未實際抓取 → 須 FAIL
     allok &= _assert_fires("Stage A 待評估有 oa_url 卻未抓 OA 全文",
         [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
@@ -155,6 +159,10 @@ def main():
     json.dump([{"pmid":"999","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
     allok &= _assert_fires("撤稿殘留 Zotero payload", gate_guard.check_no_retracted(tmp))
+    # 審查 🔴 補強回歸：撤稿僅有 DOI（無 PMID，Crossref is-retracted）也須擋下
+    json.dump([{"doi":"10.1/retracted","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
+    json.dump([{"doi":"10.1/RETRACTED","title":"doi-only","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
+    allok &= _assert_fires("撤稿僅有 DOI（無PMID）也須擋下", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
 
     # ③待評估須先核對全文：g2c_awaiting_classification 有 doi/pmid 卻無全文核對證明 → FAIL
@@ -170,6 +178,9 @@ def main():
     _aw=gate_guard.check_screen_awaiting_resolved(tmp3)
     print(("  ✅" if not _aw else "  ❌") + " Gate③ 待評估已核對全文應通過（防誤報）：" + ("通過" if not _aw else str(_aw)))
     allok &= (not _aw)
+    # 審查 🔴 補強回歸：check_waiting_fulltext 的全文路徑須含 oa_url
+    json.dump([{"verdict":"待評估","title":"oa","oa_url":"https://oa.example/w.pdf"}], io.open(tmp3/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate③ check_waiting_fulltext：有 oa_url 卻丟待評估", gate_guard.check_waiting_fulltext(tmp3))
     shutil.rmtree(tmp3, ignore_errors=True)
 
     # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
