@@ -25,10 +25,17 @@ RENDER_ARRAYS = ["sof", "body_of_evidence", "study_characteristics", "rob_summar
                  "baseline_risk_strata", "literature_status"]
 
 def _pdf_text(p):
+    # pypdf 優先；某些環境 pypdf→cryptography 載入失敗(panic) → 退 pymupdf(fitz)，避免 gate 因抽不到文字而假性失敗
     try:
         import pypdf
         return "\n".join((pg.extract_text() or "") for pg in pypdf.PdfReader(p).pages)
-    except Exception as e:
+    except BaseException:
+        # 用 BaseException：某些環境 pypdf→cryptography 觸發 pyo3 PanicException(非 Exception 子類)
+        pass
+    try:
+        import fitz  # PyMuPDF
+        d = fitz.open(p); t = "\n".join(pg.get_text() for pg in d); d.close(); return t
+    except BaseException:
         return ""
 
 def _find_data():
