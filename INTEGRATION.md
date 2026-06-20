@@ -41,6 +41,10 @@ EBM_Search 收尾時，其實**已經決定了 EBM_Analysis Phase 0 要決定的
 | `included` ＋ 安全性子研究 | direct | safety | targeted_harms |
 | `background` ＋ 機制/PK/healthy | background | mechanism_pd／pharmacokinetic | light_summary |
 | `background` ＋ 綜述 | background | narrative_review | light_summary |
+| `background` ＋ 其他（計畫書/觀察/真實世界/經濟/指引/次級…） | background | other／supportive_secondary | light_summary |
+
+> **★ 切題後不剔除（對齊 SEARCH_SPEC ⑤b 鐵律）：** 凡進入交接包者皆已通過 ③ 切題＋⑤b（核心/背景），**一律 `light_summary`（背景、列出但不分級）或 full/targeted_harms，嚴禁映成 `grade_track:none`（＝排除）**——背景文獻（含**研究計畫書/進行中試驗**、觀察、經濟、指引）是**背景不分級**，不是排除。`none` 只保留給 **Phase 0 使用者覆核時親自判為真正 off-topic** 者，交接層的自動映射**不得**產生 `none`（protocol→none 曾是 bug，已禁止）。
+
 
 - `study` 標籤相同的多篇 → 互填 `overlap_with`（同一試驗多報告，避免重複計入）。
 - `included_trials`（僅 MA）→ 原樣帶入供統合去重。
