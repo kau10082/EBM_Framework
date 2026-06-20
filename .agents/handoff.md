@@ -11,13 +11,14 @@
   - **(G) 引文追蹤新候選須『標題＋摘要』批次篩，嚴禁只憑標題丟（Cochrane 紅線）**：我 ④ 一度為規避逐筆抓摘要太慢，改成「標題沒中 P/I 就丟、不抓摘要」——使用者指出這違反 Cochrane 高敏感初篩、會漏殺用成分名/縮寫/廣義詞發表的隱藏 RCT。正解＝**Batch API 批次抓摘要**（efetch 200/批、OpenAlex 50/批；數千摘要 ~20 次呼叫），再對**全部**新候選做標題＋摘要篩；無摘要可抓者才用「負向排除法」（明顯他題才丟、其餘從寬）。新增 gate `check_citation_screen`（`citation_screen_check.py`）：g4 逐輪須 `screened_on=title+abstract`、`title_only_dropped==0`、有 ID 新候選時 `abstracts_fetched>0`。**實測：同題改回標題＋摘要批次篩，引文追蹤新增切題 0→19**（4 輪收斂 15+3+1+0）。
   - **(F) build_stage1_corpus 忠實沿用 ②c 分流（停止重推）**：`_stage1_corpus.json` 應是 ②c 決定的『凍結快照』，但舊 builder **憑『有無摘要』重新推導** candidate/awaiting，導致 (i) 135 筆 CT.gov 登錄試驗（有結構化內容、無自由文字摘要）被誤推成 `none→兩者皆無`；(ii) awaiting `reason` 用 `channels_exhausted` 反推，把『兩者皆無』(也帶 channels_exhausted) 誤標成『待人工補全文』。修法：改為**依 ②c 的 `class` 分流**（待評估類→awaiting；有全文/登錄→have；有摘要→ai_summary_only），awaiting `reason` 以 ②c 明確 reason 為準。緣由：使用者問「Stage A corpus 是否真有幫助」時，誠實檢視發現它對單一連續執行非工作輸入、且因重推與 ②c 打架；此修讓它成為忠實快照（真正可用於跨 session 交班）。
   - **(E) 待評估＝三管道全失敗才成立（補上漏掉的 step2 線上全文）**：使用者再強調最省成本序＝(1)有無摘要→(2)無摘要者全文是否可線上閱讀(PMC/EPMC)→(3)再不行才 Unpaywall OA→三者皆失敗才待評估。先前 ②c 漏了 step2（直接 abstract→Unpaywall），把有 PMC 線上全文者誤丟待評估。新增 gate `check_awaiting_channels`（`awaiting_channels_check.py`）：每筆待評估須標 `abstract_checked ∧ online_fulltext_checked ∧ unpaywall_checked ∧ channels_exhausted`，『兩者皆無』須真的無任何 ID/OA；缺一＝FAIL。實測重查本案 798 待評估→補 step2 後救回 286（103 EPMC 摘要＋183 PMC/EPMC 線上全文）→待評估降至 512。
+  - **(J) 線上全文可得者不得列 awaiting（補 `check_screen_awaiting_resolved` 的 `channels_exhausted` 豁免漏洞）**：2026-06 第二次重跑時，使用者再糾正「**只有『摘要與線上全文』都無法取得者才不進下一關（③ 嚴格篩），其他都應進 ③**」。查證：②c 重整時把 596 筆「有線上全文/OA 路徑但無自由文字摘要（多為 letter/editorial/correction、本就無摘要）」者誤丟 awaiting；理由是「本沙箱無 PDF parser 抽不出文字」——但**線上全文『可取得性』≠『我此環境抽不抽得出文字』**，內容可線上取得就該進 ③（本機可讀）。**漏洞根因**：`check_screen_awaiting_resolved` 對 awaiting 記錄只要標 `channels_exhausted`（或 reason 含『待人工補全文』）就一律豁免，使「明明有 pmcid/inEPMC/isOpenAccess/oa_url 的線上全文」被一個標記掩蓋成待評估、無 gate 攔下。**修法**：在 `check_screen_awaiting_resolved` 增 `confirmed_online` 判定——awaiting 記錄若帶 `pmcid/inEPMC=Y/isOpenAccess=Y/hasPDF=Y/oa_url/is_oa` 任一＝線上全文可得→**FAIL（不得列待評估，須進③）**，`channels_exhausted` 不能豁免。legit『待人工補全文』＝有 ID（doi/pmid）但**無任何 OA/線上全文路徑**（真付費牆、需人工找 PDF）仍合法放行。修正後本案：596 筆回到 ③（切題 409→416）、awaiting 由 628 降為 **32**（24 兩者皆無＋8 真無路徑待人工補全文）；無摘要但有線上全文者寫 `g3_fetched_by_uid.json` 證明全文路徑、過反坍縮 provenance。
 - **動到哪些檔（本輪審查範圍：僅以下檔案）**：
   1. `EBM_Search/scripts/comparator_purity_check.py`（新增；(A) 核心判定）
   2. `EBM_Search/scripts/axis_expansion_check.py`（新增；(B) 核心判定）
   3. `EBM_Search/scripts/awaiting_stage_check.py`（新增；(D) 核心判定）
   4. `EBM_Search/scripts/awaiting_channels_check.py`（新增；(E) 核心判定）
-  5. `EBM_Search/scripts/gate_guard.py`（新增 `check_comparator_purity`、`check_axis_expansion`、`check_awaiting_stage`、`check_awaiting_channels` 並掛進 `_all_checks`；(C) 新增 `_find_active_cache_by_flag` 並插為 `_find_cache` 首要發現法；abstract-first 調 `check_unpaywall_coverage` 略過有摘要者）
-  6. `EBM_Search/scripts/selftest_guards.py`（新增五 gate 各自的「會 FAIL／防誤報」自測；(C) 旗標發現＋無旗標休眠回歸）
+  5. `EBM_Search/scripts/gate_guard.py`（新增 `check_comparator_purity`、`check_axis_expansion`、`check_awaiting_stage`、`check_awaiting_channels` 並掛進 `_all_checks`；(C) 新增 `_find_active_cache_by_flag` 並插為 `_find_cache` 首要發現法；abstract-first 調 `check_unpaywall_coverage` 略過有摘要者；**(J) `check_screen_awaiting_resolved` 增 `confirmed_online` 判定，封堵 `channels_exhausted` 豁免漏洞**）
+  6. `EBM_Search/scripts/selftest_guards.py`（新增五 gate 各自的「會 FAIL／防誤報」自測；(C) 旗標發現＋無旗標休眠回歸；**(J) 線上全文可得(pmcid/inEPMC)卻列待評估→FAIL、僅ID無OA路徑→通過 三條回歸**）
   7. `EBM_Search/scripts/build_stage1_corpus.py`（(F) 改為依 ②c `class` 忠實分流，不再憑有無摘要重推；awaiting reason 以明確 reason 為準）
   8. `EBM_Search/scripts/citation_screen_check.py`（新增；(G) 核心判定）
   9. `EBM_Search/scripts/classify_units.py`（新增＋更新；(H) ⑦ 以標題＋摘要精確分類；(I) 加讀 g4_abstracts.json 補 citation-arm 摘要）
@@ -34,6 +35,8 @@
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+✅ 已修（(J) 2026-06 重跑第二次糾正）：線上全文可得者被誤丟 awaiting。本輪修改：(1) `gate_guard.check_screen_awaiting_resolved` 增 `confirmed_online`（pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa 任一）判定→awaiting 帶可得線上全文路徑＝FAIL，`channels_exhausted` 不再一律豁免；(2) selftest 加三條回歸（pmcid/inEPMC 列待評估→FAIL、僅ID無OA→通過防誤報）→全綠；(3) 本案 ②c 重整分流：有摘要 OR 線上全文可得→進③，只有兩者皆無法取得→awaiting；596 筆回到 ③、awaiting 628→32；無摘要有線上全文者寫 `g3_fetched_by_uid.json` 過反坍縮。教訓＝『線上全文可取得性』以『內容能否線上取得』為準，與『本沙箱抽不抽得出 PDF 文字』無關（後者屬環境限制、本機可解）。
 
 ✅ 已修：檢索 query 摻入對照軸 C 砍 recall 的 bug（triple vs dual COPD 案，Consensus／OpenAlex query 連兩版被塞「versus dual therapy LABA/LAMA」）。本輪修改：(1) 把該案 g0_strategy.json 各腿 query 改為只含 P＋I；(2) 新增 `comparator_purity_check.py` 並掛進 gate_guard，使「C 軸進 query」之偏離今後一律被機器攔下（含 ⓪ 策略階段）；(3) selftest 加兩條自測證明守門有效且不誤報；(4) SEARCH_SPEC 補鐵律對齊。
 
