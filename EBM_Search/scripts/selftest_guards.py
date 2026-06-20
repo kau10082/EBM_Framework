@@ -262,6 +262,26 @@ def main():
     allok &= (_none is None)
     shutil.rmtree(tmpd, ignore_errors=True)
 
+    # build_stage1_corpus 忠實分流回歸：登錄試驗(無摘要)→candidate/have；兩者皆無(帶channels_exhausted)→reason 不被竄改
+    import build_stage1_corpus as B1
+    tmpb = Path(tempfile.mkdtemp())
+    json.dump([{"uid":"uCT","class":"登錄試驗（結構化內容）","title":"NCT trial","abstract":"","pmid":"","doi":""},
+               {"uid":"uA","class":"有摘要","title":"abs paper","abstract":"x"*50,"pmid":"1","doi":""}],
+              io.open(tmpb/"g2c_FINAL_content.json","w",encoding="utf-8"))
+    json.dump([{"uid":"uN","paper_id":"uN","title":"no-id","reason":"兩者皆無","channels_exhausted":True},
+               {"uid":"uM","paper_id":"uM","title":"manual","pmid":"9","reason":"待人工補全文","channels_exhausted":True}],
+              io.open(tmpb/"g2c_awaiting_classification.json","w",encoding="utf-8"))
+    _d = B1.build(str(tmpb))
+    _ct = [c for c in _d["candidates"] if c.get("title")=="NCT trial"]
+    _ok1 = bool(_ct) and _ct[0]["fulltext_status"]=="have"
+    print(("  ✅" if _ok1 else "  ❌")+" build_stage1：登錄試驗(無摘要)歸 candidate/have："+("通過" if _ok1 else f"FAIL"))
+    allok &= _ok1
+    _none = [a for a in _d["awaiting"] if a.get("title")=="no-id"]
+    _ok2 = bool(_none) and _none[0]["reason"]=="兩者皆無"
+    print(("  ✅" if _ok2 else "  ❌")+" build_stage1：兩者皆無 reason 不被 channels_exhausted 竄改："+("通過" if _ok2 else f"FAIL"))
+    allok &= _ok2
+    shutil.rmtree(tmpb, ignore_errors=True)
+
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))
     sys.exit(0 if allok else 1)
 

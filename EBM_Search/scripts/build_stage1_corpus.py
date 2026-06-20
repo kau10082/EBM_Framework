@@ -44,35 +44,45 @@ def build(cache, topic="", pico=None):
     legs = _load(cache, "g1_legs_manifest.json") or []
     pico = pico or {"statement": topic, "P": "", "I": "", "C": "", "O": []}
 
-    awaiting_uids = {a.get("uid") for a in awaiting_src if a.get("uid")}  # 過濾 None：避免缺 uid 候選被 None 匹配誤跳過
+    # 待評估類 class（②c 已判無內容）：交 awaiting_src 統一處理，不進 candidate
+    AWAIT_CLASSES = ("待人工補全文", "兩者皆無")
     candidates, awaiting = [], []
     for c in content:
+        cls = str(c.get("class") or "")
         ab = (c.get("abstract") or "").strip()
-        has_ft = str(c.get("class") or "").startswith("有全文")
-        # 內容判定：有摘要 or 有全文路徑 → candidate；否則 awaiting
-        if c.get("uid") in awaiting_uids and not ab:
-            continue  # 由 awaiting_src 統一處理
-        ft_status = "have" if has_ft else ("ai_summary_only" if ab else "none")
-        if ft_status == "none" and not ab:
-            awaiting.append({"paper_id": _pid(c), "title": c.get("title") or "", "pmid": c.get("pmid"),
-                             "doi": c.get("doi"), "reason": "兩者皆無", "channels_exhausted": True})
+        if cls.startswith(AWAIT_CLASSES):
             continue
+        # ★ 忠實沿用 ②c 的 class 分流決定 fulltext_status——**不再憑『有無摘要』重推**
+        # （否則登錄試驗/有全文但無自由文字摘要者會被誤降 none→誤丟 awaiting；2026-06 實測 135 筆 CT.gov 被誤分類）。
+        if cls.startswith("有全文"):
+            ft_status, channel = "have", "online"
+        elif cls.startswith("登錄"):
+            ft_status, channel = "have", "registry"      # CT.gov 登錄＝結構化內容（非 awaiting）
+        elif ab:
+            ft_status, channel = "ai_summary_only", "abstract_only"
+        else:
+            ft_status, channel = "none", "manual_pending"  # 保底（②c 判為 content 者理應有內容）
         candidates.append({
             "paper_id": _pid(c), "title": (c.get("title") or "").strip() or ("(" + _pid(c) + ")"),
             "pmid": c.get("pmid"), "doi": c.get("doi"), "journal": c.get("journal"), "year": c.get("year"),
             "verdict": "candidate",
             "fulltext_status": ft_status,
             "abstract_status": "have" if ab else "none",
-            "fulltext_channel": ("online" if has_ft else ("abstract_only" if ab else "manual_pending")),
+            "fulltext_channel": channel,
             "fulltext_url": ("https://doi.org/" + c["doi"]) if c.get("doi") else None,
             "abstract": ab or None,
         })
-    # awaiting_src（含 channels_exhausted / 待人工補全文）
+    # awaiting 一律來自 awaiting_src（②c 已定的待評估），reason 以其『明確 reason』為準——
+    # **不可用 channels_exhausted 反推 reason**（兩者皆無 也帶 channels_exhausted，會被誤標成待人工補全文）。
     for a in awaiting_src:
-        v = a.get("verdict") or ""
-        reason = "待人工補全文" if ("待人工補全文" in v or a.get("channels_exhausted")) else "兩者皆無"
-        awaiting.append({"paper_id": _pid(a), "title": a.get("title") or "", "pmid": a.get("pmid"),
-                         "doi": a.get("doi"), "reason": reason, "channels_exhausted": bool(a.get("channels_exhausted"))})
+        r = a.get("reason") or a.get("verdict") or ""
+        reason = r if r in ("待人工補全文", "兩者皆無") else ("待人工補全文" if a.get("channels_exhausted") else "兩者皆無")
+        entry = {"paper_id": _pid(a), "title": a.get("title") or "", "pmid": a.get("pmid"),
+                 "doi": a.get("doi"), "reason": reason, "channels_exhausted": bool(a.get("channels_exhausted"))}
+        if a.get("oa_url"): entry["oa_url"] = a["oa_url"]
+        if a.get("oa_fetch_attempted"): entry["oa_fetch_attempted"] = True
+        if a.get("pmcid"): entry["pmcid"] = a["pmcid"]
+        awaiting.append(entry)
     return {
         "schema_version": "stage1-1.0", "topic": topic, "search_date": "",
         "review_question_seed": pico, "legs": legs,
