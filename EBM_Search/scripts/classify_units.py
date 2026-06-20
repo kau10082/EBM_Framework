@@ -60,12 +60,18 @@ def classify(cache, out="g7_units.json"):
     ver=json.loads((cache/"g6_verified.json").read_text(encoding="utf-8"))
     content={c["uid"]:c for c in json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8"))}
     union={r["uid"]:r for r in json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8"))}
+    # 引文追蹤臂(citation-arm)的摘要不在 g2c（屬另一 PRISMA 臂）→ 由 g4_abstracts.json 補，避免被當 title-only
+    g4ab={}
+    p4=cache/"g4_abstracts.json"
+    if p4.exists():
+        try: g4ab=json.loads(p4.read_text(encoding="utf-8"))
+        except Exception: g4ab={}
     from collections import Counter, defaultdict
     buckets=Counter(); studies=defaultdict(list); rows=[]; title_only=0
     for v in ver:
         if v.get("verdict")!="VERIFIED": continue
         uid=v.get("uid"); c=content.get(uid,{}); u=union.get(uid,{})
-        ab=(c.get("abstract") or "").strip(); title=v.get("title") or c.get("title") or ""
+        ab=(c.get("abstract") or "").strip() or (g4ab.get(uid) or "").strip(); title=v.get("title") or c.get("title") or ""
         if not ab: title_only+=1
         text=title+" \n "+ab; pt=v.get("pubtype_full","") or ""
         nct=u.get("nct","") or ""
