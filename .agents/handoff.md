@@ -6,13 +6,15 @@
   - **(B) 四軸展開必須真的做（axis expansion）**：四軸展開是鐵律，但既有 `axis_coverage_check` 只驗「每腿 query ≥1 同義詞命中」，**攔不到「同義詞庫根本沒展開」**（P 只寫 COPD、I 只寫 triple therapy 也會通過）。故新增稽核 **g0.axes 同義詞庫本身**：每條 in_query/mandatory_screen 軸須 ≥3 別名且含全文形式。緣由：第一版策略同義詞過於稀疏、未做四軸展開。
   - **(C) Stop hook 找不到 cache → 自動守門靜默失效（最嚴重）**：Stop hook 跑 `gate_guard.py --auto --hook` 不帶 `--cache`，靠 `_find_cache(None)` 自動發現；舊版只看 run_state＋硬編 Windows 路徑 `~/OneDrive/文件/...`，在本環境（cache 在 `EBM_Search/cache/<topic>/`、無 run_state、非 Windows）一律回 `None` → `_active(None)=False` → hook **靜默 exit 0**，整輪自動守門等同未啟用（gates 僅因人工 `--cache` 才跑到）。修法：新增 `_find_active_cache_by_flag()`——掃 repo 內 `EBM_Search/cache/*/` 找帶 `_search_active.flag` 的進行中 cache，列為 `_find_cache` 的**首要**發現法（哨兵旗標＝地真值，與 run_state/env/OneDrive 無關）。
   - **(D) 待評估只在 ②c 產生、③ 必須二元**：使用者再三強調「待評估只有 ②c 這一關會產生」。②c＝判有無可篩內容：先看有無摘要→有摘要進 ③；沒摘要者再看有無全文；**無全文且無摘要才踢待評估**（Stage A，不進 ③）。③(g3) 必須切題/離題二元，不得誤生待評估。新增 gate `check_awaiting_stage`（`awaiting_stage_check.py`）：g3 出現待評估類字樣＝FAIL。SEARCH_SPEC 補鐵律並聲明取代先前散見的「③待評估」寬鬆措辭。
+  - **(E) 待評估＝三管道全失敗才成立（補上漏掉的 step2 線上全文）**：使用者再強調最省成本序＝(1)有無摘要→(2)無摘要者全文是否可線上閱讀(PMC/EPMC)→(3)再不行才 Unpaywall OA→三者皆失敗才待評估。先前 ②c 漏了 step2（直接 abstract→Unpaywall），把有 PMC 線上全文者誤丟待評估。新增 gate `check_awaiting_channels`（`awaiting_channels_check.py`）：每筆待評估須標 `abstract_checked ∧ online_fulltext_checked ∧ unpaywall_checked ∧ channels_exhausted`，『兩者皆無』須真的無任何 ID/OA；缺一＝FAIL。實測重查本案 798 待評估→補 step2 後救回 286（103 EPMC 摘要＋183 PMC/EPMC 線上全文）→待評估降至 512。
 - **動到哪些檔（本輪審查範圍：僅以下檔案）**：
   1. `EBM_Search/scripts/comparator_purity_check.py`（新增；(A) 核心判定）
   2. `EBM_Search/scripts/axis_expansion_check.py`（新增；(B) 核心判定）
   3. `EBM_Search/scripts/awaiting_stage_check.py`（新增；(D) 核心判定）
-  4. `EBM_Search/scripts/gate_guard.py`（新增 `check_comparator_purity`、`check_axis_expansion`、`check_awaiting_stage` 並掛進 `_all_checks`；(C) 新增 `_find_active_cache_by_flag` 並插為 `_find_cache` 首要發現法）
-  5. `EBM_Search/scripts/selftest_guards.py`（新增四 gate 各自的「會 FAIL／防誤報」自測；(C) 旗標發現＋無旗標休眠回歸）
-  6. `EBM_Search/SEARCH_SPEC.md`（補「四軸展開」「對照軸純度」「Stop hook 必須找得到 cache」「待評估只在②c」四條鐵律，對齊已落地 gate）
+  4. `EBM_Search/scripts/awaiting_channels_check.py`（新增；(E) 核心判定）
+  5. `EBM_Search/scripts/gate_guard.py`（新增 `check_comparator_purity`、`check_axis_expansion`、`check_awaiting_stage`、`check_awaiting_channels` 並掛進 `_all_checks`；(C) 新增 `_find_active_cache_by_flag` 並插為 `_find_cache` 首要發現法；abstract-first 調 `check_unpaywall_coverage` 略過有摘要者）
+  6. `EBM_Search/scripts/selftest_guards.py`（新增五 gate 各自的「會 FAIL／防誤報」自測；(C) 旗標發現＋無旗標休眠回歸）
+  7. `EBM_Search/SEARCH_SPEC.md`（補「四軸展開」「對照軸純度」「Stop hook 必須找得到 cache」「待評估只在②c」「待評估＝三管道全失敗」五條鐵律，對齊已落地 gate）
 - **fresh-clone／實跑結果**：
   - `python selftest_guards.py` → 全綠（含 (A)(B) 各自 FAIL/防誤報、(C)「旗標 cache 找得到→通過」「無旗標→回 None 休眠」），結尾「✅ 全部守門有效。」
   - (C) 實證：修復前 `gate_guard._find_cache(None)` 回 `None`、`--auto --hook` 在本案進行中 cache 上仍 exit 0（dormant）；修復後 `_find_cache(None)` 正確回 `…/cache/triple_vs_dual_copd`，且對「帶旗標＋故意壞 g0」的暫時 cache 跑 `--auto --hook` → **exit 2（正確擋下）**。
@@ -29,6 +31,8 @@
 ✅ 已修：檢索 query 摻入對照軸 C 砍 recall 的 bug（triple vs dual COPD 案，Consensus／OpenAlex query 連兩版被塞「versus dual therapy LABA/LAMA」）。本輪修改：(1) 把該案 g0_strategy.json 各腿 query 改為只含 P＋I；(2) 新增 `comparator_purity_check.py` 並掛進 gate_guard，使「C 軸進 query」之偏離今後一律被機器攔下（含 ⓪ 策略階段）；(3) selftest 加兩條自測證明守門有效且不誤報；(4) SEARCH_SPEC 補鐵律對齊。
 
 ✅ 已修：四軸展開（鐵律）第一版沒做、且既有 `axis_coverage_check` 只驗「query ≥1 同義詞」攔不到稀疏同義詞庫的 bug。本輪修改：(1) 把該案 g0_strategy.json 各軸同義詞補成完整四軸展開（成分 INN／開發代號／品牌／疾病別名）；(2) 新增 `axis_expansion_check.py` 直接稽核 g0.axes 同義詞庫「真的展開」（≥3 別名且含全文形式），掛進 gate_guard 於 ⓪ 策略階段生效；(3) selftest 加三條自測（兩 FAIL＋一防誤報）；(4) SEARCH_SPEC 補「四軸展開必須真的做」鐵律對齊。
+
+✅ 已修：待評估＝三管道全失敗才成立（補上漏掉的 step2 線上全文）。本輪修改：(1) 新增 `awaiting_channels_check.py`＋`check_awaiting_channels`：待評估須標 abstract_checked∧online_fulltext_checked∧unpaywall_checked∧channels_exhausted，『兩者皆無』須無任何 ID/OA；(2) ②c 重查本案 798 待評估補 step2（Europe PMC inEPMC/isOpenAccess/pmcid＋EPMC 摘要），救回 286→待評估降 512；(3) selftest 加「缺 online_fulltext_checked→FAIL／兩者皆無帶ID→FAIL／三管道全查盡→通過」；(4) SEARCH_SPEC 待評估鐵律改寫為明確三段管道序。
 
 ✅ 已修：待評估關責——澄清並機器化「待評估只在 ②c 產生、③ 必須二元」。本輪修改：(1) 新增 `awaiting_stage_check.py`＋`check_awaiting_stage`：③(g3) 出現待評估類字樣＝FAIL；(2) ②c 採「先摘要後全文」效率序，無全文且無摘要才路由待評估；(3) selftest 加「③誤生待評估→FAIL／③全二元→通過」；(4) SEARCH_SPEC 補鐵律並聲明取代先前散見「③待評估」寬鬆措辭；(5) 配合 abstract-first：`check_unpaywall_coverage` 加「有摘要即跳過」（有摘要＝已有可篩內容、②c 不在此抓全文、無『宣稱無全文』之虞；全文留待 ③ 後納入集 verify_have_fetchable），避免與「不對有摘要者抓全文」directive 打架。
 

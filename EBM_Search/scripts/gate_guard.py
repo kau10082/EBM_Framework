@@ -291,6 +291,17 @@ def check_strict_screen(cache):
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
 
+def check_awaiting_channels(cache):
+    """鐵律：待評估＝摘要／線上全文(PMC/EPMC)／Unpaywall 三管道全失敗才成立（②c）。"""
+    aw = _load(cache / "g2c_awaiting_classification.json")
+    if aw is None:
+        return None
+    try:
+        import awaiting_channels_check
+        return awaiting_channels_check.check(aw)
+    except Exception as e:
+        return [f"awaiting_channels_check 載入失敗：{str(e)[:80]}"]
+
 def check_awaiting_stage(cache):
     """鐵律：待評估只在 ②c(Stage A)產生；③(g3_FINAL_screen) 必須切題/離題二元，不得誤生待評估。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
@@ -463,6 +474,7 @@ def _all_checks(cache):
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
+            _safe("待評估三管道全失敗才成立(摘要/線上全文/Unpaywall)", check_awaiting_channels, cache),
             _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
             _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
             _safe("Gate③ 待評估須先核對全文(不得只憑摘要punt)", check_screen_awaiting_resolved, cache),

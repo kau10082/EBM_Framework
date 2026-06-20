@@ -207,6 +207,20 @@ def main():
     allok &= _assert_fires("Gate③ check_waiting_fulltext：有 oa_url 卻丟待評估", gate_guard.check_waiting_fulltext(tmp3))
     shutil.rmtree(tmp3, ignore_errors=True)
 
+    # 待評估三管道：有 ID 卻沒把線上全文查盡就 punt → FAIL；三管道全查盡 → 通過
+    import awaiting_channels_check
+    allok &= _assert_fires("待評估三管道（有ID但缺 online_fulltext_checked）",
+        awaiting_channels_check.check([{"paper_id":"A1","pmid":"123","reason":"待人工補全文",
+                                        "abstract_checked":True,"oa_fetch_attempted":True,"channels_exhausted":True}]))
+    allok &= _assert_fires("待評估『兩者皆無』卻帶 ID",
+        awaiting_channels_check.check([{"paper_id":"A2","doi":"10.1/x","reason":"兩者皆無","abstract_checked":True}]))
+    _acok = awaiting_channels_check.check([
+        {"paper_id":"A3","pmid":"9","reason":"待人工補全文","abstract_checked":True,
+         "online_fulltext_checked":True,"unpaywall_checked":True,"channels_exhausted":True},
+        {"paper_id":"A4","reason":"兩者皆無","abstract_checked":True}])
+    print(("  ✅" if not _acok else "  ❌") + " 待評估三管道：三管道全查盡應通過（防誤報）：" + ("通過" if not _acok else str(_acok)))
+    allok &= (not _acok)
+
     # 待評估關責：③(g3) 出現待評估 → FAIL（待評估只能在 ②c 產生）
     import awaiting_stage_check
     allok &= _assert_fires("③ 誤生待評估（待評估只能在②c）",
