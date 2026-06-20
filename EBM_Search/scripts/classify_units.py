@@ -51,6 +51,25 @@ R_SURVEY= re.compile(r"delphi|consensus (project|panel|exercise|document|stateme
 
 def has(pt,*w): return any(x.lower() in (pt or "").lower() for x in w)
 
+# 樞紐試驗『樣本數特徵』（無 NCT 的次級分析常只報藥名＋N＋作者）——保守連結用
+PIV_N = {"IMPACT":[10355],"FULFIL":[1810,1811],"ETHOS":[8588,8509,8572],"KRONOS":[1896,1902],
+         "TRILOGY":[1368,1367],"TRIBUTE":[1532],"TRINITY":[2691,2680]}
+ACR_ANY = re.compile(r"\b(IMPACT|ETHOS|KRONOS|FULFIL|TRILOGY|TRIBUTE|TRINITY|TRIVERSYTI|TRISTAR|INTREPID|TRIFORCE)\b(?!\s+(?:of|on)\b)")
+NUM_N = re.compile(r"(\d{1,2},?\d{3})\s*(?:patients|subjects|participants|were random|outpatients|symptomatic)", re.I)
+
+def sig_link(text):
+    """無 NCT 時，用『試驗縮寫(摘要全文)』或『樣本數特徵』保守連到母試驗；連不到回 None。"""
+    t=text or ""
+    m=ACR_ANY.search(t)
+    if m and re.search(r"trial|study|copd|exacerbation|patients|randomi", t, re.I):
+        return m.group(1).upper()
+    for x in NUM_N.findall(t):
+        try: n=int(x.replace(",",""))
+        except Exception: continue
+        for tr,Ns in PIV_N.items():
+            if any(abs(n-N)<=max(5,int(N*0.005)) for N in Ns): return tr
+    return None
+
 def detect_trial(text, nct_field, names=None):
     """以 NCT 為最可靠的 Study 鍵：任何出現的 NCT 都當一個 Study（已知樞紐→正式名；其餘→CT.gov 名或 NCT 本身）。
     無 NCT 才退回 word-boundary 試驗縮寫。names＝{NCT:顯示名}（NCT_TRIAL ＋ CT.gov 抓回的 nct_names）。"""
@@ -123,6 +142,9 @@ def classify(cache, out="g7_units.json"):
             if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 剔出核心
                 design="排除:非三合一介入RCT(他藥/雙合一)"; row["design"]=design
                 row["trial"]=trial; row["nct"]=key; buckets[design]+=1; rows.append(row); continue
+            if not trial:  # 無 NCT/縮寫上下文 → 試『縮寫(摘要)＋樣本數特徵』保守連結
+                sl=sig_link(text)
+                if sl: trial=sl; row["linked_by"]="signature"
             row["trial"]=trial or "(未辨識)"; row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
             row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
