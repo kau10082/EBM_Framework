@@ -40,6 +40,14 @@ R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|co
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
 R_DUAL  = re.compile(r"\blaba[\s/\-]?lama\b|\blama[\s/\-]?laba\b|dual bronchodilat|dual (long-acting )?bronchodilator|umeclidinium[\s/\-]?vilanterol|glycopyrr\w+[\s/\-]?formoterol|formoterol[\s/\-]?glycopyrr|indacaterol[\s/\-]?glycopyrr|tiotropium[\s/\-]?olodaterol|aclidinium[\s/\-]?formoterol|anoro|ultibro|stiolto|spiolto|duaklir|bevespi|two long-acting bronchodilator", re.I)
 R_TRIP  = re.compile(r"triple|ics[\s/\-]?laba[\s/\-]?lama|single[\s\-]?inhaler triple|trelegy|trimbow|breztri|trixeo|fostair|fluticasone furoate[\s/\-]?umeclidinium[\s/\-]?vilanterol|budesonide[\s/\-]?glycopyrr\w+[\s/\-]?formoterol|beclomet\w*[\s/\-]?formoterol[\s/\-]?glycopyrron", re.I)
+# RCT 次級/事後分析（隨機化在母試驗，摘要常無 randomized 字樣）——屬該試驗的『報告』，仍歸 RCT/Study
+R_RCT2ND= re.compile(r"post[\s\-]?hoc|responder analysis|pre[\s\-]?specified (analysis|subgroup|outcome)|subgroup analysis|exploratory (post|analysis|endpoint)|secondary (analysis|outcome analysis)|further analysis of|analysis of (the )?(impact|ethos|kronos|fulfil|trilogy|tribute|trinity|etwas)|analysis of (data from|pooled data from the)|of the (impact|ethos|kronos|fulfil|trilogy|tribute|trinity) (trial|study)", re.I)
+# 其他原始臨床研究設計詞（非隨機/小型臨床比較等）
+R_PRIM2 = re.compile(r"open[\s\-]?label|cross[\s\-]?over|clinical (trial|comparison)|we compared the|comparative (trial)|phase (i{1,3}|[1-4])\b|single[\s\-]?(centre|center) (study|trial)|multi[\s\-]?(centre|center) (study|trial)|treatment-na[iï]ve.{0,30}(study|trial)", re.I)
+# 藥學/裝置/方法學（背景）
+R_PHARM = re.compile(r"pulmonary deposition|lung deposition|in vitro|in-vitro|in silico|pharmacokinetic|pharmacodynamic|bioequivalence|bioavailability|aerosol|particle size|fine particle|device (performance|resistance|design|engineering)|dry powder inhaler (design|performance)|computational fluid|deposition (model|modeling|modelling)|usability|peak inspiratory flow|inhalation profile", re.I)
+# 共識/調查/觀點（背景）
+R_SURVEY= re.compile(r"delphi|consensus (project|panel|exercise|document|statement)|expert (opinion|panel|consensus|view)|perception|knowledge (and|of|on|gap)|attitude|questionnaire|cross-sectional survey|physician survey|survey of|inhaler technique|taste|quality improvement|implementation (of|science)|prescrib|practice pattern|unmet need", re.I)
 
 def has(pt,*w): return any(x.lower() in (pt or "").lower() for x in w)
 
@@ -77,13 +85,18 @@ def classify(cache, out="g7_units.json"):
         nct=u.get("nct","") or ""
         is_ct = ("ClinicalTrials.gov" in (u.get("sources") or [])) or bool(nct)
         # 設計判別（優先序）
+        trip_ctx = bool(R_TRIP.search(text))  # 與本題相關（含三合一）才把次級分析當試驗報告
         if has(pt,"Meta-Analysis","Systematic Review") or R_SRMA.search(text): design="背景:SR/MA/network-meta"
         elif has(pt,"Guideline","Practice Guideline") or R_GUIDE_TITLE.search(title): design="背景:指引"
         elif R_PROTO.search(text) and not R_RCT.search(ab): design="進行中/試驗計畫書"
         elif has(pt,"Randomized Controlled Trial","Controlled Clinical Trial") or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
+        elif trip_ctx and R_RCT2ND.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 試驗事後/次級分析＝該試驗報告
         elif is_ct and not ab: design="進行中/登錄試驗(CT.gov)"
         elif has(pt,"Observational Study") or R_OBS.search(text): design="背景:觀察性/真實世界"
+        elif trip_ctx and R_PRIM2.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 其他原始臨床研究設計
         elif R_ECON.search(text): design="背景:經濟評估"
+        elif R_PHARM.search(text): design="背景:藥學/裝置/方法學"
+        elif R_SURVEY.search(text): design="背景:共識/調查/觀點"
         elif R_REVIEW.search(text): design="背景:綜述/其他次級"
         else: design="背景:其他(未分型,待人工)"
         row={"uid":uid,"title":title,"pmid":v.get("pmid",""),"doi":v.get("doi",""),

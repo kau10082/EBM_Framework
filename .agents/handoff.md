@@ -39,6 +39,8 @@
 
 ✅ 已修：四軸展開（鐵律）第一版沒做、且既有 `axis_coverage_check` 只驗「query ≥1 同義詞」攔不到稀疏同義詞庫的 bug。本輪修改：(1) 把該案 g0_strategy.json 各軸同義詞補成完整四軸展開（成分 INN／開發代號／品牌／疾病別名）；(2) 新增 `axis_expansion_check.py` 直接稽核 g0.axes 同義詞庫「真的展開」（≥3 別名且含全文形式），掛進 gate_guard 於 ⓪ 策略階段生效；(3) selftest 加三條自測（兩 FAIL＋一防誤報）；(4) SEARCH_SPEC 補「四軸展開必須真的做」鐵律對齊。
 
+✅ 已修：⑦「未分型」過多——改用三段 cascade 分析（摘要→全文→Unpaywall）。使用者指出進到 ⑦ 的都該有摘要/全文可分析、不該未分型。查證：281「未分型」中 259 其實有摘要，只是 classifier pattern 太窄（漏了 RCT 事後/次級分析〔post hoc/responder/subgroup/「analysis of the X trial」→應歸該試驗報告〕、藥學/裝置/方法學、共識/調查、其他原始臨床設計）。本輪修改：(1) `classify_units.py` 大幅擴充摘要 pattern（step1）→未分型 281→140；(2) 對殘餘以 EuropePMC/PMC fullTextXML 補全文再分類（step2）→140→129；(3) Unpaywall PDF（step3）本沙箱無 parser、env-limited。結果：未分型 281→129、title-only 33（22 為 OA-PDF env-limited）。核心 9 個樞紐 RCT Study 始終穩定。註：擴充 RCT 次級分析偵測會使「未辨識試驗名」RCT 報告增加（次級分析常不寫試驗名）→ 屬待人工連結，據實申報。
+
 ✅ 已修：②c『有全文』未 materialize 內容→⑦ 未辨識。本輪修改：(1) 批次補抓 499 筆摘要(OpenAlex/Crossref/EPMC/PMC)、citation-arm 19 筆存 `g4_abstracts.json`；(2) `classify_units.py` 加讀 `g4_abstracts.json` 作 citation-arm fallback；(3) ⑦ title-only 由 ~54→22（全為 OA-PDF，本沙箱無 PDF parser、本機可解，誠實申報）。教訓＝②c 標「有全文」必須真的抓回摘要/全文（abstract-first 批次），不可只信 OA 旗標。
 
 ✅ 已做：⑦ 決定納入單位改為核對『標題＋摘要(方法學)』精確分類（committed `classify_units.py`）。本輪修改：(1) 新增可重用腳本，設計優先序＋NCT/word-boundary 試驗歸併＋對照臂 LABA/LAMA 判別；(2) SEARCH_SPEC 補 ⑦ 分類鐵律。實測：指引 226→27、IMPACT 59→34，核心三合一 vs LABA/LAMA Study 清楚辨識，殘餘據實標待人工。注意：classify_units.py 屬分類輔助、目前無對應 selftest（判別為啟發式、結果本就標 rapid-review 待人工覆核）；審查可評估是否需為其關鍵分支補 selftest。
