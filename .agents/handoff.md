@@ -61,6 +61,8 @@
 
 ✅ 已修（(O) 2026-06 使用者：Phase0 為何有 none 9）：計畫書被誤映成排除。本輪修改：(1) INTEGRATION.md 映射表補背景catch-all→light_summary＋「交接層不得自動產生 none(排除)、none 僅留 Phase0 親判 off-topic」鐵律（對齊 ⑤b 不剔除）；(2) cache build_seed.py 計畫書→light_summary；(3) _corpus_seed.json/_corpus.json 9 筆 none→light_summary，validate p0 通過。教訓＝『切題後不剔除』要一路貫徹到交接/Analysis 映射，背景(含 protocol/進行中試驗)＝light_summary 不是 none。
 
+✅ 已修（(K) 2026-06 使用者：④→⑥→⑦ 跳號）：SEARCH_SPEC 內部兩套編號並存。本輪修改：(1) 加「管線步驟編號（定版，唯一權威）」清單＝④引文追蹤→⑤收斂後處理〔⑤a交叉驗證/⑤b決定納入單位/⑤c Zotero/⑤d人工補全文〕→⑥三表+PDF→⑦交接包；(2) 修四處舊編號（L32/L60/L74/L79）；(3) 同步修 SKILL.md 收尾行。純文件一致化，不動 gate/腳本（commit 8cbbe17）。教訓＝交叉驗證與決定納入單位是 ⑤ 子步、非 ⑥/⑦。
+
 ✅ 已修（(N) 2026-06 使用者：欄位資訊多缺、須檢核機制）：補全＋欄位 gate。本輪修改：(1) `backfill_ids.py` 交叉填補 PMID/DOI（OpenAlex→PubMed esummary→esearch→Crossref title），128 筆→100 有PMID/123 有DOI/fetch_failed=0，殘缺為會議摘要 source_none；(2) `report_check.py` 段4 加欄位檢核：每格不得空/曖昧『缺』(缺值標『無』)、驗證欄須含○(≥1 索引確認存在性)、id_backfill.fetch_failed>0→FAIL；(3) selftest 加四條回歸→全綠；(4) 本案重產 PDF：0 列空缺/無○，gate 全綠。對齊 AGENTS.md 資料表硬規則(區分來源無 vs 抓取失敗)。
 
 ✅ 已做（(M) 2026-06 使用者定版）：search PDF 縮為 5 核心段落。本輪修改：(1) `build_search_pdf.py` 改渲染 5 段（檢索基本參數／具體檢索策略真實字串／PRISMA 流程數據＋圖／最終納入清單[研究名·標題·DOI·PMID·驗證]／進行中試驗[登錄號·標題]）；(2) `report_check.py` 改 5 段制稽核（日期到日、真實布林字串、納入清單欄位、進行中表、PRISMA+二分閉合）；(3) selftest fixtures 更新為 5 段、全綠；(4) 本案產出 8 頁 PDF（核心 RCT 4 Study/62 報告＋SR/MA 66＋進行中 16 試驗），gate_guard 全綠。註：背景表不在 5 段 PDF 內（背景仍保存於 corpus_seed/Zotero，僅不渲染進此 PDF）。
