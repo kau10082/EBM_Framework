@@ -51,17 +51,21 @@ R_SURVEY= re.compile(r"delphi|consensus (project|panel|exercise|document|stateme
 
 def has(pt,*w): return any(x.lower() in (pt or "").lower() for x in w)
 
-def detect_trial(text, nct_field):
-    for m in NCTRE.findall(text or ""):
-        key=m.upper().replace("NCT0","NCT") if False else m.upper()
-        key="NCT"+re.sub(r"\D","",key)
-        if key in NCT_TRIAL: return NCT_TRIAL[key], key
-    if nct_field:
-        key="NCT"+re.sub(r"\D","",nct_field)
-        if key in NCT_TRIAL: return NCT_TRIAL[key], key
+def detect_trial(text, nct_field, names=None):
+    """以 NCT 為最可靠的 Study 鍵：任何出現的 NCT 都當一個 Study（已知樞紐→正式名；其餘→CT.gov 名或 NCT 本身）。
+    無 NCT 才退回 word-boundary 試驗縮寫。names＝{NCT:顯示名}（NCT_TRIAL ＋ CT.gov 抓回的 nct_names）。"""
+    names = names or NCT_TRIAL
+    ncts=["NCT"+re.sub(r"\D","",m) for m in NCTRE.findall(text or "")]
+    if nct_field: ncts.append("NCT"+re.sub(r"\D","",nct_field))
+    # 已知樞紐試驗優先（給穩定正式名）
+    for k in ncts:
+        if k in NCT_TRIAL: return NCT_TRIAL[k], k
+    # 其餘任何 NCT → 自成一個 Study（鍵＝NCT，顯示名取 CT.gov 名或 NCT）
+    for k in ncts:
+        return names.get(k, k), k
     m=ACR.search(text or "")
     if m and TRIALCTX.search(text or ""): return m.group(1).upper(), ""
-    return None, (("NCT"+re.sub(r"\D","",nct_field)) if nct_field else "")
+    return None, ""
 
 def classify(cache, out="g7_units.json"):
     cache=Path(cache)
@@ -74,6 +78,18 @@ def classify(cache, out="g7_units.json"):
     if p4.exists():
         try: g4ab=json.loads(p4.read_text(encoding="utf-8"))
         except Exception: g4ab={}
+    # NCT→顯示名（CT.gov 抓回的 nct_names.json）＋已知樞紐，供 detect_trial 將任何 NCT 歸為 Study
+    names=dict(NCT_TRIAL)
+    pn=cache/"nct_names.json"
+    if pn.exists():
+        try: names.update({k:v for k,v in json.loads(pn.read_text(encoding="utf-8")).items() if k not in NCT_TRIAL})
+        except Exception: pass
+    # 以 CT.gov 介入判定的『非三合一試驗』NCT 集合：這些 NCT 的 RCT 報告＝介入非三合一→剔出核心
+    nontriple=set()
+    pt2=cache/"nct_triple.json"
+    if pt2.exists():
+        try: nontriple=set(json.loads(pt2.read_text(encoding="utf-8")).get("nontriple_nct",[]))
+        except Exception: pass
     from collections import Counter, defaultdict
     buckets=Counter(); studies=defaultdict(list); rows=[]; title_only=0
     for v in ver:
@@ -103,7 +119,10 @@ def classify(cache, out="g7_units.json"):
              "arm":v.get("arm"),"design":design,"abstract_available":bool(ab)}
         if design=="原始研究:RCT":
             trip=bool(R_TRIP.search(text)); dual=bool(R_DUAL.search(text))
-            trial,key=detect_trial(text,nct)
+            trial,key=detect_trial(text,nct,names)
+            if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 剔出核心
+                design="排除:非三合一介入RCT(他藥/雙合一)"; row["design"]=design
+                row["trial"]=trial; row["nct"]=key; buckets[design]+=1; rows.append(row); continue
             row["trial"]=trial or "(未辨識)"; row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
             row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
