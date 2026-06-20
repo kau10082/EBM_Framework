@@ -47,7 +47,7 @@ def _safe(t):
 
 def build(infile, out, font=None):
     data = json.loads(Path(infile).read_text(encoding="utf-8"))
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
@@ -65,8 +65,9 @@ def build(infile, out, font=None):
             ("GRID",(0,0),(-1,-1),0.4,colors.grey),("VALIGN",(0,0),(-1,-1),"TOP"),
             ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#d9e6f2")),
             ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f4f7fb")])])
-    out=str(out); doc=SimpleDocTemplate(out,pagesize=A4,topMargin=14*mm,bottomMargin=13*mm,leftMargin=13*mm,rightMargin=13*mm)
-    W=A4[0]-26*mm; S=[]
+    PG=landscape(A4)  # ★ A4 橫向(容寬表，對齊 SEARCH_SPEC『A4 橫向容寬表』與範本)
+    out=str(out); doc=SimpleDocTemplate(out,pagesize=PG,topMargin=12*mm,bottomMargin=12*mm,leftMargin=12*mm,rightMargin=12*mm)
+    W=PG[0]-24*mm; S=[]
     legs=data.get("legs",[]); pf=data.get("prisma_flow",{}); exc=data.get("excluded",{})
     # 1 title
     S.append(P("<b>EBM 檢索報告</b>",15,sp=2))
