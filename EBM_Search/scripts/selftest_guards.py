@@ -207,6 +207,14 @@ def main():
     allok &= _assert_fires("Gate③ check_waiting_fulltext：有 oa_url 卻丟待評估", gate_guard.check_waiting_fulltext(tmp3))
     shutil.rmtree(tmp3, ignore_errors=True)
 
+    # 待評估關責：③(g3) 出現待評估 → FAIL（待評估只能在 ②c 產生）
+    import awaiting_stage_check
+    allok &= _assert_fires("③ 誤生待評估（待評估只能在②c）",
+        awaiting_stage_check.check([{"uid":"u1","verdict":"待評估","title":"x"}]))
+    _asok = awaiting_stage_check.check([{"uid":"u1","verdict":"切題"},{"uid":"u2","verdict":"離題"}])
+    print(("  ✅" if not _asok else "  ❌") + " 待評估關責：③ 全為切題/離題應通過（防誤報）：" + ("通過" if not _asok else str(_asok)))
+    allok &= (not _asok)
+
     # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
     tmp2 = Path(tempfile.mkdtemp())
     json.dump([{"uid":"u1","verdict":"切題"}], io.open(tmp2/"g3_FINAL_screen.json","w",encoding="utf-8"))

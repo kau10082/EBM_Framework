@@ -289,6 +289,17 @@ def check_strict_screen(cache):
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
 
+def check_awaiting_stage(cache):
+    """鐵律：待評估只在 ②c(Stage A)產生；③(g3_FINAL_screen) 必須切題/離題二元，不得誤生待評估。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None
+    try:
+        import awaiting_stage_check
+        return awaiting_stage_check.check(g3)
+    except Exception as e:
+        return [f"awaiting_stage_check 載入失敗：{str(e)[:80]}"]
+
 def check_screen_order(cache):
     """Bug3：③嚴格篩(g3)不得早於②c全文取得(g2c)與 Stage A 交接(_stage1_corpus)。
     見 g3_FINAL_screen.json 卻缺前置產物＝順序顛倒。"""
@@ -445,6 +456,7 @@ def _all_checks(cache):
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
+            _safe("待評估只在②c(③不得誤生待評估)", check_awaiting_stage, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
