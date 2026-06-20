@@ -291,6 +291,17 @@ def check_strict_screen(cache):
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
 
+def check_citation_screen(cache):
+    """鐵律：④ 引文追蹤新候選須批次抓摘要、以『標題＋摘要』高敏初篩，嚴禁只憑標題丟（Cochrane 紅線）。"""
+    g4 = _load(cache / "g4_citation_tracking.json")
+    if g4 is None:
+        return None
+    try:
+        import citation_screen_check
+        return citation_screen_check.check(g4)
+    except Exception as e:
+        return [f"citation_screen_check 載入失敗：{str(e)[:80]}"]
+
 def check_awaiting_channels(cache):
     """鐵律：待評估＝摘要／線上全文(PMC/EPMC)／Unpaywall 三管道全失敗才成立（②c）。"""
     aw = _load(cache / "g2c_awaiting_classification.json")
@@ -471,6 +482,7 @@ def _all_checks(cache):
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("待評估只在②c(③不得誤生待評估)", check_awaiting_stage, cache),
             _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
+            _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
             _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),

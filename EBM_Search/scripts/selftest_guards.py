@@ -207,6 +207,16 @@ def main():
     allok &= _assert_fires("Gate③ check_waiting_fulltext：有 oa_url 卻丟待評估", gate_guard.check_waiting_fulltext(tmp3))
     shutil.rmtree(tmp3, ignore_errors=True)
 
+    # ④ 引文追蹤篩選方式：只憑標題丟棄 → FAIL；批次抓摘要+標題摘要篩 → 通過
+    import citation_screen_check
+    allok &= _assert_fires("④ 只憑標題丟棄新候選（Cochrane 紅線）",
+        citation_screen_check.check({"screening_method":"title-only",
+            "rounds":[{"round":1,"screened_on":"title-only","new_with_id":100,"abstracts_fetched":0,"title_only_dropped":80}]}))
+    _cs = citation_screen_check.check({"screening_method":"title+abstract (batch)",
+            "rounds":[{"round":1,"screened_on":"title+abstract","new_with_id":100,"abstracts_fetched":95,"title_only_dropped":0}]})
+    print(("  ✅" if not _cs else "  ❌") + " ④ 批次抓摘要+標題摘要篩應通過（防誤報）：" + ("通過" if not _cs else str(_cs)))
+    allok &= (not _cs)
+
     # 待評估三管道：有 ID 卻沒把線上全文查盡就 punt → FAIL；三管道全查盡 → 通過
     import awaiting_channels_check
     allok &= _assert_fires("待評估三管道（有ID但缺 online_fulltext_checked）",
