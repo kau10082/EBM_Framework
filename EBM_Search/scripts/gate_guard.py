@@ -36,10 +36,34 @@ def _active(cache):
     """檢索是否進行中：唯有哨兵旗標存在才讓 Stop hook 生效（避免全域每回合打擾）。"""
     return cache is not None and (cache / ACTIVE_FLAG).exists()
 
+def _find_active_cache_by_flag(roots=None):
+    """掃描 repo 內 EBM_Search/cache/*/ 找帶哨兵旗標 _search_active.flag 的『進行中』檢索 cache。
+    這是 Stop hook（無 --cache）最可攜、最可靠的發現方式：哨兵旗標本身就是『此 cache 有檢索進行中』
+    的地真值，與 run_state／env／OneDrive 路徑無關（後三者在 fresh-clone／手機／非 Windows 常常解析不到，
+    會讓 hook 找不到 cache → 靜默 exit 0 → 守門等同失效）。多個進行中時取最近修改者（最可能是當前這輪）。"""
+    if roots is None:
+        here = Path(__file__).resolve().parent          # EBM_Search/scripts
+        roots = [here.parent / "cache"]                 # EBM_Search/cache
+    cands = []
+    for root in roots:
+        try:
+            if Path(root).is_dir():
+                for f in Path(root).glob("*/" + ACTIVE_FLAG):
+                    cands.append(f.parent)
+        except Exception:
+            pass
+    if not cands:
+        return None
+    return max(cands, key=lambda d: (d / ACTIVE_FLAG).stat().st_mtime)
+
 def _find_cache(explicit=None):
     if explicit and Path(explicit).exists():
         return Path(explicit)
-    # 從 EBM run_state 解析 cache_dir
+    # 優先：掃哨兵旗標找『進行中』cache（可攜、不依賴 run_state/env/OneDrive；Stop hook 無 --cache 時的主幹）
+    flagged = _find_active_cache_by_flag()
+    if flagged is not None:
+        return flagged
+    # 其次：從 EBM run_state 解析 cache_dir
     try:
         import run_state
         st = run_state.load() or {}
@@ -48,7 +72,7 @@ def _find_cache(explicit=None):
             return Path(cd)
     except Exception:
         pass
-    # 退而求其次：env / 預設 OneDrive 文件
+    # 再退而求其次：env / 預設 OneDrive 文件
     for cand in [os.environ.get("EBM_CACHE_DIR"),
                  os.path.expanduser(r"~/OneDrive/文件/EBM_Framework/work/cache")]:
         if cand and Path(cand).exists():

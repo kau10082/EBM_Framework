@@ -225,6 +225,21 @@ def main():
     allok &= (not _nv)
     shutil.rmtree(tmp2, ignore_errors=True)
 
+    # Stop hook 可攜發現：掃哨兵旗標找『進行中』cache（修復前 _find_cache(None) 在非 Windows／無 run_state
+    # 會回 None → hook 靜默 exit 0 → 守門等同失效；本測證明改用旗標掃描後找得到，且無旗標時休眠）
+    tmpd = Path(tempfile.mkdtemp())
+    (tmpd/"flagged").mkdir(); (tmpd/"flagged"/gate_guard.ACTIVE_FLAG).write_text("")
+    (tmpd/"noflag").mkdir()
+    _found = gate_guard._find_active_cache_by_flag(roots=[tmpd])
+    _ok = (_found is not None and _found.name == "flagged")
+    print(("  ✅" if _ok else "  ❌") + " Stop hook 旗標發現：找到帶旗標的進行中 cache：" + ("通過" if _ok else f"FAIL({_found})"))
+    allok &= _ok
+    (tmpd/"flagged"/gate_guard.ACTIVE_FLAG).unlink()
+    _none = gate_guard._find_active_cache_by_flag(roots=[tmpd])
+    print(("  ✅" if _none is None else "  ❌") + " 無旗標→回 None（hook 休眠、全域零打擾）：" + ("通過" if _none is None else str(_none)))
+    allok &= (_none is None)
+    shutil.rmtree(tmpd, ignore_errors=True)
+
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))
     sys.exit(0 if allok else 1)
 
