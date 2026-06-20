@@ -16,6 +16,7 @@
   - (b) 反之『有 OA 旗標就強迫進③』也不對——會把防爬蟲擋住、真讀不到者硬塞進③無內容可篩；故以**實際讀取嘗試**為準。
   legit『待人工補全文』＝有路徑但實際讀不到（已試）或僅 ID 無 OA 路徑（真付費牆）。
 **實作（本案）**：寫 `read_fulltext.py` 真的線上抓全文——PMC: `efetch db=pmc` 抽 `<body>`；OA: 抓 HTML 抽正文。596 筆中**實際讀到 263**（237 PMC-XML＋26 OA-HTML）→進③用**真全文**篩（切題 416→**468**，全文比摘要命中更多 P∧I∧C）；**333 真讀不到**（238 非OA-PMC citation-only＋95 防爬蟲/僅PDF）→awaiting 待人工補全文（標 `online_read_attempted`）。awaiting 由 628→**365**（341 待人工補全文＋24 兩者皆無）。讀到全文者寫 `g3_fetched_by_uid.json` 過反坍縮 provenance。selftest 加：pmcid 列待評估但未試讀→FAIL、已試讀仍讀不到→通過、僅ID無OA→通過。
+  - **(K) 管線步驟編號不一致（spec 內兩套並存、相差一號）**：使用者發現「為何引文追蹤是 ④，下一步卻跳成 ⑥、⑦」。查證屬實＝SEARCH_SPEC 內部有兩套編號並存：**權威的詳細停頓點**＝④引文追蹤→⑤收斂後處理(Zotero+人工補全文)→⑥三表+PDF→⑦交接包；但散見幾行**舊草編號**把『交叉驗證』標 ⑥、『決定納入單位』標 ⑦、甚至把『引文追蹤』標 ⑤（Stage B 定義行 L74、關責不外溢行 L79、撤稿管控行 L60、③登錄判軸行 L32）。**修法**：(1) 在 ⑤ 區塊頂加「**管線步驟編號（定版，唯一權威）**」單一清單——④引文追蹤→⑤收斂後處理〔⑤a交叉驗證(存在性+撤稿)、⑤b決定納入單位(classify_units)、⑤c Zotero、⑤d人工補全文〕→⑥三表+PDF→⑦交接包；明示交叉驗證/決定納入單位＝⑤ 子步、非 ⑥/⑦；(2) 把 L32/L60/L74/L79 四處舊編號改齊（交叉驗證→⑤a、決定納入單位→⑤b、引文追蹤→④、三表PDF→⑥、交接包→⑦）；(3) 同步修 `.claude/skills/ebm-search/SKILL.md` 收尾行（⑦三表+PDF→⑥三表+PDF、⑦交接包）。**純文件編號一致化，不動任何 gate/腳本邏輯。**
 - **動到哪些檔（本輪審查範圍：僅以下檔案）**：
   1. `EBM_Search/scripts/comparator_purity_check.py`（新增；(A) 核心判定）
   2. `EBM_Search/scripts/axis_expansion_check.py`（新增；(B) 核心判定）
@@ -26,7 +27,8 @@
   7. `EBM_Search/scripts/build_stage1_corpus.py`（(F) 改為依 ②c `class` 忠實分流，不再憑有無摘要重推；awaiting reason 以明確 reason 為準）
   8. `EBM_Search/scripts/citation_screen_check.py`（新增；(G) 核心判定）
   9. `EBM_Search/scripts/classify_units.py`（新增＋更新；(H) ⑦ 以標題＋摘要精確分類；(I) 加讀 g4_abstracts.json 補 citation-arm 摘要）
-  10. `EBM_Search/SEARCH_SPEC.md`（補「四軸展開」「對照軸純度」「Stop hook 必須找得到 cache」「待評估只在②c」「待評估＝三管道全失敗」「引文追蹤須標題+摘要批次篩」「⑦分類須讀標題+摘要」七條鐵律/規範，對齊已落地 gate/腳本）
+  10. `EBM_Search/SEARCH_SPEC.md`（補「四軸展開」「對照軸純度」「Stop hook 必須找得到 cache」「待評估只在②c」「待評估＝三管道全失敗」「引文追蹤須標題+摘要批次篩」「⑦分類須讀標題+摘要」七條鐵律/規範，對齊已落地 gate/腳本；**(K) 加「管線步驟編號（定版）」單一權威清單、修 L32/L60/L74/L79 四處舊編號**）
+  11. `.claude/skills/ebm-search/SKILL.md`（(K) 收尾行步驟編號改齊：⑥三表+PDF、⑦交接包）
 - **fresh-clone／實跑結果**：
   - `python selftest_guards.py` → 全綠（含 (A)(B) 各自 FAIL/防誤報、(C)「旗標 cache 找得到→通過」「無旗標→回 None 休眠」），結尾「✅ 全部守門有效。」
   - (C) 實證：修復前 `gate_guard._find_cache(None)` 回 `None`、`--auto --hook` 在本案進行中 cache 上仍 exit 0（dormant）；修復後 `_find_cache(None)` 正確回 `…/cache/triple_vs_dual_copd`，且對「帶旗標＋故意壞 g0」的暫時 cache 跑 `--auto --hook` → **exit 2（正確擋下）**。
@@ -39,6 +41,8 @@
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+✅ 已修（(K) 2026-06 使用者指出 ④→⑥→⑦ 跳號）：SEARCH_SPEC 內部兩套編號並存。本輪修改：(1) 加「管線步驟編號（定版，唯一權威）」清單＝④引文追蹤→⑤收斂後處理〔⑤a交叉驗證/⑤b決定納入單位/⑤c Zotero/⑤d人工補全文〕→⑥三表+PDF→⑦交接包；(2) 修四處舊編號（L32/L60/L74/L79）使交叉驗證=⑤a、決定納入單位=⑤b、引文追蹤=④、三表PDF=⑥、交接包=⑦；(3) 同步修 SKILL.md 收尾行。純文件一致化，不動 gate/腳本。教訓＝交叉驗證與決定納入單位是 ⑤ 的子步、不是獨立的 ⑥/⑦；⑥/⑦ 固定為「三表+PDF」「交接包」。
 
 ✅ 已修（(J) 2026-06 重跑第二次糾正，兩段式）：線上全文之分流以『**我能否線上閱讀到全文**』為準。本輪修改：(1) `gate_guard.check_screen_awaiting_resolved`：awaiting 帶已確認線上全文/OA 路徑(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa)者，須附 `online_read_attempted`（實際試讀失敗）才合法，否則 FAIL；(2) selftest 加四條回歸（pmcid/inEPMC 列待評估未試讀→FAIL、已試讀讀不到→通過、僅ID無OA→通過）→全綠；(3) 本案寫 `read_fulltext.py` 真的線上抓全文（PMC `efetch db=pmc` 抽 `<body>`、OA HTML 抽正文，免 PDF parser），596 筆讀到 263→進③用真全文篩（切題 416→468）、333 真讀不到→awaiting；awaiting 628→365。教訓＝別用『沙箱無 PDF parser』當藉口——PMC/EPMC fullTextXML 與 OA HTML 是純文字/XML，免 PDF 工具即可線上閱讀；只有防爬蟲/僅PDF/非OA 才真讀不到。
 

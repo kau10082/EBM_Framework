@@ -43,4 +43,4 @@ python EBM_Search/scripts/gate_guard.py --cache <cache_dir>
 （這條對齊 `SEARCH_SPEC.md` ★執行規範「機器守門優先於記性」；於啟動器重申，確保手機/遠端也照做。）
 
 ## 收尾：接力進 EBM 評讀
-依規格 Phase 1 ⑦：三表＋PDF 交付後，寫交接包 `_corpus_seed.json`（`python EBM_Search/scripts/build_corpus_seed.py …`）到全文資料夾，**停下問「是否繼續進入 EBM 分析？」**。使用者回「**繼續／是**」→ 進入 **ebm-analysis**（讀 `EBM_Analysis/ANALYSIS_SPEC.md`，用交接包預填 Phase 0）。整合契約與流程見 [`INTEGRATION.md`](../../../INTEGRATION.md)。
+依規格 Phase 1 ⑥：三表＋PDF 交付後，⑦ 寫交接包 `_corpus_seed.json`（`python EBM_Search/scripts/build_corpus_seed.py …`）到全文資料夾（編號依 SEARCH_SPEC「管線步驟編號（定版）」：④引文追蹤→⑤收斂後處理〔⑤a交叉驗證/⑤b決定納入單位/⑤c Zotero/⑤d人工補全文〕→⑥三表+PDF→⑦交接包），**停下問「是否繼續進入 EBM 分析？」**。使用者回「**繼續／是**」→ 進入 **ebm-analysis**（讀 `EBM_Analysis/ANALYSIS_SPEC.md`，用交接包預填 Phase 0）。整合契約與流程見 [`INTEGRATION.md`](../../../INTEGRATION.md)。
