@@ -48,6 +48,8 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
+✅ 已修（(P) 2026-06）：`EBM_Analysis/run_state.json` 未被 gitignore → Stop hook 抓到未追蹤檔。run_state 是執行期狀態（含本機絕對路徑、per-run），同 cache/outputs 屬本機不共享產物，補進 `EBM_Analysis/.gitignore`。另：analysis 端 render_smoketest 依賴 pypdf→cryptography，本沙箱該套件 panic（環境限制）→ 改以 pymupdf 核實 FINAL_REPORT.pdf（無磚塊字、SoF 含全因死亡+SAE、章節完整）；analysis_gate（只驗 PDF 存在≥10KB）通過。屬環境限制非方法學缺陷。
+
 ✅ 已修（(O) 2026-06 使用者：Phase0 為何有 none 9）：計畫書被誤映成排除。本輪修改：(1) INTEGRATION.md 映射表補背景catch-all→light_summary＋「交接層不得自動產生 none(排除)、none 僅留 Phase0 親判 off-topic」鐵律（對齊 ⑤b 不剔除）；(2) cache build_seed.py 計畫書→light_summary；(3) _corpus_seed.json/_corpus.json 9 筆 none→light_summary，validate p0 通過。教訓＝『切題後不剔除』要一路貫徹到交接/Analysis 映射，背景(含 protocol/進行中試驗)＝light_summary 不是 none。
 
 ✅ 已修（(N) 2026-06 使用者：欄位資訊多缺、須檢核機制）：補全＋欄位 gate。本輪修改：(1) `backfill_ids.py` 交叉填補 PMID/DOI（OpenAlex→PubMed esummary→esearch→Crossref title），128 筆→100 有PMID/123 有DOI/fetch_failed=0，殘缺為會議摘要 source_none；(2) `report_check.py` 段4 加欄位檢核：每格不得空/曖昧『缺』(缺值標『無』)、驗證欄須含○(≥1 索引確認存在性)、id_backfill.fetch_failed>0→FAIL；(3) selftest 加四條回歸→全綠；(4) 本案重產 PDF：0 列空缺/無○，gate 全綠。對齊 AGENTS.md 資料表硬規則(區分來源無 vs 抓取失敗)。
