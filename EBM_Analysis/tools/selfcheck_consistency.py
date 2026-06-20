@@ -60,6 +60,17 @@ def check(syn=None):
         rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
         if re.search(r"\b(RR|OR)\b", rel) and re.search(r"NNT[BH]?", ae) and not re.search(r"CI|到|—|–", ae):
             fails.append(f"C6 SoF「{(o.get('outcome') or '')[:20]}」二分類絕對效應給了 NNT 但缺 95% CI（須由相對效應 CI 代入 ACR 回推）")
+    # C6b: 相對＋絕對並列鐵則（sof_table Ch14 §14.1.5）——二分類/時間事件結局（相對效應含 RR/OR/HR）
+    #      其絕對效應欄必須給『具體絕對量』：每千人自然頻率 或 NNTB/NNTH 或 率差/風險差(帶數字)；
+    #      不得只給相對效應、或只寫「絕對值依基線」等無數字的空話。誠實申報『無法可靠估計(事件極少/CI不明)』者放行。
+    for o in (syn.get("sof") or []):
+        rel = o.get("relative_effect") or ""; ae = o.get("absolute_effect") or ""
+        if re.search(r"\b(RR|OR|HR)\b", rel):
+            has_abs = bool(re.search(r"NNT[BH]|/\s*1000|每\s*1?\s*000|每\s*\d|百分點|率差|風險差|\bRD\b|\d+\s*%|\bmL\b", ae)) and bool(re.search(r"\d", ae))
+            honest = bool(re.search(r"無法.{0,4}(估|計)|不明|事件.{0,3}極少|待全文|無法可靠", ae))
+            if not has_abs and not honest:
+                fails.append(f"C6b SoF「{(o.get('outcome') or '')[:20]}」二分類/時間事件僅給相對效應，缺『絕對效應』"
+                             f"（每千人自然頻率／NNTB/NNTH／率差，須帶數字）——sof_table 鐵則：相對＋絕對並列，不得以『依基線』空話帶過")
     # C7: 運算覆驗——由相對效應＋ACR 重算 RD/NNT/CI，與報告所寫比對（不再只信手抄）
     try:
         import absrisk
