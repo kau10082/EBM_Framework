@@ -25,6 +25,20 @@ NCT_TRIAL = {
     "NCT01917331":"TRILOGY","NCT02579850":"TRIBUTE","NCT01911364":"TRINITY","NCT03478683":"ETHOS-ext",
     "NCT03142362":"FULFIL-ext","NCT04636437":"TRIVERSYTI",
 }
+# 樞紐試驗『是否含 LABA/LAMA 雙支擴對照臂』＝核心/非核心的權威 trial-level 事實（curated，與 NCT_TRIAL 同性質）。
+# 核心/非核心是『試驗設計』屬性、非『單篇報告摘要』屬性——逐報告以 regex 判 dual 會因子報告未重述對照臂而飄移
+# （2026-06 使用者糾正：ETHOS 假陰、FULFIL/TRILOGY/TRINITY 假陽）。故對已知樞紐試驗以此權威表定案，
+# 非樞紐試驗才回退 regex(已含分隔符正規化＋遮蔽三合一藥名跨度)。
+PIVOTAL_LABALAMA_ARM = {        # 三合一 vs LABA/LAMA：確有雙支擴對照臂 → 核心
+    "IMPACT": True,   # FF/UMEC/VI vs UMEC/VI(LABA/LAMA) ＋ FF/VI(ICS/LABA)
+    "ETHOS":  True,   # BGF vs GFF(glycopyrrolate/formoterol＝LAMA/LABA) ＋ BFF(ICS/LABA)
+    "KRONOS": True,   # BGF vs GFF(LAMA/LABA) ＋ BFF ＋ BUD/FORM(ICS/LABA)
+    "TRIBUTE":True,   # BDP/FF/G vs IND/GLY(LABA/LAMA)
+    "TRIVERSYTI":True,
+    "FULFIL": False,  # vs BUD/FORM(ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)
+    "TRILOGY":False,  # vs BDP/FF(ICS/LABA) 唯一對照 → 非核心
+    "TRINITY":False,  # vs tiotropium(LAMA 單方) ＋ open-triple → 非核心(對照非 LABA/LAMA 雙支擴)
+}
 ACR = re.compile(r"\b(IMPACT|ETHOS|KRONOS|FULFIL|TRILOGY|TRIBUTE|TRINITY|TRIVERSYTI|TRISTAR)\b(?!\s+(?:of|on|study population)\b)")
 TRIALCTX = re.compile(r"\b(trial|study|randomi[sz]ed|cohort|programme|program)\b", re.I)
 NCTRE = re.compile(r"NCT0?\d{6,8}", re.I)
@@ -34,12 +48,35 @@ R_SRMA  = re.compile(r"meta-?analys|systematic review|we searched (pubmed|embase
 R_GUIDE_TITLE = re.compile(r"guideline|gold (report|science committee|20\d\d|strategy document)|recommendations for the (diagnosis|management|treatment|pharmacolog)|consensus (statement|document)|position (paper|statement)|practice parameter|clinical practice recommendation", re.I)
 R_PROTO = re.compile(r"study protocol|protocol for|rationale and design|^design of|methods? (paper|of a)|statistical analysis plan", re.I)
 R_RCT   = re.compile(r"randomi[sz]ed|randomly (assigned|allocated)|double-?blind|placebo-?controlled|active-?controlled|parallel-?group|1:1 (randomi|ratio)|were assigned to receive", re.I)
-R_OBS   = re.compile(r"real-?world|observational|retrospective (cohort|study|analysis)|prospective cohort|propensity|claims (data|database)|electronic (health|medical) record|nationwide|population-?based|registry-?based|new-?user (cohort|design)|target trial emulation", re.I)
+R_OBS   = re.compile(r"real-?world|observational|retrospective (cohort|study|analysis)|prospective cohort|propensity|claims (data|database)|electronic (health|medical) record|nationwide|population-?based|registry-?based|new-?user (cohort|design)|target trial emulation|pharmacoepidemiolog|probabilistic bias analysis|before[\s\-]?after (study|design|comparison)|pre[\s\-]?post (study|design)|whose treatment was changed (from|to)|we included patients whose", re.I)
+# 真正的隨機化證據（用來把關『其他原始臨床研究』回退路徑——只認確有隨機化者，避免綜述描述他人試驗誤判 RCT）
+R_RAND  = re.compile(r"randomi[sz]ed|randomly (assigned|allocated)|double-?blind|placebo-?controlled (trial|study)|1:1 (randomi|ratio)|were (randomly )?assigned to receive|cross-?over (trial|study)|open-?label.{0,20}randomi", re.I)
+# 明確的綜述/藥物簡介訊號（review 描述他人試驗時常含 randomized/placebo-controlled 字樣 → 會誤觸 R_RCT；
+# 故先擋下這些『綜述體』再判 RCT）。2026-06 使用者逐筆核對 24 篇獨立核心 RCT 後立：誤拉入綜述/藥動 8+ 篇。
+R_REVIEW_STRONG = re.compile(r"narrative (review|paper)|this (review|article|paper) (review|summari[sz]|explore|discuss|present|offer)|to review (current|the) (evidence|literature|role|use)|we (used pubmed|conducted (a|the) literature search|searched (pubmed|medline|the literature))|literature search (from|was conducted|using)|areas covered\b|this article (review|explore|present)|overview of (the )?(heterogeneity|current)|drug (profile|review)|reviews the role", re.I)
+R_PK_STRONG = re.compile(r"population pharmacokinetic|pharmacokinetic (analysis|profile|model|characteri)|pharmacodynamic (analysis|profile)|bioequivalence|gas trapping|residual volume", re.I)
+# 會議摘要偵測（DOI/標題訊號）：依 Cochrane/MECIR，會議摘要＝『待評估研究(studies awaiting classification)』，
+# 未經完整同行評審、數據不完整 → **不得當核心可分析 RCT**（除非是已納入完整論文試驗的子報告）。
+# 2026-06 使用者糾正：一篇 ERS congress-2020 摘要(無 PMID)被誤判為獨立核心 RCT。
+R_CONF_DOI = re.compile(r"congress-\d|/conference|meetingabstract|ajrccm-conference|\.congress\.|abstract-\d", re.I)
+R_CONF_TITLE = re.compile(r"\bposter\b|\bP\d{2,4}\b|congress abstract|conference abstract|^synopsis:", re.I)
+# 研究計畫書（無結果）強訊號：protocol 描述會含 randomized/double-blind→會誤觸 R_RCT；故須能蓋過 RCT。
+# 2026-06 使用者(外部 Claude)逐筆核對立：ANTES B+、日本 RCT 皆為 protocol(無 outcome)，誤入核心。
+R_PROTO_STRONG = re.compile(r"\bstudy protocol\b|\bprotocol for a\b|\btrial protocol\b|rationale and design|"
+    r"results (are |will be )?(expected|anticipated|pending|reported (in|by|during))|"
+    r"will be (randomi[sz]ed|enrolled|recruited|assigned|conducted)|recruitment (began|will begin|started|commenced|is ongoing|is expected)|"
+    r"first (patient|participant|subject)\b.{0,50}(20[2-9]\d)|enrol(l)?ment (began|will|is expected|started)|"
+    r"this (study|trial) (will|aims to|is designed to) (enrol|recruit|randomi|assess|investigate|evaluate)", re.I)
+# ICS 退階/移除設計（回答『能否撤 ICS』≠『起始三合一 vs 雙支擴』）→ 核心但須打 design=ICS-withdrawal 標籤，
+# 避免下游 meta 把『退階』與『起始』方向性混算。2026-06 使用者(外部 Claude)核對 SUNSET/WISDOM 立。
+R_ICS_WD = re.compile(r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of fluticasone|"
+    r"de-?escalat|step(ping)?[\s\-]?down|stepwise (withdrawal|removal)|discontinu(e|ation|ing) (of )?(the )?(ics|inhaled cortico)|"
+    r"removing (the )?inhaled cortico|direct (de-escalation|change) from (long-term )?triple", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
 R_DUAL  = re.compile(r"\blaba[\s/\-]?lama\b|\blama[\s/\-]?laba\b|dual bronchodilat|dual (long-acting )?bronchodilator|umeclidinium[\s/\-]?vilanterol|glycopyrr\w+[\s/\-]?formoterol|formoterol[\s/\-]?glycopyrr|indacaterol[\s/\-]?glycopyrr|tiotropium[\s/\-]?olodaterol|aclidinium[\s/\-]?formoterol|anoro|ultibro|stiolto|spiolto|duaklir|bevespi|two long-acting bronchodilator", re.I)
-R_TRIP  = re.compile(r"triple|ics[\s/\-]?laba[\s/\-]?lama|single[\s\-]?inhaler triple|trelegy|trimbow|breztri|trixeo|fostair|fluticasone furoate[\s/\-]?umeclidinium[\s/\-]?vilanterol|budesonide[\s/\-]?glycopyrr\w+[\s/\-]?formoterol|beclomet\w*[\s/\-]?formoterol[\s/\-]?glycopyrron", re.I)
+R_TRIP  = re.compile(r"triple|ics[\s/\-]?laba[\s/\-]?lama|single[\s\-]?inhaler triple|trelegy|trimbow|breztri|trixeo|fostair|fluticasone furoate[\s/\-]?umeclidinium[\s/\-]?vilanterol|budesonide[\s/\-]?glycopyrr\w+[\s/\-]?formoterol|beclomet\w*[\s/\-]?formoterol[\s/\-]?glycopyrron|ff[\s/\-]?umec[\s/\-]?vi\b|\bbgf\b|\bbdp[\s/\-]?ff[\s/\-]?g\b", re.I)
 # RCT 次級/事後分析（隨機化在母試驗，摘要常無 randomized 字樣）——屬該試驗的『報告』，仍歸 RCT/Study
 R_RCT2ND= re.compile(r"post[\s\-]?hoc|responder analysis|pre[\s\-]?specified (analysis|subgroup|outcome)|subgroup analysis|exploratory (post|analysis|endpoint)|secondary (analysis|outcome analysis)|further analysis of|analysis of (the )?(impact|ethos|kronos|fulfil|trilogy|tribute|trinity|etwas)|analysis of (data from|pooled data from the)|of the (impact|ethos|kronos|fulfil|trilogy|tribute|trinity) (trial|study)", re.I)
 # 其他原始臨床研究設計詞（非隨機/小型臨床比較/加成試驗等）——放寬以接住被誤丟未分型的真原始研究
@@ -121,14 +158,22 @@ def classify(cache, out="g7_units.json"):
         is_ct = ("ClinicalTrials.gov" in (u.get("sources") or [])) or bool(nct)
         # 設計判別（優先序）
         trip_ctx = bool(R_TRIP.search(text))  # 與本題相關（含三合一）才把次級分析當試驗報告
+        # pubtype 是否明確標 RCT（最可靠；有此旗標則不被『綜述體』訊號擋下）
+        is_rct_pt = has(pt,"Randomized Controlled Trial","Controlled Clinical Trial")
         if is_ct: design="進行中/登錄試驗(CT.gov)"  # ★ 登錄腿記錄＝登錄試驗（不論有無合成摘要；修『給了合成摘要後 is_ct&not ab 失效→落未分型』）
         elif has(pt,"Meta-Analysis","Systematic Review") or R_SRMA.search(text): design="背景:SR/MA/network-meta"
         elif has(pt,"Guideline","Practice Guideline") or R_GUIDE_TITLE.search(title): design="背景:指引"
-        elif R_PROTO.search(text) and not R_RCT.search(ab): design="進行中/試驗計畫書"
-        elif has(pt,"Randomized Controlled Trial","Controlled Clinical Trial") or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
+        # ★ 先擋『綜述體/藥動』再判 RCT（2026-06 使用者逐筆核對立）：綜述描述他人試驗常含 randomized/placebo-controlled
+        #   字樣→會誤觸 R_RCT；故無 RCT pubtype 而命中強綜述/PK 訊號者先歸背景，避免把綜述/藥動誤拉成 RCT。
+        elif (not is_rct_pt) and R_REVIEW_STRONG.search(text): design="背景:綜述/其他次級"
+        elif (not is_rct_pt) and R_PK_STRONG.search(text) and not R_RAND.search(ab): design="背景:藥學/裝置/方法學"
+        # 研究計畫書(無結果)優先於 RCT：protocol 含 randomized 字樣會誤觸 R_RCT，故強訊號須能蓋過。
+        elif R_PROTO_STRONG.search(text) or R_PROTO.search(title) or (R_PROTO.search(text) and not R_RCT.search(ab)): design="進行中/試驗計畫書"
+        elif is_rct_pt or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
         elif trip_ctx and R_RCT2ND.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 試驗事後/次級分析＝該試驗報告
         elif has(pt,"Observational Study") or R_OBS.search(text): design="背景:觀察性/真實世界"
-        elif trip_ctx and R_PRIM2.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 其他原始臨床研究設計
+        # ★ 其他原始臨床研究回退：須『確有隨機化證據(R_RAND)』才當 RCT，否則綜述『we compared/clinical trial』會誤判
+        elif trip_ctx and R_PRIM2.search(text) and R_RAND.search(text) and not R_OBS.search(text): design="原始研究:RCT"
         elif R_ECON.search(text): design="背景:經濟評估"
         elif R_PHARM.search(text): design="背景:藥學/裝置/方法學"
         elif R_SURVEY.search(text): design="背景:共識/調查/觀點"
@@ -137,7 +182,15 @@ def classify(cache, out="g7_units.json"):
         row={"uid":uid,"title":title,"pmid":v.get("pmid",""),"doi":v.get("doi",""),
              "arm":v.get("arm"),"design":design,"abstract_available":bool(ab)}
         if design=="原始研究:RCT":
-            trip=bool(R_TRIP.search(text)); dual=bool(R_DUAL.search(text))
+            # 對照軸(C=LABA/LAMA)偵測校正（2026-06 使用者糾正核心/非核心誤判）：
+            #  (1) 先正規化分隔符 en/em-dash→hyphen、β→b——否則 ETHOS/KRONOS 的
+            #      `glycopyrrolate–formoterol`(en-dash) 漏判 → 假陰(該核心被丟非核心)。
+            #  (2) 再『遮蔽三合一藥名跨度』(R_TRIP.sub) 才掃 R_DUAL——否則三合一名 `FF/UMEC/VI`
+            #      內含 `UMEC/VI`=umeclidinium/vilanterol(一個雙支擴對) → 假陽(FULFIL/TRILOGY 對照其實
+            #      是 ICS/LABA 卻被當核心)。真正獨立的雙支擴對照臂(如 IMPACT 的 UMEC/VI 比較組)遮蔽後仍在。
+            dtext=text.replace("–","-").replace("—","-").replace("β","b")
+            trip=bool(R_TRIP.search(dtext))
+            dual=bool(R_DUAL.search(R_TRIP.sub(" ", dtext)))
             trial,key=detect_trial(text,nct,names)
             if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 歸背景（非核心），不丟棄
                 design="背景:非核心RCT(非三合一vs雙合一介入)"; row["design"]=design
@@ -147,7 +200,24 @@ def classify(cache, out="g7_units.json"):
                 if sl: trial=sl; row["linked_by"]="signature"
             row["trial"]=trial or "(未辨識)"; row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
-            row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
+            # 核心/非核心：已知樞紐試驗以 trial-level 權威表定案（試驗設計屬性，不隨子報告摘要飄移）；
+            # 非樞紐才回退『標題+摘要 regex(trip∧dual)』。
+            doi_l=str(v.get("doi") or "").lower()
+            is_conf = bool(R_CONF_DOI.search(doi_l)) or bool(R_CONF_TITLE.search(title))
+            if trial in PIVOTAL_LABALAMA_ARM:
+                # 樞紐試驗（有完整論文）的子報告即使是會議摘要也保留為該試驗報告（支持性）
+                row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
+                row["core_basis"]="pivotal_trial_design"
+            elif is_conf:
+                # 獨立會議摘要（無對應完整論文）＝待評估研究，不得當核心可分析 RCT（MECIR）
+                row["unit"]="待評估:會議摘要(未完整發表)"; row["design"]="背景:會議摘要(待評估)"
+                row["core_basis"]="conference_abstract_awaiting"
+            else:
+                row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
+            # ★ ICS 退階/移除設計標記：凡判為核心(含樞紐)且命中 ICS-withdrawal 訊號者，改記為獨立子型，
+            #   下游 meta 不得與『起始三合一 vs 雙支擴』混算（回答的是『能否撤 ICS』這個不同臨床問題）。
+            if str(row.get("unit","")).startswith("核心") and R_ICS_WD.search(dtext):
+                row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["design_subtype"]="ICS-withdrawal"
             studies[trial or "(未辨識試驗)"].append(row)
             buckets[row["unit"]]+=1
         else:
@@ -158,6 +228,24 @@ def classify(cache, out="g7_units.json"):
              "rct_studies":{k:len(v) for k,v in studies.items()},
              "core_rct_studies":sorted({r["trial"] for r in core if r["trial"]!="(未辨識)"}),
              "rows":rows}
+    # ★ 主動覆核防線（2026-06 使用者『避免下次再犯』）：把『不確定/高風險的核心判定』攤出來逼人工覆核，
+    #   不要等下游才被抓。核心列只要落入下列任一風險即列入待覆核，寫 g7_review_flags.json 並在 main 警示：
+    #   (1) 非樞紐核心(無權威表背書,純 regex)；(2) 無 PMID(疑會議摘要/未完整發表)；(3) DOI 像會議摘要；
+    #   (4) 帶 ICS-withdrawal 子型(設計不同,需確認方向)；(5) 摘要含 protocol 字樣(疑無結果)。
+    review_flags=[]
+    for r in rows:
+        if not str(r.get("unit","")).startswith("核心"): continue
+        reasons=[]
+        if r.get("trial") not in PIVOTAL_LABALAMA_ARM: reasons.append("非樞紐核心(regex判定,須覆核對照臂)")
+        if not r.get("pmid"): reasons.append("無PMID(疑會議摘要/未完整發表)")
+        if R_CONF_DOI.search(str(r.get("doi") or "").lower()): reasons.append("DOI疑會議摘要")
+        if r.get("design_subtype")=="ICS-withdrawal": reasons.append("ICS退階設計(勿與起始混算)")
+        if R_PROTO_STRONG.search((r.get("title") or "")): reasons.append("標題含protocol訊號(疑無結果)")
+        if reasons:
+            review_flags.append({"uid":r.get("uid"),"pmid":r.get("pmid"),"title":(r.get("title") or "")[:90],
+                                 "trial":r.get("trial"),"unit":r.get("unit"),"flags":reasons})
+    out_obj["core_review_flags"]=review_flags
+    (cache/"g7_review_flags.json").write_text(json.dumps(review_flags,ensure_ascii=False,indent=1),encoding="utf-8")
     (cache/out).write_text(json.dumps(out_obj,ensure_ascii=False),encoding="utf-8")
     return out_obj
 
@@ -170,7 +258,16 @@ def enrich(cache, mailto="test@example.com"):
     換主題時自動依該主題 g0 的 I 軸判定，不必改碼。"""
     cache=Path(cache)
     g0=json.loads((cache/"g0_strategy.json").read_text(encoding="utf-8"))
-    axes=g0.get("axes",{}); I=axes.get("I",{})
+    axes=g0.get("axes",{})
+    # ★ 介入軸不一定鍵名叫 "I"（可能是 I_triple、I_intervention…）：穩健地依鍵名/role 找出介入軸，
+    #   否則 enrich 會靜默拿到空 isyn → 所有 NCT 介入判為不在範圍 → 全部 RCT 誤丟背景（2026-06 使用者糾正）。
+    I=axes.get("I")
+    if not isinstance(I,dict) or not I.get("synonyms"):
+        for k,v in axes.items():
+            if not isinstance(v,dict): continue
+            if k=="I" or k.upper().startswith("I_") or "intervention" in str(v.get("role","")).lower():
+                I=v; break
+    I=I if isinstance(I,dict) else {}
     isyn=[_norm(s) for s in (I.get("synonyms") or []) if s and len(s)>3]
     # 四軸展開的成分清單（若有）：用『各類別成分各命中≥1』作為組合介入(如三合一)的通用判準
     fae=g0.get("four_axis_expansion",{}).get("axisC_class_INN_devcode_brand",{})
@@ -218,6 +315,12 @@ def main():
     print("\nRCT 依 NCT/試驗名歸併為 Study：")
     for k,v in sorted(o["rct_studies"].items(),key=lambda x:-x[1]): print(f"  ● {k}: {v} 報告")
     print("\n核心『三合一 vs LABA/LAMA』Study：", ", ".join(o["core_rct_studies"]))
+    rf=o.get("core_review_flags") or []
+    if rf:
+        print(f"\n⚠️  核心待人工覆核 {len(rf)} 筆（rapid-review 不可逕信，須逐筆核對；明細 g7_review_flags.json）：")
+        for x in rf[:30]:
+            print(f"   - [{x.get('pmid') or '無PMID'}] {x['title']} ｜ {'、'.join(x['flags'])}")
+        print("   → 非樞紐核心/無PMID/會議摘要/ICS退階/protocol 訊號者，務必人工或 Phase 0 覆核後才當核心證據。")
 
 if __name__=="__main__":
     main()

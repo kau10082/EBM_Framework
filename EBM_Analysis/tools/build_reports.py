@@ -158,81 +158,91 @@ def final_report():
         L += [f"**證據基礎**：{len(sc)} 項隨機對照試驗，涵蓋 {drugs}。詳見各 `*.report.md` 與 `synthesis.md`。", ""]
     L += ["---", ""]
 
-    # 一、總結
-    L += ["## 一、總結（Bottom Line）", ""]
-    L += [f"- {b}" for b in syn.get("bottom_line", [])]
-    L.append("")
+    # ★ 標準版型＝Cochrane 後半段 6 段（與 PDF build_grade_pdf --layout cochrane5 同步；
+    #   2026-06 使用者定為 analysis 階段 PDF/MD 統一格式）。
+    # 一、納入研究特徵摘要表
+    if sc:
+        L += ["## 一、納入研究特徵摘要表（Characteristics of Included Studies）", "",
+              "> 證明各試驗臨床上可比（Cochrane Ch9）：設計／基準風險／介入·對照精確內容／追蹤。", "",
+              _row(["試驗", "研究設計", "N／族群", "介入臂", "對照臂", "追蹤", "主要終點"]), _row(["---"] * 7)]
+        for r in sc:
+            L.append(_row([r["trial"], (r.get("phase", "") + "；多中心雙盲平行"), r["n"],
+                           f'{r["drug"]}（{r["dose"]}）', r["comparator"], r["duration"], r["primary_outcome"]]))
+        L.append("")
+        for st in syn.get("baseline_risk_strata", []):
+            L.append(f"- 基準風險分層：{st['baseline_risk']} → {st['absolute_reduction']}")
+        L.append("")
 
-    # 二、SoF
+    # 二、個別試驗偏誤風險評估
+    rs = syn.get("rob_summary", [])
+    if rs:
+        L += ["## 二、個別試驗偏誤風險評估（Risk of Bias 2）", "",
+              "> 逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出瑕疵來源。", "",
+              _row(["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]), _row(["---"] * 8)]
+        for r in rs:
+            L.append(_row([r["trial"], r["randomization"], r["deviations"], r["missing_data"], r["measurement"],
+                           r["selective_reporting"], f"**{r['overall']}**",
+                           (r.get("evidence_basis", "") + "：" + (r.get("note", "") or ""))]))
+        L.append("")
+
+    # 三、數據綜整與統合分析（Meta-Analysis）
+    ma = syn.get("meta_analysis", [])
+    if ma:
+        L += ["## 三、數據綜整與統合分析（Data Synthesis／Meta-Analysis）", "",
+              "> 逐核心結局之池化合併效應＋異質性 I²（Cochrane Ch10）；未池化者說明理由。", "",
+              _row(["核心結局", "模型", "合併效應（95% CI）", "I²", "逐試驗效應", "絕對效應換算", "異質性判讀／理由"]), _row(["---"] * 7)]
+        _mdl = {"fixed": "固定效應", "random": "隨機效應", "not_pooled": "未池化"}
+        for m in ma:
+            eff = m.get("pooled_effect", "") + (f'（{m.get("ci","")}）' if m.get("ci") else "")
+            L.append(_row([m["outcome"], _mdl.get(m["model"], m["model"]), eff, m.get("i2") or "—",
+                           m.get("per_study") or "", m.get("absolute") or "", m["heterogeneity"]]))
+        L.append("")
+    for k, t in [("consistency", "數據一致性"), ("conflict_analysis", "證據對抗"),
+                 ("weight_adjudication", "權重裁決與整體判讀")]:
+        if syn.get(k):
+            L += [f"**{t}**：{syn[k]}", ""]
+
+    # 四、GRADE 證據確定性評級
+    boe = syn.get("body_of_evidence", [])
+    if boe:
+        L += ["## 四、GRADE 證據確定性評級（Evidence Profile）", "",
+              "> 逐核心結局自 RCT 起始『高』，跑 5 大下調領域結算（Cochrane Ch14）。", "",
+              _row(["核心結局", "確定性", "下調領域結算（依據）"]), _row(["---"] * 3)]
+        for b in boe:
+            L.append(_row([b["outcome"], SYM.get(b["certainty"], b["certainty"]) + " " + b["certainty"], b["basis"]]))
+        L.append("")
+
+    # 五、發現摘要表（SoF）與臨床建議
     sof = syn.get("sof", [])
     if sof:
-        L += ["## 二、Summary of Findings（重要結果總覽表）", ""]
+        L += ["## 五、發現摘要表（SoF）與臨床決策建議", ""]
         if rq:
-            L += [f"**表頭宣告（適用對象）**　族群（P）：{rq.get('P','')}；介入（I）：{rq.get('I','')}；對照（C）：{rq.get('C','')}", ""]
-        L += [_row(["結果", "對照組風險", "介入組對應風險", "絕對效應", "相對效應", "參與者(研究)", "確定性", "評論"]),
-              _row(["---"] * 8)]
+            L += [f"**適用對象**　P：{rq.get('P','')}；I：{rq.get('I','')}；C：{rq.get('C','')}", ""]
+        L += ["> 相對＋絕對並列（每 1000 人）＋NNTB/NNTH＋95% CI；跨無效線/資料不足者不計 NNT（Cochrane Ch14·15）。", "",
+              _row(["臨床結局（時框）", "假設對照風險", "對應介入風險", "絕對效應差（每 1000 人）＋NNT", "相對效應（95% CI）", "N（研究）", "確定性", "降級腳註"]), _row(["---"] * 8)]
         for r in sof:
             L.append(_row([r.get("outcome", ""), r.get("assumed_control_risk", ""), r.get("corresponding_risk", ""),
                            r.get("absolute_effect", ""), r.get("relative_effect", ""), r.get("n_participants_studies", ""),
                            SYM.get(r.get("certainty", ""), r.get("certainty", "")), r.get("comment") or ""]))
-        L += ["", "> 解讀提醒：相對效應（RR/HR）須搭配絕對數字才完整；連續型結果（FEV1、生活品質）沒有比值，效益以「平均差」呈現。", ""]
-
-    # 三、證據品質與完整度
-    if sc or syn.get("rob_summary") or syn.get("publication_bias"):
-        L += ["## 三、證據品質與完整度", ""]
-        if sc:
-            L += ["### 1. 納入研究特徵表", "",
-                  _row(["試驗", "藥物", "期別", "N", "劑量(每日一次)", "療程", "對照", "主要終點"]), _row(["---"] * 8)]
-            for r in sc:
-                L.append(_row([r["trial"], r["drug"], r["phase"], r["n"], r["dose"], r["duration"], r["comparator"], r["primary_outcome"]]))
-            L.append("")
-        rs = syn.get("rob_summary", [])
-        if rs:
-            L += ["### 2. 偏誤風險（RoB 2）逐領域摘要", "",
-                  _row(["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體"]), _row(["---"] * 7)]
-            for r in rs:
-                L.append(_row([r["trial"], r["randomization"], r["deviations"], r["missing_data"], r["measurement"], r["selective_reporting"], f"**{r['overall']}**"]))
-            L.append("")
-        if syn.get("publication_bias"):
-            L += ["### 3. 發表偏誤／缺失證據聲明", "", syn["publication_bias"], ""]
+        L.append("")
+        for fn in syn.get("sof_footnotes", []):
+            L.append(f"- {fn}")
+        L.append("")
+        L += ["### 臨床建議底線（Authors' Conclusions）", ""]
+        L += [f"- {b}" for b in syn.get("bottom_line", [])]
         if syn.get("subgroup_implications"):
-            L += ["### 4. 次群組與對研究的意涵", "", syn["subgroup_implications"], ""]
-        strata = syn.get("baseline_risk_strata", [])
-        if strata:
-            L += ["### 5. 基準風險分層的絕對效應", "",
-                  _row(["基準惡化風險（對照組）", "對應介入率", "每人每年絕對減少"]), _row(["---"] * 3)]
-            for r in strata:
-                L.append(_row([r["baseline_risk"], r["corresponding"], r["absolute_reduction"]]))
-            L += ["", "> 頻繁惡化（高 BSI）患者的絕對獲益最大、NNTB 最小；輕度患者獲益較小。", ""]
-        rr = syn.get("related_reviews", [])
-        if rr:
-            L += ["### 6. 相關系統性回顧／統合分析（AMSTAR 2 品質）", "",
-                  "> 與上方 4 個 RCT「納入研究特徵表」分離（study vs review 單位區分）；去重後不與個別 RCT 結論疊加。", "",
-                  _row(["回顧（類型）", "涵蓋範圍", "納入試驗", "AMSTAR 2 信心", "角色"]), _row(["---"] * 5)]
-            for r in rr:
-                L.append(_row([r["review"], r["scope"], r["trials_covered"],
-                               f"**{AMSTAR2_SYM.get(r['amstar2_rating'], r['amstar2_rating'])}**", r["role"]]))
-            L.append("")
-            for r in rr:
-                if r.get("amstar2_basis"):
-                    L += [f"- **{r['review']}** 評級依據：{r['amstar2_basis']}"]
-            L.append("")
+            L += ["", f"**利弊平衡與次群組**：{syn['subgroup_implications']}"]
+        L += ["", "> 【Cochrane Ch15 規範】提供利弊平衡與決策指引，但不下強制醫囑（不寫『必須全面改用』）；"
+              "最終決策須納入個別病患價值觀、偏好與在地資源。", ""]
+        if syn.get("publication_bias"):
+            L += [f"**發表偏誤／利益衝突**：{syn['publication_bias']}", ""]
+        lim = syn.get("limitations", [])
+        if lim:
+            L += ["**限制與尚待釐清**："] + [f"- {x}" for x in lim] + [""]
 
-    # 四、跨篇統合與結論
-    L += ["## 四、跨篇統合與結論", ""]
-    for k, t in [("consistency", "數據一致性"), ("conflict_analysis", "證據對抗（為何單藥 vs 類別確定性不同）"),
-                 ("weight_adjudication", "權重裁決與整體結論")]:
-        if syn.get(k):
-            L += [f"### {t}", "", syn[k], ""]
-
-    # 五、限制
-    lim = syn.get("limitations", [])
-    if lim:
-        L += ["## 五、限制與尚待釐清", ""] + [f"- {x}" for x in lim] + [""]
-
-    # 六、給臨床
+    # 六、給臨床的一句話
     if syn.get("clinical_one_liner"):
-        L += ["## 六、給臨床的一句話", "", f"> **{syn['clinical_one_liner']}**", ""]
+        L += ["## 六、給臨床的一句話（Clinical Bottom Line）", "", f"> **{syn['clinical_one_liner']}**", ""]
 
     L += ["---", "",
           "> 附註：本報告由 EBM_Analysis 評讀引擎自動產出（運算由 Claude 直接執行、無外部 API）；"
@@ -265,6 +275,17 @@ def main():
     fr = final_report()
     n = ledger()
     extra = " / FINAL_REPORT.md" if fr else ""
+    # 標準成品＝MD＋PDF 同格式（Cochrane 6 段）：MD 寫完即連帶產 PDF，確保兩者同步、不漏 PDF。
+    pdf_made = ""
+    if fr and "--no-pdf" not in sys.argv:
+        try:
+            import build_grade_pdf
+            build_grade_pdf.build(str(CACHE / "_synthesis.json"), str(OUTPUTS / "FINAL_REPORT.pdf"), layout="cochrane5")
+            pdf_made = " / FINAL_REPORT.pdf"
+        except SystemExit:
+            sys.stderr.write("⚠️ 缺 reportlab，未產 PDF（pip install reportlab 後重跑，或 build_grade_pdf.py 單獨產）。\n")
+        except Exception as e:
+            sys.stderr.write(f"⚠️ PDF 產生失敗（{str(e)[:80]}）；MD 已產出，可單獨跑 build_grade_pdf.py。\n")
     # 自動更新 run-state 指標檔（成品位置＋階段），避免座標檔走舊
     try:
         import run_state
@@ -275,7 +296,7 @@ def main():
         run_state.autofill()
     except Exception:
         pass
-    print(f"✅ {n} papers → outputs/（report.md / synthesis.md{extra} / ledger.csv）")
+    print(f"✅ {n} papers → outputs/（report.md / synthesis.md{extra}{pdf_made} / ledger.csv）")
 
 
 if __name__ == "__main__":

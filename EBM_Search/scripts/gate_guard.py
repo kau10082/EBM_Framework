@@ -199,16 +199,28 @@ def check_partition_provenance(cache):
     extra = (sset | aset) - set(base_by_uid)
     if missing: fails.append(f"有 {len(missing)} 筆 base uid 未被分類（漏失）")
     if extra: fails.append(f"有 {len(extra)} 個 uid 不在 base（憑空冒出）")
-    # (2) provenance：screened 每筆必須有自己的內容
+    # (2) provenance：screened 每筆必須有自己的『實際解析到的內容』（非只 OA 旗標/登錄表的空殼）
+    #     —— 無 abstract 者，其 uid 必須在 fetched 表中且帶『已解析證明』(text_len≥MIN 或 verified 旗標)。
+    #     (2026-06 使用者糾正 Bug：②c 只憑 OA/PMC 旗標標 have、未實抓解析，無內容卻漏進 ③；
+    #      機器看守改為要求 fetched 條目證明真的抓到可解析內容，否則該筆應在 ②c 待評估。)
+    MIN_PARSED = 1500
     no_content = []
     for s in scr:
         b = base_by_uid.get(s.get("uid"))
         if b is None: continue
         has_ab = bool((b.get("abstract") or "").strip())
-        if not has_ab and s.get("uid") not in fetched:
+        if has_ab: continue
+        f = fetched.get(s.get("uid"))
+        ok = isinstance(f, dict) and (
+            (isinstance(f.get("text_len"), int) and f["text_len"] >= MIN_PARSED)
+            or f.get("verified") or f.get("fulltext_verified")
+            or f.get("channel") == "registry")          # 登錄試驗＝結構化內容、無自由文字摘要
+        if not ok:
             no_content.append((b.get("title") or b.get("uid") or "?")[:45])
     if no_content:
-        fails.append(f"③ 有 {len(no_content)} 筆 screened 其 base 無 abstract 且 uid 不在 fetched 表（疑遭坍縮鍵污染、無內容卻拿到判定）：{no_content[:5]}")
+        fails.append(f"③ 有 {len(no_content)} 筆 screened 無 abstract 且 fetched 表未證明實抓解析到內容"
+                     f"（text_len≥{MIN_PARSED}/verified）：②c 須實抓+解析全文，無可解析內容者應在 ②c 判待評估、"
+                     f"不得只憑 OA/PMC 旗標標 have 漏進 ③：{no_content[:5]}")
     return fails
 
 def check_have_verified(cache):

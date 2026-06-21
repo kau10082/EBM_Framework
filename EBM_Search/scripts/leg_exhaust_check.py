@@ -29,6 +29,15 @@ AI_CAPPED = {"consensus", "openevidence", "oe"}
 
 def _norm(name): return (name or "").strip().lower()
 
+def _base(name):
+    """去掉 SR 子腿後綴（`<leg>-SR`／`<leg> sr`），讓 SR 子腿沿用母腿的窮盡分類。
+    （SR 過濾器 additive 子腿命名見 SEARCH_SPEC「主動詢問 SR Filter」段：非 PubMed 腿用 `<leg>-SR`。）"""
+    n = _norm(name)
+    for suf in ("-sr", " sr", "_sr", "-systematic-review"):
+        if n.endswith(suf):
+            return n[: -len(suf)].strip()
+    return n
+
 def check(legs, min_legs=4):
     """回傳 fails 清單（空＝通過）。legs: list[dict]。"""
     fails = []
@@ -37,7 +46,7 @@ def check(legs, min_legs=4):
     seen_exhaustible = 0
     for leg in legs:
         name = leg.get("leg") or leg.get("name") or "?"
-        n = _norm(name)
+        n = _base(name)
         hit = leg.get("hitCount"); fetched = leg.get("fetched")
         exhaustible = leg.get("exhaustible")
         # 跳過腿：唯一合法理由＝技術硬限制（MCP 未連/無金鑰/管轄封鎖）

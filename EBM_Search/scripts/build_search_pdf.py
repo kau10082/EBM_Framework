@@ -87,33 +87,32 @@ def build(infile, out, font=None):
 
     # ── 段3 PRISMA 流程數據 ──
     S.append(H("三、PRISMA 文獻篩選流程數據"))
-    fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in data.get("funnel",[])]
+    # 漏斗表（流程圖已移除，僅保留表格）。最後一步固定補「納入分析文獻 Included」——
+    # 由產生器確定性附加（不靠手動編 funnel），數量取 prisma_flow.included（缺則由 included_studies 報告數推算）；
+    # funnel 內若已含『納入分析』步先濾掉，避免重複。
+    funnel=[s for s in (data.get("funnel") or []) if "納入分析" not in str(s.get("step",""))]
+    inc_n=(data.get("prisma_flow") or {}).get("included")
+    if inc_n in (None, ""):
+        inc_n=sum(len(g.get("reports",[])) for g in data.get("included_studies",[]))
+    funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
+                   "change":"交接 corpus_seed 進 EBM 評讀；分類後各類篇數如下"})
+    fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
+    # 末步「納入分析文獻」之後，逐類列出『分類後各類篇數』(included_breakdown)——由產生器確定性附加，
+    # 讓 PRISMA 末步詳述 ⑤b 分類結果(核心RCT/SR-MA/其他RCT/各背景)，總和須＝Included。
+    for lab,cnt in (data.get("included_breakdown") or []):
+        fr.append([f"　└ {lab}", str(cnt)])
     if len(fr)>1:
-        t=Table(fr,colWidths=[60*mm,W-60*mm]); t.setStyle(tstyle()); S.append(t)
+        t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
-    # 流程圖
-    legs=data.get("search_strategy",[])
-    legtxt="；".join(f"{l['leg']}{l.get('hit','')}" for l in legs if not l.get("skip") and l.get('hit') is not None)
-    d=Drawing(W,150)
-    def box(x,y,w,h,txt,fill="#eef3fb"):
-        d.add(Rect(x,y,w,h,fillColor=colors.HexColor(fill),strokeColor=colors.HexColor("#33689e"),strokeWidth=0.8))
-        for i,ln in enumerate(txt.split("\n")): d.add(String(x+4,y+h-11-i*10,_safe(ln),fontName=F,fontSize=7))
-    def arrow(x1,y1,x2,y2):
-        d.add(Line(x1,y1,x2,y2,strokeColor=colors.grey,strokeWidth=0.8)); d.add(Polygon(points=[x2-3,y2+4,x2+3,y2+4,x2,y2],fillColor=colors.grey,strokeColor=colors.grey))
-    box(0,122,W*0.62,26,f"辨識 Identification：各腿命中合計 {pf.get('identification','')}\n{legtxt}")
-    box(0,96,W*0.62,18,f"去重 Dedup：跨源去重聯集 ＝ {pf.get('dedup','')}")
-    box(0,66,W*0.62,24,f"篩選 Screening：初篩保留 {pf.get('screening','')}；待評估 {pf.get('awaiting','')}（不進嚴格篩）")
-    box(0,38,W*0.62,22,f"③ 嚴格篩二分：離題 {pf.get('excluded_screen','')}（切題進納入）")
-    box(0,8,W*0.62,24,f"納入 Included ＝ {pf.get('included','')}（核心 RCT 報告＋SR/MA＋背景）")
-    box(W*0.66,90,W*0.34,30,f"其他方法（引文追蹤）\nSR/MA·樞紐種子反向+正向\n新增切題 +{pf.get('citation_arm','')}")
-    for y1 in (122,96,66,38): arrow(W*0.31,y1,W*0.31,y1-8)
-    arrow(W*0.66,100,W*0.62,24)
-    S.append(d); S.append(Spacer(1,3*mm))
+    S.append(Spacer(1,3*mm))
 
-    # ── 段4 最終納入證據清單 ──
-    S.append(H("四、最終納入的證據清單（核心 RCT／重要 MA）"))
-    S.append(P("欄位：研究名稱｜標題｜DOI｜PMID｜PubMed/Crossref 驗證",8.5,col="#555",sp=3))
-    for grp in data.get("included_studies",[]):
+    # ── 段4 最終納入證據清單（只列核心 RCT）──
+    # 2026-06 使用者要求：本表只列『核心原始 RCT（三合一 vs LABA/LAMA）』，不列其他原始 RCT／SR-MA
+    #（後兩者見 PRISMA 分類統計與交接包 corpus_seed）。以群組 type 含『核心』為核心群篩選條件。
+    core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
+    S.append(H("四、最終納入的核心 RCT 證據清單（三合一 vs LABA/LAMA）"))
+    S.append(P("僅列核心原始 RCT；其他原始 RCT／SR-MA／背景見第三節分類統計與交接包｜欄位：研究名稱｜標題｜DOI｜PMID｜PubMed/Crossref 驗證",8.5,col="#555",sp=3))
+    for grp in core_groups:
         head=P(f"<b>● {grp.get('study','')}（{grp.get('type','')}，{len(grp.get('reports',[]))} 報告）</b>",9.5,sp=1)
         tr=[["標題","DOI","PMID","驗證"]]+[[cell(r[0],7.5),cell(r[2],7),cell(r[1],7.5),cell(r[3],7.5)] for r in grp.get("reports",[])]
         t=Table(tr,colWidths=[W-92*mm,40*mm,22*mm,30*mm]); t.setStyle(tstyle())

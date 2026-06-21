@@ -103,7 +103,9 @@
    - 要清空→加 `--clear`；不要來源清單→加 `--no-sources`；要連抽取全文→加 `--with-text`。
 4. **回報**：封存到 `runs/<日期>_<slug>/` 的 deliverables／audit 各幾檔、有無 sources.md、是否已清空。提醒 `runs/` 已 gitignore（含原文引用片段，留本機）。
 
-## PDF 輸出（若使用者要 PDF 版報告）
+## PDF 輸出（標準成品格式，務必遵照）
+> **★ analysis 階段 PDF＋MD 一律照標準格式（鐵律，2026-06 使用者『務必遵照此規格與規範』）：** 標準＝**Cochrane 6 段**（特徵表／RoB2／統合分析含 I²／GRADE Profile／SoF＋臨床建議／臨床一句話）；**SoF 必『相對＋絕對(每千人)＋NNTB/NNTH＋95% CI』、跨無效線/資料不足不計 NNT、附降級腳註**；全文不可得先 registry_backfill 補實＋登錄確認盲蔽可解 RoB 封印（誠實標『治療期間/待全文』，禁以記憶填全文數字）。完整規格與機器 gate 對照見 **`phases/04_output.md`**，由 `build_reports.py`＋`build_grade_pdf.py --layout cochrane5` 渲染、`selfcheck_consistency` C1-C18 硬擋。**禁用舊版自訂格式或手拼 SoF。**
+
 用 reportlab ＋ Windows CJK 字型（微軟正黑 `C:/Windows/Fonts/msyh.ttc`，subfontIndex=0；後備 `STSong-Light`）；SoF 表放橫向頁。
 **★ 所有中文 ParagraphStyle 必設 `wordWrap='CJK'`**：否則 reportlab 把中文當無空格長字、遇標點提前斷行，表格會「不滿一行就跳行」變得臃腫。
 **★ 禁用 emoji／彩色符號字符**：微軟正黑沒有 emoji 字形，會渲染成方格（□）。常見地雷：`⚠️ ✅ ❌ ⭐ ⚡ 🚫`（含變化選擇符 U+FE0F）。
