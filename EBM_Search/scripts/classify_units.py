@@ -48,7 +48,13 @@ R_SRMA  = re.compile(r"meta-?analys|systematic review|we searched (pubmed|embase
 R_GUIDE_TITLE = re.compile(r"guideline|gold (report|science committee|20\d\d|strategy document)|recommendations for the (diagnosis|management|treatment|pharmacolog)|consensus (statement|document)|position (paper|statement)|practice parameter|clinical practice recommendation", re.I)
 R_PROTO = re.compile(r"study protocol|protocol for|rationale and design|^design of|methods? (paper|of a)|statistical analysis plan", re.I)
 R_RCT   = re.compile(r"randomi[sz]ed|randomly (assigned|allocated)|double-?blind|placebo-?controlled|active-?controlled|parallel-?group|1:1 (randomi|ratio)|were assigned to receive", re.I)
-R_OBS   = re.compile(r"real-?world|observational|retrospective (cohort|study|analysis)|prospective cohort|propensity|claims (data|database)|electronic (health|medical) record|nationwide|population-?based|registry-?based|new-?user (cohort|design)|target trial emulation", re.I)
+R_OBS   = re.compile(r"real-?world|observational|retrospective (cohort|study|analysis)|prospective cohort|propensity|claims (data|database)|electronic (health|medical) record|nationwide|population-?based|registry-?based|new-?user (cohort|design)|target trial emulation|pharmacoepidemiolog|probabilistic bias analysis|before[\s\-]?after (study|design|comparison)|pre[\s\-]?post (study|design)|whose treatment was changed (from|to)|we included patients whose", re.I)
+# 真正的隨機化證據（用來把關『其他原始臨床研究』回退路徑——只認確有隨機化者，避免綜述描述他人試驗誤判 RCT）
+R_RAND  = re.compile(r"randomi[sz]ed|randomly (assigned|allocated)|double-?blind|placebo-?controlled (trial|study)|1:1 (randomi|ratio)|were (randomly )?assigned to receive|cross-?over (trial|study)|open-?label.{0,20}randomi", re.I)
+# 明確的綜述/藥物簡介訊號（review 描述他人試驗時常含 randomized/placebo-controlled 字樣 → 會誤觸 R_RCT；
+# 故先擋下這些『綜述體』再判 RCT）。2026-06 使用者逐筆核對 24 篇獨立核心 RCT 後立：誤拉入綜述/藥動 8+ 篇。
+R_REVIEW_STRONG = re.compile(r"narrative (review|paper)|this (review|article|paper) (review|summari[sz]|explore|discuss|present|offer)|to review (current|the) (evidence|literature|role|use)|we (used pubmed|conducted (a|the) literature search|searched (pubmed|medline|the literature))|literature search (from|was conducted|using)|areas covered\b|this article (review|explore|present)|overview of (the )?(heterogeneity|current)|drug (profile|review)|reviews the role", re.I)
+R_PK_STRONG = re.compile(r"population pharmacokinetic|pharmacokinetic (analysis|profile|model|characteri)|pharmacodynamic (analysis|profile)|bioequivalence|gas trapping|residual volume", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
@@ -135,14 +141,21 @@ def classify(cache, out="g7_units.json"):
         is_ct = ("ClinicalTrials.gov" in (u.get("sources") or [])) or bool(nct)
         # 設計判別（優先序）
         trip_ctx = bool(R_TRIP.search(text))  # 與本題相關（含三合一）才把次級分析當試驗報告
+        # pubtype 是否明確標 RCT（最可靠；有此旗標則不被『綜述體』訊號擋下）
+        is_rct_pt = has(pt,"Randomized Controlled Trial","Controlled Clinical Trial")
         if is_ct: design="進行中/登錄試驗(CT.gov)"  # ★ 登錄腿記錄＝登錄試驗（不論有無合成摘要；修『給了合成摘要後 is_ct&not ab 失效→落未分型』）
         elif has(pt,"Meta-Analysis","Systematic Review") or R_SRMA.search(text): design="背景:SR/MA/network-meta"
         elif has(pt,"Guideline","Practice Guideline") or R_GUIDE_TITLE.search(title): design="背景:指引"
+        # ★ 先擋『綜述體/藥動』再判 RCT（2026-06 使用者逐筆核對立）：綜述描述他人試驗常含 randomized/placebo-controlled
+        #   字樣→會誤觸 R_RCT；故無 RCT pubtype 而命中強綜述/PK 訊號者先歸背景，避免把綜述/藥動誤拉成 RCT。
+        elif (not is_rct_pt) and R_REVIEW_STRONG.search(text): design="背景:綜述/其他次級"
+        elif (not is_rct_pt) and R_PK_STRONG.search(text) and not R_RAND.search(ab): design="背景:藥學/裝置/方法學"
         elif R_PROTO.search(text) and not R_RCT.search(ab): design="進行中/試驗計畫書"
-        elif has(pt,"Randomized Controlled Trial","Controlled Clinical Trial") or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
+        elif is_rct_pt or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
         elif trip_ctx and R_RCT2ND.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 試驗事後/次級分析＝該試驗報告
         elif has(pt,"Observational Study") or R_OBS.search(text): design="背景:觀察性/真實世界"
-        elif trip_ctx and R_PRIM2.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 其他原始臨床研究設計
+        # ★ 其他原始臨床研究回退：須『確有隨機化證據(R_RAND)』才當 RCT，否則綜述『we compared/clinical trial』會誤判
+        elif trip_ctx and R_PRIM2.search(text) and R_RAND.search(text) and not R_OBS.search(text): design="原始研究:RCT"
         elif R_ECON.search(text): design="背景:經濟評估"
         elif R_PHARM.search(text): design="背景:藥學/裝置/方法學"
         elif R_SURVEY.search(text): design="背景:共識/調查/觀點"
