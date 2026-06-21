@@ -159,6 +159,18 @@ def main():
         [f for f in stage1_check.check({"schema_version":"stage1-1.0",
           "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
           "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"ai_summary_only","abstract_status":"have","abstract":""}],"awaiting":[]}) if "abstract" in f])
+    # 防『只憑 OA/PMC 旗標標 have、未實抓解析』（②c 鐵律；2026-06 使用者糾正）：have+無摘要+channel=online+無解析證明 → 須 FAIL
+    allok &= _assert_fires("Stage A 候選 fulltext_status=have 卻無已解析正文（OA-flag-only 假 have）",
+        [f for f in stage1_check.check({"schema_version":"stage1-1.0",
+          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
+          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"online","abstract":""}],"awaiting":[]}) if "實抓" in f])
+    # 正向防誤報：登錄試驗(registry)無自由文字摘要合法；有 fulltext_chars≥1500 證明合法
+    _hok=stage1_check.check({"schema_version":"stage1-1.0",
+          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
+          "candidates":[{"paper_id":"R1","title":"nct","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"registry","abstract":""},
+                        {"paper_id":"F1","title":"ft","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"online","fulltext_chars":7400,"abstract":""}],"awaiting":[]})
+    print(("  ✅" if not _hok else "  ❌") + " Stage A have(registry/實抓解析證明)應通過（防誤報）：" + ("通過" if not _hok else str(_hok)))
+    allok &= (not _hok)
     # 防『未查全文就丟兩者皆無』：awaiting 標兩者皆無卻有 pmid → 須 FAIL
     _legs4=[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}]
     _ok_cand=[{"paper_id":"C1","title":"t","verdict":"candidate","fulltext_status":"none","abstract_status":"have","abstract":"real abstract"}]
