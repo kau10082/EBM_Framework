@@ -25,6 +25,20 @@ NCT_TRIAL = {
     "NCT01917331":"TRILOGY","NCT02579850":"TRIBUTE","NCT01911364":"TRINITY","NCT03478683":"ETHOS-ext",
     "NCT03142362":"FULFIL-ext","NCT04636437":"TRIVERSYTI",
 }
+# 樞紐試驗『是否含 LABA/LAMA 雙支擴對照臂』＝核心/非核心的權威 trial-level 事實（curated，與 NCT_TRIAL 同性質）。
+# 核心/非核心是『試驗設計』屬性、非『單篇報告摘要』屬性——逐報告以 regex 判 dual 會因子報告未重述對照臂而飄移
+# （2026-06 使用者糾正：ETHOS 假陰、FULFIL/TRILOGY/TRINITY 假陽）。故對已知樞紐試驗以此權威表定案，
+# 非樞紐試驗才回退 regex(已含分隔符正規化＋遮蔽三合一藥名跨度)。
+PIVOTAL_LABALAMA_ARM = {        # 三合一 vs LABA/LAMA：確有雙支擴對照臂 → 核心
+    "IMPACT": True,   # FF/UMEC/VI vs UMEC/VI(LABA/LAMA) ＋ FF/VI(ICS/LABA)
+    "ETHOS":  True,   # BGF vs GFF(glycopyrrolate/formoterol＝LAMA/LABA) ＋ BFF(ICS/LABA)
+    "KRONOS": True,   # BGF vs GFF(LAMA/LABA) ＋ BFF ＋ BUD/FORM(ICS/LABA)
+    "TRIBUTE":True,   # BDP/FF/G vs IND/GLY(LABA/LAMA)
+    "TRIVERSYTI":True,
+    "FULFIL": False,  # vs BUD/FORM(ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)
+    "TRILOGY":False,  # vs BDP/FF(ICS/LABA) 唯一對照 → 非核心
+    "TRINITY":False,  # vs tiotropium(LAMA 單方) ＋ open-triple → 非核心(對照非 LABA/LAMA 雙支擴)
+}
 ACR = re.compile(r"\b(IMPACT|ETHOS|KRONOS|FULFIL|TRILOGY|TRIBUTE|TRINITY|TRIVERSYTI|TRISTAR)\b(?!\s+(?:of|on|study population)\b)")
 TRIALCTX = re.compile(r"\b(trial|study|randomi[sz]ed|cohort|programme|program)\b", re.I)
 NCTRE = re.compile(r"NCT0?\d{6,8}", re.I)
@@ -39,7 +53,7 @@ R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budge
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
 R_DUAL  = re.compile(r"\blaba[\s/\-]?lama\b|\blama[\s/\-]?laba\b|dual bronchodilat|dual (long-acting )?bronchodilator|umeclidinium[\s/\-]?vilanterol|glycopyrr\w+[\s/\-]?formoterol|formoterol[\s/\-]?glycopyrr|indacaterol[\s/\-]?glycopyrr|tiotropium[\s/\-]?olodaterol|aclidinium[\s/\-]?formoterol|anoro|ultibro|stiolto|spiolto|duaklir|bevespi|two long-acting bronchodilator", re.I)
-R_TRIP  = re.compile(r"triple|ics[\s/\-]?laba[\s/\-]?lama|single[\s\-]?inhaler triple|trelegy|trimbow|breztri|trixeo|fostair|fluticasone furoate[\s/\-]?umeclidinium[\s/\-]?vilanterol|budesonide[\s/\-]?glycopyrr\w+[\s/\-]?formoterol|beclomet\w*[\s/\-]?formoterol[\s/\-]?glycopyrron", re.I)
+R_TRIP  = re.compile(r"triple|ics[\s/\-]?laba[\s/\-]?lama|single[\s\-]?inhaler triple|trelegy|trimbow|breztri|trixeo|fostair|fluticasone furoate[\s/\-]?umeclidinium[\s/\-]?vilanterol|budesonide[\s/\-]?glycopyrr\w+[\s/\-]?formoterol|beclomet\w*[\s/\-]?formoterol[\s/\-]?glycopyrron|ff[\s/\-]?umec[\s/\-]?vi\b|\bbgf\b|\bbdp[\s/\-]?ff[\s/\-]?g\b", re.I)
 # RCT 次級/事後分析（隨機化在母試驗，摘要常無 randomized 字樣）——屬該試驗的『報告』，仍歸 RCT/Study
 R_RCT2ND= re.compile(r"post[\s\-]?hoc|responder analysis|pre[\s\-]?specified (analysis|subgroup|outcome)|subgroup analysis|exploratory (post|analysis|endpoint)|secondary (analysis|outcome analysis)|further analysis of|analysis of (the )?(impact|ethos|kronos|fulfil|trilogy|tribute|trinity|etwas)|analysis of (data from|pooled data from the)|of the (impact|ethos|kronos|fulfil|trilogy|tribute|trinity) (trial|study)", re.I)
 # 其他原始臨床研究設計詞（非隨機/小型臨床比較/加成試驗等）——放寬以接住被誤丟未分型的真原始研究
@@ -137,7 +151,15 @@ def classify(cache, out="g7_units.json"):
         row={"uid":uid,"title":title,"pmid":v.get("pmid",""),"doi":v.get("doi",""),
              "arm":v.get("arm"),"design":design,"abstract_available":bool(ab)}
         if design=="原始研究:RCT":
-            trip=bool(R_TRIP.search(text)); dual=bool(R_DUAL.search(text))
+            # 對照軸(C=LABA/LAMA)偵測校正（2026-06 使用者糾正核心/非核心誤判）：
+            #  (1) 先正規化分隔符 en/em-dash→hyphen、β→b——否則 ETHOS/KRONOS 的
+            #      `glycopyrrolate–formoterol`(en-dash) 漏判 → 假陰(該核心被丟非核心)。
+            #  (2) 再『遮蔽三合一藥名跨度』(R_TRIP.sub) 才掃 R_DUAL——否則三合一名 `FF/UMEC/VI`
+            #      內含 `UMEC/VI`=umeclidinium/vilanterol(一個雙支擴對) → 假陽(FULFIL/TRILOGY 對照其實
+            #      是 ICS/LABA 卻被當核心)。真正獨立的雙支擴對照臂(如 IMPACT 的 UMEC/VI 比較組)遮蔽後仍在。
+            dtext=text.replace("–","-").replace("—","-").replace("β","b")
+            trip=bool(R_TRIP.search(dtext))
+            dual=bool(R_DUAL.search(R_TRIP.sub(" ", dtext)))
             trial,key=detect_trial(text,nct,names)
             if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 歸背景（非核心），不丟棄
                 design="背景:非核心RCT(非三合一vs雙合一介入)"; row["design"]=design
@@ -147,7 +169,13 @@ def classify(cache, out="g7_units.json"):
                 if sl: trial=sl; row["linked_by"]="signature"
             row["trial"]=trial or "(未辨識)"; row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
-            row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
+            # 核心/非核心：已知樞紐試驗以 trial-level 權威表定案（試驗設計屬性，不隨子報告摘要飄移）；
+            # 非樞紐才回退『標題+摘要 regex(trip∧dual)』。
+            if trial in PIVOTAL_LABALAMA_ARM:
+                row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
+                row["core_basis"]="pivotal_trial_design"
+            else:
+                row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
             studies[trial or "(未辨識試驗)"].append(row)
             buckets[row["unit"]]+=1
         else:

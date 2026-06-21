@@ -43,5 +43,6 @@ fresh-clone / 自測：
 ✅ 已修(使用者要求):⑥ PDF PRISMA 段移除流程圖、只保留漏斗表格（scripts/build_search_pdf.py 刪除段3 的 Drawing/box/arrow 流程圖區塊，保留 funnel 表＋二分閉合；report_check/gate_guard 仍綠）
 ✅ 已修(使用者要求):⑥ PDF PRISMA 漏斗表最後一步固定補「納入分析文獻 Included」——由產生器確定性附加（非手動編 funnel）：scripts/build_search_pdf.py 段3 先濾掉 funnel 內既有『納入分析』步、再附加一行，數量取 prisma_flow.included（缺則由 included_studies 報告數推算）；已驗：移除 _search_report.json 手動步後 PDF 仍渲染出該末步（423），report_check/gate_guard 綠
 ✅ 已修(使用者要求):⑥ PDF PRISMA 末步須詳述『分類後各類篇數』——scripts/build_search_pdf.py 段3 於 Included 步後逐類渲染 `included_breakdown`（核心RCT/SR-MA/其他RCT/各背景，總和=Included）為縮排子列；breakdown 由 ⑤b g7_units.buckets 計算寫入 _search_report.json（本案 59/64/45/143/89/23=423）。report_check/gate_guard 綠
+✅ 已修(使用者糾正):⑤b 核心/非核心 RCT 判準誤判——scripts/classify_units.py：(a) 對照軸偵測先正規化 en/em-dash→hyphen＋β→b（修 ETHOS/KRONOS `glycopyrrolate–formoterol` 假陰）、(b) 遮蔽三合一藥名跨度(R_TRIP.sub)再掃 R_DUAL＋R_TRIP 補 FF/UMEC/VI·BGF·BDP/FF/G 縮寫（修 `FF/UMEC/VI⊃UMEC/VI` 子字串假陽）、(c) **核心/非核心是試驗設計屬性、非單篇報告屬性**→對已知樞紐試驗以 trial-level 權威表 `PIVOTAL_LABALAMA_ARM` 定案（IMPACT/ETHOS/KRONOS/TRIBUTE=核心；FULFIL/TRILOGY/TRINITY=非核心 vs ICS/LABA），非樞紐才回退 regex。實證：7 大樞紐全部歸位正確；核心報告 59→53。下游報告/breakdown/corpus_seed/PDF 同步重建。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
