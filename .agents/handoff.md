@@ -48,4 +48,6 @@ fresh-clone / 自測：
 
 ✅ 已修(使用者要求):⑥ PDF 段四「最終納入的證據清單」改為**只列核心 RCT**——scripts/build_search_pdf.py 段4 以群組 type 含『核心』篩選 `included_studies`，只渲染核心原始 RCT（三合一 vs LABA/LAMA）群組，排除『其他三合一 RCT』與 SR/MA 群組（後兩者見第三節分類統計與交接包）；標題改「四、最終納入的核心 RCT 證據清單」。report_check/gate_guard 綠。
 
+✅ 已修(使用者糾正):⑤b 會議摘要被誤判為獨立核心 RCT——scripts/classify_units.py 新增 `R_CONF_DOI`/`R_CONF_TITLE` 偵測會議摘要(ERS congress-/conference/poster/synopsis 等)；依 Cochrane/MECIR 會議摘要＝『待評估研究』，**獨立會議摘要(無對應完整論文)不得當核心**→歸 `待評估:會議摘要(未完整發表)`；惟已納入樞紐試驗(有完整論文)的子報告即使是摘要仍保留為該試驗支持性報告。實證：1 篇 ERS congress-2020 摘要(無 PMID,n=104)由核心移出；核心報告 32→31。下游同步重建。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

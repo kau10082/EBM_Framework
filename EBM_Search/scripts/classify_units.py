@@ -55,6 +55,11 @@ R_RAND  = re.compile(r"randomi[sz]ed|randomly (assigned|allocated)|double-?blind
 # 故先擋下這些『綜述體』再判 RCT）。2026-06 使用者逐筆核對 24 篇獨立核心 RCT 後立：誤拉入綜述/藥動 8+ 篇。
 R_REVIEW_STRONG = re.compile(r"narrative (review|paper)|this (review|article|paper) (review|summari[sz]|explore|discuss|present|offer)|to review (current|the) (evidence|literature|role|use)|we (used pubmed|conducted (a|the) literature search|searched (pubmed|medline|the literature))|literature search (from|was conducted|using)|areas covered\b|this article (review|explore|present)|overview of (the )?(heterogeneity|current)|drug (profile|review)|reviews the role", re.I)
 R_PK_STRONG = re.compile(r"population pharmacokinetic|pharmacokinetic (analysis|profile|model|characteri)|pharmacodynamic (analysis|profile)|bioequivalence|gas trapping|residual volume", re.I)
+# 會議摘要偵測（DOI/標題訊號）：依 Cochrane/MECIR，會議摘要＝『待評估研究(studies awaiting classification)』，
+# 未經完整同行評審、數據不完整 → **不得當核心可分析 RCT**（除非是已納入完整論文試驗的子報告）。
+# 2026-06 使用者糾正：一篇 ERS congress-2020 摘要(無 PMID)被誤判為獨立核心 RCT。
+R_CONF_DOI = re.compile(r"congress-\d|/conference|meetingabstract|ajrccm-conference|\.congress\.|abstract-\d", re.I)
+R_CONF_TITLE = re.compile(r"\bposter\b|\bP\d{2,4}\b|congress abstract|conference abstract|^synopsis:", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
@@ -184,9 +189,16 @@ def classify(cache, out="g7_units.json"):
             row["comparator_LABA_LAMA"]=dual
             # 核心/非核心：已知樞紐試驗以 trial-level 權威表定案（試驗設計屬性，不隨子報告摘要飄移）；
             # 非樞紐才回退『標題+摘要 regex(trip∧dual)』。
+            doi_l=str(v.get("doi") or "").lower()
+            is_conf = bool(R_CONF_DOI.search(doi_l)) or bool(R_CONF_TITLE.search(title))
             if trial in PIVOTAL_LABALAMA_ARM:
+                # 樞紐試驗（有完整論文）的子報告即使是會議摘要也保留為該試驗報告（支持性）
                 row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
                 row["core_basis"]="pivotal_trial_design"
+            elif is_conf:
+                # 獨立會議摘要（無對應完整論文）＝待評估研究，不得當核心可分析 RCT（MECIR）
+                row["unit"]="待評估:會議摘要(未完整發表)"; row["design"]="背景:會議摘要(待評估)"
+                row["core_basis"]="conference_abstract_awaiting"
             else:
                 row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
             studies[trial or "(未辨識試驗)"].append(row)
