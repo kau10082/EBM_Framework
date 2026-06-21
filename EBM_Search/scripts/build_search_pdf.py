@@ -94,17 +94,26 @@ def build(infile, out, font=None):
     #   **不再把背景/進行中/他族群/綜述等非納入類別列進 Included 下**（那些是分流統計、非納入分析）。
     #   數量與明細皆由產生器確定性計算（資料驅動，換主題自適用），不靠手編 included_breakdown。
     funnel=[s for s in (data.get("funnel") or []) if "納入分析" not in str(s.get("step",""))]
-    core_n=sum(len(g.get("reports",[])) for g in data.get("included_studies",[]) if "核心" in str(g.get("type","")))
+    core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
+    core_n=sum(len(g.get("reports",[])) for g in core_groups)
     SRMA={"Meta-Analysis","Systematic Review","meta-analysis","systematic review",
           "SR/MA","統合分析","系統性回顧","Meta-analysis"}
-    srma_n=sum(1 for r in (data.get("background") or []) if len(r)>3 and str(r[3]).strip() in SRMA)
+    srma_rows=[r for r in (data.get("background") or []) if len(r)>3 and str(r[3]).strip() in SRMA]
+    srma_n=len(srma_rows)
     inc_n=core_n+srma_n
     funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
                    "change":"交接 corpus_seed 進 EBM 評讀；僅計實際納入分析者，明細如下"})
     fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
-    # Included 明細：只列『核心 RCT＋子研究』與『SR/MA』兩類（其餘背景/進行中不屬納入分析）。
-    for lab,cnt in (("核心 RCT＋子研究", core_n), ("SR/MA", srma_n)):
-        fr.append([f"　└ {lab}", str(cnt)])
+    # Included 明細：只列『核心 RCT＋子研究』與『SR/MA』兩類，並**簡短列出是哪幾篇**——
+    #   核心：逐 Study 名＋報告數（細目見段4）；SR/MA：逐篇短標題＋PMID（資料驅動，換主題自適用）。
+    core_detail="、".join(f"{g.get('study','')} {len(g.get('reports',[]))}" for g in core_groups)
+    fr.append(["　└ 核心 RCT＋子研究", f"{core_n}（{core_detail}）" if core_detail else str(core_n)])
+    fr.append(["　└ SR/MA", str(srma_n)])
+    for r in srma_rows:
+        short=str(r[0])[:44]+("…" if len(str(r[0]))>44 else "")
+        pmid=str(r[1]) if len(r)>1 and str(r[1]).strip() else "—"
+        fr.append([f"　　• {short}", f"PMID {pmid}"])
+
     if len(fr)>1:
         t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
