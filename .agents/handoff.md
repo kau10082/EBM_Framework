@@ -40,5 +40,6 @@ fresh-clone / 自測：
 ✅ 已修:Bug1 無可解析內容者漏到③（SEARCH_SPEC.md ②c 鐵律＋gate_guard 強化：無abstract須有實抓解析證明，否則②c判待評估）
 ✅ 已修:Bug2 未盡力解析全文、只憑旗標標 have（SEARCH_SPEC.md 規定②c須窮盡 PMC/Unpaywall全locations/PDF/HTML 實抓解析；gate 以 text_len 證明）
 ✅ 已修:⑤b --enrich 找不到介入軸→CT.gov 交叉核對靜默跳過（scripts/classify_units.py enrich 改穩健尋找介入軸 I/I_*/role；補跑 CT.gov 核對 34 NCT，核心 RCT 正確歸併、非核心歸背景）
+✅ 已修(使用者要求):⑥ PDF PRISMA 段移除流程圖、只保留漏斗表格（scripts/build_search_pdf.py 刪除段3 的 Drawing/box/arrow 流程圖區塊，保留 funnel 表＋二分閉合；report_check/gate_guard 仍綠）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

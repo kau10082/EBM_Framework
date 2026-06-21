@@ -91,24 +91,7 @@ def build(infile, out, font=None):
     if len(fr)>1:
         t=Table(fr,colWidths=[60*mm,W-60*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
-    # 流程圖
-    legs=data.get("search_strategy",[])
-    legtxt="；".join(f"{l['leg']}{l.get('hit','')}" for l in legs if not l.get("skip") and l.get('hit') is not None)
-    d=Drawing(W,150)
-    def box(x,y,w,h,txt,fill="#eef3fb"):
-        d.add(Rect(x,y,w,h,fillColor=colors.HexColor(fill),strokeColor=colors.HexColor("#33689e"),strokeWidth=0.8))
-        for i,ln in enumerate(txt.split("\n")): d.add(String(x+4,y+h-11-i*10,_safe(ln),fontName=F,fontSize=7))
-    def arrow(x1,y1,x2,y2):
-        d.add(Line(x1,y1,x2,y2,strokeColor=colors.grey,strokeWidth=0.8)); d.add(Polygon(points=[x2-3,y2+4,x2+3,y2+4,x2,y2],fillColor=colors.grey,strokeColor=colors.grey))
-    box(0,122,W*0.62,26,f"辨識 Identification：各腿命中合計 {pf.get('identification','')}\n{legtxt}")
-    box(0,96,W*0.62,18,f"去重 Dedup：跨源去重聯集 ＝ {pf.get('dedup','')}")
-    box(0,66,W*0.62,24,f"篩選 Screening：初篩保留 {pf.get('screening','')}；待評估 {pf.get('awaiting','')}（不進嚴格篩）")
-    box(0,38,W*0.62,22,f"③ 嚴格篩二分：離題 {pf.get('excluded_screen','')}（切題進納入）")
-    box(0,8,W*0.62,24,f"納入 Included ＝ {pf.get('included','')}（核心 RCT 報告＋SR/MA＋背景）")
-    box(W*0.66,90,W*0.34,30,f"其他方法（引文追蹤）\nSR/MA·樞紐種子反向+正向\n新增切題 +{pf.get('citation_arm','')}")
-    for y1 in (122,96,66,38): arrow(W*0.31,y1,W*0.31,y1-8)
-    arrow(W*0.66,100,W*0.62,24)
-    S.append(d); S.append(Spacer(1,3*mm))
+    S.append(Spacer(1,3*mm))
 
     # ── 段4 最終納入證據清單 ──
     S.append(H("四、最終納入的證據清單（核心 RCT／重要 MA）"))
