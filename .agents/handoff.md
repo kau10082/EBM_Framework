@@ -2,12 +2,15 @@
 
 【初審】功能塊：分析階段『全文為準』機器強制（使用者 2026-06-21 糾正：到分析階段一切以全文資訊為準，真的各管道都讀不到全文才退網路/AI 合成）
 
-本輪審查範圍：僅以下 5 檔
+本輪審查範圍：僅以下 8 檔
 - `EBM_Analysis/guardrails/fulltext_authoritative.md`（新增護欄）
 - `EBM_Analysis/tools/fulltext_gate.py`（新增機器 gate）
 - `EBM_Analysis/tools/verify_all.py`（接線）
 - `EBM_Analysis/schema/phase1_extract.json`（新增 `fulltext_attempts` 欄）
 - `EBM_Analysis/phases/01_extract.md` ＋ `EBM_Analysis/manifest.yaml`（規格/登錄）
+- `EBM_Analysis/tools/analysis_scope.py`（新增：算進入分析集／需補全文最小集）
+- `EBM_Analysis/schema/phase0_corpus.json`（新增 `is_primary_report` 欄）
+- `EBM_Analysis/phases/00_triage.md`（步驟 5/6 範圍改用 analysis_scope；手機可跳過實執行）
 
 改了什麼（5 條）：
 1. **新增護欄 `fulltext_authoritative.md`**：分析階段以全文為準；退 abstract/registry/ai_synthesis 前須逐一實試 local_pdf→PMC fullTextXML→Unpaywall 全 oa_locations→manual_supplement 並記 `fulltext_attempts`；取得全文→標 `full_text` 以全文重抽；唯全部取不到才退二手，且 status=needs_review＋Phase 3 確定性封頂（連動 registry_backfill／selfcheck C4）。
@@ -21,7 +24,13 @@ fresh-clone / 自測：
 - 實跑 COPD analysis cache：4 篇核心試驗 p1（IMPACT/ETHOS/KRONOS/TRIBUTE）先全部 abstract-only → gate **FAIL（正確抓出未窮盡全文）**；補實試三管道（local_pdf=not_found、PMC=not_found〔NEJM/Lancet 非 OA、不在 PMC，已重試排除 503〕、Unpaywall=not_found/parse_failed〔僅 Manchester 典藏 landing 頁、非 PDF〕）記入 fulltext_attempts 後 → schema ✅＋gate **PASS**。證明 gate 屬實有效、且 4 篇全文確實線上不可得（退 abstract 合法、status=needs_review、Phase 3 封頂）。
 - `verify_all.py`/`fulltext_gate.py` 語法＋import OK。
 
-想被重點看：(a) gate 要求的三必試管道 {local_pdf,pmc_fulltextxml,unpaywall_oa} 是否合理（manual_supplement 容許 skipped，因使用者可能跳過補全文）；(b) 「標 full_text 卻無 fulltext_obtained 證據→FAIL」會否誤傷『本機 PDF 直接讀、未經線上管道』情境（目前 local_pdf 取得也會記 fulltext_obtained，應不誤傷，但請確認）；(c) 與既有 registry_backfill／selfcheck C4「非全文不得 low」是否重複或衝突。
+另一組改動（同屬分析階段、2026-06 使用者『只匯入/只補進入分析那幾篇』）：
+6. **新增 `tools/analysis_scope.py`**：確定性算 `analysis_set`（grade_track∈{full,targeted_harms}＝進入分析＝Zotero 範圍）、`need_manual_fulltext`（分析集中全文未取得且為錨點者＝full 的 is_primary_report 每 Study 一篇＋targeted_harms 真害；＝補這些即可）、`optional_fulltext`（full 次級/overlap，補了不增進核心 GRADE）。
+7. **schema `phase0_corpus.json` 加 `is_primary_report`**（每核心 Study 標一篇主報告為分析全文錨點）。
+8. **`phases/00_triage.md` 步驟 5/6 改範圍**：補全文範圍＝`need_manual_fulltext`（不再全 full+harms 都補）；Zotero 範圍＝`analysis_set`（不再鏡像 _corpus.json 全集，背景 light_summary 不進 Zotero，除非 --include-background）；註明手機/遠端可暫跳過實執行、範圍清單仍算好備查。
+   實跑：本案 analysis_set=51 報告（核心 28→4 Study＋targeted_harms 23）；need_manual=4 核心主報告（IMPACT/ETHOS/KRONOS/TRIBUTE primaries）＋21 harms 候選；optional=24 IMPACT/ETHOS/TRIBUTE 次級報告。
+
+想被重點看：(a) gate 要求的三必試管道 {local_pdf,pmc_fulltextxml,unpaywall_oa} 是否合理（manual_supplement 容許 skipped）；(b) 「標 full_text 卻無 fulltext_obtained 證據→FAIL」會否誤傷『本機 PDF 直接讀』情境（local_pdf 取得也記 fulltext_obtained，應不誤傷）；(c) 與既有 registry_backfill／selfcheck C4「非全文不得 low」是否衝突；(d) analysis_scope 把 Zotero 範圍縮成『只分析集、不含背景』是否與既有『Zotero≡報告』規則衝突（按：EBM_Search ⑤c 已 deprecated 移 Phase 0，此為新權威範圍，無衝突）。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
@@ -53,5 +62,7 @@ fresh-clone / 自測：
 ✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
 
 ✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
+
+✅ 已修(使用者『只匯入/只補進入分析那幾篇』):新增 `tools/analysis_scope.py` 確定性算『進入分析集(Zotero 範圍)＝full+targeted_harms』『需補全文最小集＝每 Study 主報告(is_primary_report)＋真 harms』『選補＝full 次級 overlap』；schema phase0 加 `is_primary_report`；phases/00_triage.md 步驟 5/6 範圍改用 analysis_scope（補全文只補 need_manual、Zotero 只匯 analysis_set 不含背景）並註明手機可暫跳過實執行。實證：本案進入分析 51 報告(4 核心 Study＋23 harms)、需補全文 4 核心主報告為主。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

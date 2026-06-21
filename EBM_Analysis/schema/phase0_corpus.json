@@ -61,6 +61,7 @@
             "description": "證據角色"
           },
           "design": { "type": ["string", "null"], "description": "RCT/SR-MA/NRSI/Phase I/review…" },
+          "is_primary_report": { "type": "boolean", "description": "是否為該 Study 的主要報告（分析錨點）。同一試驗多報告中只一篇為 true；分析以它為全文錨點，其餘為 overlap 次級報告。用於 analysis_scope 算『需補全文』最小集（每 Study 一篇）。" },
           "grade_track": {
             "enum": ["full", "targeted_harms", "light_summary", "none"],
             "description": "full=跑完整四階段；targeted_harms=只評 harms；light_summary=背景摘要不分級；none=排除"
