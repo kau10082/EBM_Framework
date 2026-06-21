@@ -1,31 +1,38 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【初審】功能塊：EBM_Search 策略/①關報告流程改善 ＋ SR Filter 分工（使用者 2026-06-21 於 triple-vs-dual COPD 實跑中連續提出）
+【初審】功能塊：EBM_Search 檢索流程多項改善（使用者 2026-06-21 於 triple-vs-dual COPD 實跑中連續糾正）
 
-本輪審查範圍：僅以下 2 檔
+本輪審查範圍：僅以下 3 檔
 - `EBM_Search/SEARCH_SPEC.md`
 - `EBM_Search/scripts/leg_exhaust_check.py`
+- `EBM_Search/scripts/gate_guard.py`
 
-改了什麼：
-1. **① 廣蒐不含引文搜索**（SEARCH_SPEC.md，第①關停頓點新增鐵律）：第①關只「各腿用核准 query 廣蒐 → 跨腿去重」，**不做引文追蹤/snowball**；引文追蹤＝第④關、須在 ③ 定出核心後以核心為種子才做。OpenAlex／Europe PMC 在 ① 僅作廣檢，references/citations 引文鏈留待 ④；①報告勿讓使用者誤以為已做引文搜索。
-2. **報告策略時主動問 SR Filter，且 SR Filter 用在『PubMed 以外』的腿**（SEARCH_SPEC.md，`check_strategy_approved` 段新增鐵律）：報告策略時必須主動問「是否套用 Systematic Review Filter」，並明確**分工**——**PubMed 腿維持 Cochrane 高敏感 RCT 過濾器**；**SR 過濾器套在 PubMed 以外的腿（Consensus／OpenAlex／Europe PMC）**補抓既有 SR/MA/NMA（Consensus `study_types`、OpenAlex/EuropePMC `PUB_TYPE`/標題）；ClinicalTrials.gov 為登錄庫、SR 不適用。SR 過濾器**additive**（每腿額外一條 SR 子查詢、聯集進池，不取代廣檢、不損 recall）；非 PubMed 的 SR 子腿用 `<leg>-SR` 命名並設 `design_filter_allowed:true`。
-   - **修正歷程（使用者兩次糾正）**：第一版誤把 SR Filter 寫成套在 PubMed 腿 → 已改為「PubMed 以外的腿」。
-3. **leg_exhaust gate 認得 `<leg>-SR` 子腿**（scripts/leg_exhaust_check.py）：新增 `_base()` 去掉 `-SR`/` sr`/`_sr` 後綴，讓 SR 子腿沿用母腿的窮盡分類（`Consensus-SR`→AI 合成腿免窮盡、`OpenAlex-SR`/`EuropePMC-SR`→可窮盡須 fetched≥hitCount）。配合第 2 點 `<leg>-SR` 命名約定，否則 SR 子腿會被誤判 FAIL。
+改了什麼（5 條）：
+1. **① 廣蒐不含引文搜索**（SEARCH_SPEC.md，第①關停頓點）：① 只「廣蒐＋去重」，引文追蹤/snowball＝④，須在 ③ 定核心後做；OpenAlex/EuropePMC 在 ① 僅廣檢。
+2. **報告策略時主動問 SR Filter**（SEARCH_SPEC.md，`check_strategy_approved` 段）：報告策略時必須主動問是否套 Systematic Review Filter。
+3. **SR Filter 用在『PubMed 以外』的腿**（SEARCH_SPEC.md）：PubMed 維持 Cochrane RCT 過濾器；SR 過濾器套 Consensus/OpenAlex/EuropePMC（additive、`<leg>-SR` 命名、design_filter_allowed:true）；CT.gov 不適用。
+4. **leg_exhaust 認得 `<leg>-SR` 子腿**（scripts/leg_exhaust_check.py）：新增 `_base()` 去 `-SR` 後綴，SR 子腿沿用母腿窮盡分類。
+5. **②c 必『實抓+解析』全文、無可解析內容者在②c就判待評估**（SEARCH_SPEC.md ＋ scripts/gate_guard.py）：
+   - Bug1（使用者）：所有管道都無摘要/無可解析全文者，應在「②c 全文搜索」這一關就歸「待評估」，不該漏到 ③ 才發現。
+   - Bug2（使用者）：未盡力解析全文（只憑 OA/PMC 旗標標 have），導致後關才「突然」多出可解析全文。
+   - 修法：SEARCH_SPEC 新增鐵律——②c 對無摘要者須**窮盡管道實抓+解析**（PMC fullTextXML／Unpaywall 全部 oa_locations／OA PDF(pdftotext)・HTML 去標籤），取得可解析正文才算 have；三管道抓+解析後仍無內容（含外文無法以英文軸詞比對）→ ②c 判 `待人工補全文`，不得漏進 ③。
+   - 機器看守：`gate_guard.check_partition_provenance` 強化——screened 且無 abstract 者，其 uid 須在 `g3_fetched_by_uid.json` 且帶實抓解析證明（`text_len`≥1500 或 `verified`，登錄試驗 `channel:registry` 例外）；只掛旗標無正文＝FAIL。等於把「have 須實抓驗證」前移到 ②c。
 
 fresh-clone / 自測：
-- `python EBM_Search/scripts/selftest_guards.py` → ✅ 全部守門有效（含改過的 leg_exhaust）。
-- 實跑 triple-vs-dual COPD cache：`gate_guard.py` 所有已抵達關卡通過（取盡/策略遵從/四軸覆蓋/四軸展開/對照軸純度）。SR 過濾器 additive 實證：EuropePMC-SR 淨增 34、Consensus-SR 淨增 3、OpenAlex-SR 淨增 0；文獻聯集 1333→1370。
-- 附帶：comparator_purity gate 實際攔下我一版 Consensus-SR query 誤含「versus dual therapy」（C 軸詞）→ 已修為 C-clean query，gate 轉綠（守門有效，非放水）。
+- `python EBM_Search/scripts/selftest_guards.py` → ✅ 全部守門有效（含改過的 leg_exhaust、gate_guard）。
+- 實跑 COPD cache：`gate_guard.py` 全關通過。第 5 條修正後實跑效果：原 96 筆「無摘要卻靠旗標/標題進 ③」者重抓，58 可解析、其中 27 可靠重篩（14 切題/13 離題）、69 無可解析內容→退回②c待評估；切題 349→354、待評估 63→132。證明 Bug 屬實且修正生效。
 
-想被重點看：兩條新增鐵律措辭是否與既有「關責不外溢」「④引文追蹤」「SR 模式 PubMed 過濾器」「對照軸純度」段一致無矛盾；`leg_exhaust_check._base()` 後綴清單是否足夠（目前 `-sr`/` sr`/`_sr`/`-systematic-review`）。
+想被重點看：第 5 條 `check_partition_provenance` 的 `text_len≥1500` 門檻與 `channel:registry` 例外是否合理；②c 鐵律措辭是否與既有「待評估三管道」「有 OA 卻不抓」「have 須實抓驗證(verify_have_fetchable)」段一致無重複矛盾。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
 
-✅ 已修:① 關報告誤含引文搜索語意（本輪修改:SEARCH_SPEC.md 第①關停頓點新增「廣蒐去重不含引文搜索、snowball 屬④」鐵律）
-✅ 已修:報告策略時未主動問 SR filter（本輪修改:SEARCH_SPEC.md `check_strategy_approved` 段新增「主動詢問 SR Filter」鐵律）
-✅ 已修:SR Filter 套用對象寫錯（誤寫成 PubMed 腿）（本輪修改:SEARCH_SPEC.md 改為「SR Filter 套在 PubMed 以外的腿、additive、`<leg>-SR` 命名、design_filter_allowed:true」；PubMed 維持 RCT 過濾器）
-✅ 已修:leg_exhaust gate 不認得 SR 子腿會誤判（本輪修改:scripts/leg_exhaust_check.py 新增 `_base()` 去 `-SR` 後綴，SR 子腿沿用母腿窮盡分類；selftest 仍綠）
+✅ 已修:① 關報告誤含引文搜索語意（SEARCH_SPEC.md 第①關停頓點新增「廣蒐去重不含引文搜索」鐵律）
+✅ 已修:報告策略時未主動問 SR filter（SEARCH_SPEC.md `check_strategy_approved` 段新增鐵律）
+✅ 已修:SR Filter 套用對象寫錯成 PubMed（改為「PubMed 以外的腿、additive、`<leg>-SR`、design_filter_allowed:true」）
+✅ 已修:leg_exhaust gate 不認得 SR 子腿（scripts/leg_exhaust_check.py 新增 `_base()` 去 `-SR` 後綴）
+✅ 已修:Bug1 無可解析內容者漏到③（SEARCH_SPEC.md ②c 鐵律＋gate_guard 強化：無abstract須有實抓解析證明，否則②c判待評估）
+✅ 已修:Bug2 未盡力解析全文、只憑旗標標 have（SEARCH_SPEC.md 規定②c須窮盡 PMC/Unpaywall全locations/PDF/HTML 實抓解析；gate 以 text_len 證明）
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
