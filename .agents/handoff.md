@@ -1,33 +1,22 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【初審】功能塊：EBM_Search 檢索流程多項改善（使用者 2026-06-21 於 triple-vs-dual COPD 實跑中連續糾正）
+【初審】功能塊：把「Zotero 匯入」與「人工補全文」從 EBM_Search 移到 EBM_Analysis Phase 0（使用者 2026-06-21 糾正：最終分析哪幾篇要到 Phase 0 分流定稿才確定，故這兩步權威版該在 Phase 0 做）
 
-本輪審查範圍：僅以下 4 檔
+本輪審查範圍：僅以下 3 檔
+- `EBM_Analysis/phases/00_triage.md`
 - `EBM_Search/SEARCH_SPEC.md`
-- `EBM_Search/scripts/leg_exhaust_check.py`
-- `EBM_Search/scripts/gate_guard.py`
-- `EBM_Search/scripts/classify_units.py`
+- `config/settings.example.yaml`
 
-改了什麼（6 條）：
-1. **① 廣蒐不含引文搜索**（SEARCH_SPEC.md，第①關停頓點）：① 只「廣蒐＋去重」，引文追蹤/snowball＝④，須在 ③ 定核心後做；OpenAlex/EuropePMC 在 ① 僅廣檢。
-2. **報告策略時主動問 SR Filter**（SEARCH_SPEC.md，`check_strategy_approved` 段）：報告策略時必須主動問是否套 Systematic Review Filter。
-3. **SR Filter 用在『PubMed 以外』的腿**（SEARCH_SPEC.md）：PubMed 維持 Cochrane RCT 過濾器；SR 過濾器套 Consensus/OpenAlex/EuropePMC（additive、`<leg>-SR` 命名、design_filter_allowed:true）；CT.gov 不適用。
-4. **leg_exhaust 認得 `<leg>-SR` 子腿**（scripts/leg_exhaust_check.py）：新增 `_base()` 去 `-SR` 後綴，SR 子腿沿用母腿窮盡分類。
-5. **②c 必『實抓+解析』全文、無可解析內容者在②c就判待評估**（SEARCH_SPEC.md ＋ scripts/gate_guard.py）：
-   - Bug1（使用者）：所有管道都無摘要/無可解析全文者，應在「②c 全文搜索」這一關就歸「待評估」，不該漏到 ③ 才發現。
-   - Bug2（使用者）：未盡力解析全文（只憑 OA/PMC 旗標標 have），導致後關才「突然」多出可解析全文。
-   - 修法：SEARCH_SPEC 新增鐵律——②c 對無摘要者須**窮盡管道實抓+解析**（PMC fullTextXML／Unpaywall 全部 oa_locations／OA PDF(pdftotext)・HTML 去標籤），取得可解析正文才算 have；三管道抓+解析後仍無內容（含外文無法以英文軸詞比對）→ ②c 判 `待人工補全文`，不得漏進 ③。
-   - 機器看守：`gate_guard.check_partition_provenance` 強化——screened 且無 abstract 者，其 uid 須在 `g3_fetched_by_uid.json` 且帶實抓解析證明（`text_len`≥1500 或 `verified`，登錄試驗 `channel:registry` 例外）；只掛旗標無正文＝FAIL。等於把「have 須實抓驗證」前移到 ②c。
-6. **⑤b classify_units 的 `--enrich` 找不到介入軸→CT.gov 交叉核對靜默跳過**（scripts/classify_units.py，使用者糾正）：
-   - Bug：`enrich()` 寫死 `axes.get("I")` 找介入軸，但 g0 介入軸鍵名為 `I_triple` → isyn 取到空 → 所有 NCT 介入判「不在範圍」→ 真三合一 RCT 會被誤丟背景；且因實跑時我整步跳過 `--enrich`，CT.gov 的 NCT→試驗名／介入交叉核對根本沒跑，留下大量「未辨識 RCT／格式異常 NCT」需人工覆核。
-   - 修法：`enrich()` 改為**穩健尋找介入軸**——`axes.get("I")` 無效時，掃 axes 找鍵名 `I`／`I_` 開頭或 role 含 "intervention" 的軸。實跑（補 g0.four_axis_expansion 三合一成分後）`--enrich` 生效：CT.gov 核對 34 NCT→13 三合一／21 雙合一·他藥，核心 82→59 報告、25 筆非核心 RCT 正確歸背景。
-   - 殘留「未辨識 39」經查證實＝**有摘要的獨立小型 RCT（無 NCT）**、「title-only 19」＝**勘誤/讀者來函/社論/會議短摘**（本無摘要）——非流程缺失。
+改了什麼（3 條）：
+1. **Phase 0 新增步驟 5（人工補全文）、步驟 6（Zotero 匯入）**（`EBM_Analysis/phases/00_triage.md`）：分流定稿後才做——補全文以 `grade_track∈{full,targeted_harms}`（真正要評讀者）為準（取全文順序 PMC fullTextXML→Unpaywall 全 oa_locations→本機 PDF，仍缺則實際建補全文資料夾＋寫 `需補全文清單.txt`）；Zotero 匯入鏡像 `_corpus.json` 全集、以 `relevance:`／`role:`／`grade_track:`／`study:` 標籤對齊分流。理由寫進文件：退階試驗（如 SUNSET/WISDOM）最後只當背景 light_summary 就不必補全文，故必須以 Phase 0 定稿名單為準，避免在 EBM_Search 對未定稿名單白補/重複匯入。斷點同步更新（分流→補全文→Zotero→Phase 1）。
+2. **SEARCH_SPEC ⑤c/⑤d 標『權威版移到 Phase 0』**（`EBM_Search/SEARCH_SPEC.md`）：⑤c/⑤d 段首新增鐵律——⑤c 預設不匯 Zotero、⑤d 至多做 handoff 前初步可得性盤點（標 `fulltext_status` 帶下游），權威執行改在 Phase 0；原 (a)(b) 細節保留為「使用者在 EBM_Search 階段明確要求即時做」時用，預設略過。
+3. **settings 範本補 `analysis.fulltext_dir`**（`config/settings.example.yaml`）：給 Phase 0 補全文資料夾用，留空回退 `EBM_Analysis/inputs/_fulltext_supplement/`。
 
 fresh-clone / 自測：
-- `python EBM_Search/scripts/selftest_guards.py` → ✅ 全部守門有效（含改過的 leg_exhaust、gate_guard）。
-- 實跑 COPD cache：`gate_guard.py` 全關通過。第 5 條修正後實跑效果：原 96 筆「無摘要卻靠旗標/標題進 ③」者重抓，58 可解析、其中 27 可靠重篩（14 切題/13 離題）、69 無可解析內容→退回②c待評估；切題 349→354、待評估 63→132。證明 Bug 屬實且修正生效。
+- 本輪純文件/設定範本改動（無程式邏輯變更）。`python EBM_Search/scripts/selftest_guards.py` 仍 ✅（守門腳本未動）；COPD cache `gate_guard.py` 仍全關綠。
+- 不影響既有流程：EBM_Search 不再預設在 ⑤c/⑤d 動 Zotero/補全文，與下游 Phase 0 不重工。
 
-想被重點看：第 5 條 `check_partition_provenance` 的 `text_len≥1500` 門檻與 `channel:registry` 例外是否合理；②c 鐵律措辭是否與既有「待評估三管道」「有 OA 卻不抓」「have 須實抓驗證(verify_have_fetchable)」段一致無重複矛盾。
+想被重點看：Phase 0 步驟 5/6 的措辭是否與 ANALYSIS_SPEC、ingest_seed 交接邏輯一致；SEARCH_SPEC ⑤c/⑤d 的「預設略過、改 Phase 0」與其他段（⑦交接包、Zotero≡報告表二三）是否仍自洽無矛盾（交接包仍含 verdict 供 Phase 0 預填，不受影響）。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
@@ -55,5 +44,7 @@ fresh-clone / 自測：
 ✅ 已修(使用者/外部 Claude 逐筆核對):⑤b 核心 RCT 再精進兩類——(A) **研究計畫書(無結果)不得當核心**：scripts/classify_units.py 新增 `R_PROTO_STRONG`(study protocol/rationale and design/results expected/will be randomised/first patient 20XX…)，且 protocol 強訊號**蓋過 R_RCT**(protocol 含 randomized 字樣會誤觸 RCT)→ ANTES B+、日本 RCT 由核心移到『進行中/試驗計畫書(待結果)』。(B) **ICS 退階/移除設計≠起始三合一 vs 雙支擴**：新增 `R_ICS_WD`(withdrawal of ICS/de-escalation/step-down/discontinue ICS…)，凡核心且命中者改記 `核心:ICS 退階試驗` 並打 `design_subtype=ICS-withdrawal`→ SUNSET、WISDOM 與起始試驗分開、下游 meta 不混算。實證：核心起始 IMPACT/ETHOS/KRONOS/TRIBUTE=27 報告、ICS 退階 2、計畫書移出 2；corpus_seed included 31→29。下游 report/breakdown/seed/PDF 同步重建、全關綠。
 
 ✅ 已修(使用者『避免下次再犯』總結教訓):⑤b classify_units 新增**主動覆核防線 `core_review_flags`**——classify() 收尾自動把『高風險核心判定』攤出來寫 g7_review_flags.json 並於 main 顯著警示:(1)非樞紐核心(純 regex,無權威表背書)、(2)無 PMID(疑會議摘要/未完整發表)、(3)DOI 疑會議摘要、(4)ICS 退階子型、(5)標題含 protocol 訊號。**教訓＝我一再信任自動化結果就當定稿、靠使用者抓錯;此防線把不確定性主動逼出來覆核(對齊框架『rapid-review 須人工覆核』『機器守門優先於記性』),下次同類風險會自動浮現而非等下游爆。** 本案實測 flag 出 SUNSET/WISDOM(非樞紐+ICS退階)＋2 筆 conf-DOI 樞紐子報告。
+
+✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
