@@ -131,6 +131,25 @@
           }
         },
         "missing_evidence_sensitivity": { "type": ["string", "null"], "description": "缺失證據敏感度分析(ROB-ME；Ch13)：假設未發表/進行中研究為 null，估計合併效應是否被稀釋/翻轉，作為發表偏誤降級之佐證(非僅以『廠商資助』籠統降級)" },
+        "meta_analysis": {
+          "type": "array",
+          "description": "數據綜整/統合分析(Ch10)：逐 core outcome 的池化合併效應＋異質性。未池化者以 model='not_pooled' 並於 heterogeneity 說明理由(如對照藥不同/僅摘要)。",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["outcome", "model", "pooled_effect", "heterogeneity"],
+            "properties": {
+              "outcome": {"type": "string"},
+              "model": {"enum": ["fixed", "random", "not_pooled"], "description": "固定/隨機效應；not_pooled=未池化(敘述綜整)"},
+              "k_studies": {"type": ["integer", "string", "null"], "description": "納入合併之研究數"},
+              "pooled_effect": {"type": "string", "description": "合併效應量＋類型(如『RR 0.76』)；未池化寫逐試驗範圍"},
+              "ci": {"type": ["string", "null"], "description": "95% CI"},
+              "i2": {"type": ["string", "null"], "description": "I^2 異質性(如『0%』)；未池化可 null"},
+              "heterogeneity": {"type": "string", "description": "異質性判讀＋來源解釋(統計＋臨床)；未池化在此說明理由"},
+              "per_study": {"type": ["string", "null"], "description": "逐試驗效應量列示"},
+              "absolute": {"type": ["string", "null"], "description": "絕對效應換算(每千人/率差)"}
+            }
+          }
+        },
         "prisma_attest": { "type": ["object", "null"], "additionalProperties": { "type": "string" }, "description": "PRISMA 2020 人工聲明項(鍵=項號字串，如 \"24\")，供 prisma_audit 將回顧層 MANUAL 項(註冊/資金/利益衝突/資料蒐集流程/可得性)轉 ATTEST。" },
         "publication_bias": { "type": ["string", "null"], "description": "發表偏誤/缺失證據聲明（<10 不畫漏斗圖）" },
         "subgroup_implications": { "type": ["string", "null"], "description": "次群組＋對研究的意涵" },

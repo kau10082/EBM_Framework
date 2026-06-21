@@ -54,6 +54,7 @@ def build(infile, out, font=None):
     data = json.loads(Path(infile).read_text(encoding="utf-8"))
     syn = data.get("synthesis", data)
     pp = data.get("per_paper", [])
+    layout = (globals().get("_LAYOUT") or "default")
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
     from reportlab.lib import colors
@@ -82,6 +83,81 @@ def build(infile, out, font=None):
     title = syn.get("report_title") or "EBM GRADE 評讀報告"
     S.append(P("<b>" + title + "</b>", 15, sp=2))
     S.append(P("（rapid review；GRADE 確定性：高 ●●●● / 中 ●●●○ / 低 ●●○○ / 極低 ●○○○）", 8.5, col="#666", sp=6))
+
+    if layout == "cochrane5":
+        CW = lambda *ws: list(ws[:-1]) + [W - sum(ws[:-1])]
+        # ── 1 納入研究特徵摘要表 ──
+        S.append(H("1、納入研究特徵摘要表（Characteristics of Included Studies）"))
+        S.append(P("證明各試驗臨床上『可擺在一起比』（Cochrane Ch9）：研究設計／基準風險／介入·對照精確內容／追蹤時框。", 8.5, col="#555", sp=3))
+        sc = syn.get("study_characteristics") or []
+        rows = [["試驗", "研究設計", "N／族群（基準風險）", "介入臂", "對照臂", "追蹤", "主要終點"]]
+        for r in sc:
+            rows.append([cell(r.get("trial", "")), cell(r.get("phase", "") + "；多中心雙盲平行", 7.5),
+                         cell(r.get("n", ""), 7.5), cell(r.get("drug", "") + "（" + r.get("dose", "") + "）", 7.5),
+                         cell(r.get("comparator", ""), 7.5), cell(r.get("duration", "")), cell(r.get("primary_outcome", ""), 7.5)])
+        t = Table(rows, colWidths=CW(20 * mm, 36 * mm, 30 * mm, 50 * mm, 34 * mm, 16 * mm)); t.setStyle(tstyle()); S.append(t)
+        for st in (syn.get("baseline_risk_strata") or []):
+            S.append(P("· 基準風險分層：" + st.get("baseline_risk", "") + " → " + st.get("absolute_reduction", ""), 8, col="#555", sp=1))
+        S.append(Spacer(1, 3 * mm))
+
+        # ── 2 個別試驗偏誤風險評估 ──
+        S.append(H("2、個別試驗偏誤風險評估（Risk of Bias 2）"))
+        S.append(P("逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出設計瑕疵。", 8.5, col="#555", sp=3))
+        rows = [["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]]
+        for r in (syn.get("rob_summary") or []):
+            rows.append([cell(r.get("trial", "")), cell(r.get("randomization", "")), cell(r.get("deviations", "")),
+                         cell(r.get("missing_data", "")), cell(r.get("measurement", "")), cell(r.get("selective_reporting", "")),
+                         cell(r.get("overall", "")), cell((r.get("evidence_basis", "") + "：" + (r.get("note", "") or "")), 7)])
+        t = Table(rows, colWidths=CW(18 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, 22 * mm, 18 * mm)); t.setStyle(tstyle()); S.append(t)
+        S.append(Spacer(1, 3 * mm))
+
+        # ── 3 數據綜整與統合分析 ──
+        S.append(H("3、數據綜整與統合分析（Data Synthesis／Meta-Analysis）"))
+        S.append(P("逐核心結局之池化合併效應＋異質性 I^2（Cochrane Ch10）；未池化者說明理由。", 8.5, col="#555", sp=3))
+        rows = [["核心結局", "模型", "合併效應（95% CI）", "I^2", "逐試驗效應", "絕對效應換算", "異質性判讀／理由"]]
+        for m in (syn.get("meta_analysis") or []):
+            eff = m.get("pooled_effect", "") + ("（" + m.get("ci", "") + "）" if m.get("ci") else "")
+            rows.append([cell(m.get("outcome", ""), 7.5), cell({"fixed": "固定效應", "random": "隨機效應", "not_pooled": "未池化"}.get(m.get("model"), m.get("model")), 7.5),
+                         cell(eff, 7.5), cell(m.get("i2") or "—", 7.5), cell(m.get("per_study") or "", 7),
+                         cell(m.get("absolute") or "", 7), cell(m.get("heterogeneity", ""), 7)])
+        t = Table(rows, colWidths=CW(30 * mm, 16 * mm, 32 * mm, 12 * mm, 50 * mm, 44 * mm)); t.setStyle(tstyle()); S.append(t)
+        S.append(Spacer(1, 3 * mm))
+
+        # ── 4 GRADE 證據確定性評級 ──
+        S.append(H("4、GRADE 證據確定性評級（Evidence Profile）"))
+        S.append(P("逐核心結局自 RCT 起始『高』，跑 5 大下調領域（偏誤／不一致／間接／不精確／發表偏誤）結算（Cochrane Ch14）。", 8.5, col="#555", sp=3))
+        rows = [["核心結局", "確定性", "下調領域結算（依據）"]]
+        for b in (syn.get("body_of_evidence") or []):
+            c = b.get("certainty", "")
+            rows.append([cell(b.get("outcome", ""), 8), cell(f"{CERT_DOT.get(c,'')} {CERT_TXT.get(c,c)}", 8), cell(b.get("basis", ""), 7.5)])
+        t = Table(rows, colWidths=CW(44 * mm, 26 * mm)); t.setStyle(tstyle()); S.append(t)
+        S.append(Spacer(1, 3 * mm))
+
+        # ── 5 SoF 表 + 臨床決策建議 ──
+        S.append(H("5、發現摘要表（SoF）與臨床決策建議"))
+        rows = [["結局（時框）", "假設對照風險", "對應介入風險", "絕對效應（每千人／率差）", "相對效應（95% CI）", "N（研究）", "確定性", "降級腳註"]]
+        for o in (syn.get("sof") or []):
+            c = o.get("certainty", "")
+            rows.append([cell(o.get("outcome", ""), 7.5), cell(o.get("assumed_control_risk", ""), 7), cell(o.get("corresponding_risk", ""), 7),
+                         cell(o.get("absolute_effect", ""), 7), cell(o.get("relative_effect", ""), 7), cell(o.get("n_participants_studies", ""), 7),
+                         cell(f"{CERT_DOT.get(c,'')} {CERT_TXT.get(c,c)}", 7.5), cell(o.get("comment", "") or "", 7)])
+        t = Table(rows, colWidths=CW(28 * mm, 28 * mm, 24 * mm, 40 * mm, 42 * mm, 24 * mm, 18 * mm)); t.setStyle(tstyle()); S.append(t)
+        S.append(Spacer(1, 2 * mm))
+        S.append(P("<b>臨床建議底線（Authors' Conclusions）</b>", 11, sp=3))
+        for b in (syn.get("bottom_line") or []):
+            S.append(P("● " + b, 9, sp=2))
+        if syn.get("subgroup_implications"):
+            S.append(P("<b>利弊平衡與次群組：</b>" + syn["subgroup_implications"], 8.5, sp=2, col="#444"))
+        if syn.get("clinical_one_liner"):
+            S.append(P("<b>給臨床的一句話：</b>" + syn["clinical_one_liner"], 9, sp=2, col="#1a4a7a"))
+        S.append(P("【Cochrane Ch15 規範】本報告提供利弊平衡與決策指引，但不下強制醫囑（不寫『必須全面改用』）；最終決策須納入個別病患價值觀、偏好與在地資源。", 8.5, sp=3, col="#7a1a1a"))
+        for lim in (syn.get("limitations") or []):
+            S.append(P("· 限制：" + lim, 7.8, col="#666", sp=1))
+        S.append(Spacer(1, 2 * mm))
+        S.append(P("頁尾：依 Cochrane Handbook 第 III 章報告規範渲染；單一 AI rapid review，最終納入與分級建議人工覆核。", 7.5, col="#888"))
+        doc.build(S)
+        print(f"✅ GRADE PDF（Cochrane 5 段）產出：{out}（{os.path.getsize(out)} bytes，字型 {F}）")
+        return
 
     # 1 白話總結
     S.append(H("1、白話總結（一分鐘讀懂）"))
@@ -178,7 +254,11 @@ def main():
     ap.add_argument("--in", dest="infile", default=None)
     ap.add_argument("--out", default=None)
     ap.add_argument("--font", default=None)
+    ap.add_argument("--layout", default="default", choices=["default", "cochrane5"],
+                    help="default=8 段；cochrane5=Cochrane 後半段 5 核心數據段（特徵表/RoB2/統合/GRADE/SoF+結論）")
     a = ap.parse_args()
+    global _LAYOUT
+    _LAYOUT = a.layout
     try:
         sys.path.insert(0, str(HERE)); import workdir
         cache = workdir.cache_dir(); outputs = workdir.outputs_dir()
