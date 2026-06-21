@@ -15,6 +15,8 @@
 - `EBM_Analysis/schema/phase4_output.json`（新增選用 `meta_analysis` 欄：池化合併效應＋I^2）
 - `EBM_Analysis/tools/build_reports.py`（MD 改 Cochrane 6 段＋連帶產 PDF）
 - `EBM_Analysis/phases/04_output.md`（明定標準 6 段 PDF/MD 統一格式）
+- `EBM_Analysis/tools/selfcheck_consistency.py`（新增 C17 降級必附腳註／C18 ≥2試驗必含 meta_analysis）
+- `EBM_Analysis/ANALYSIS_SPEC.md` ＋ `EBM_Analysis/manifest.yaml`（標準格式鐵律＋登錄 C1-C18）
 
 改了什麼（5 條）：
 1. **新增護欄 `fulltext_authoritative.md`**：分析階段以全文為準；退 abstract/registry/ai_synthesis 前須逐一實試 local_pdf→PMC fullTextXML→Unpaywall 全 oa_locations→manual_supplement 並記 `fulltext_attempts`；取得全文→標 `full_text` 以全文重抽；唯全部取不到才退二手，且 status=needs_review＋Phase 3 確定性封頂（連動 registry_backfill／selfcheck C4）。
@@ -66,6 +68,8 @@ fresh-clone / 自測：
 ✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
 
 ✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
+
+✅ 已修(使用者『之後 analysis 階段 PDF/MD 務必遵照此規格與規範，務必』):把標準格式從『文件規範』升級為『機器硬 gate』——(1) selfcheck_consistency 新增 **C17（任一結局確定性<高→sof_footnotes 必非空，GRADE 降級透明）** 與 **C18（≥2 試驗→meta_analysis 必含，未池化亦須 model=not_pooled+理由）**，併入 build_reports/verify_all 的硬 gate，不過則擋渲染；(2) phases/04_output.md 補『SoF 數據呈現黃金守則』與『registry_backfill＋RoB 封印解除』兩條鐵律（相對+絕對每千人+NNT+CI、跨無效線不計NNT、降級腳註、登錄補實後可解 RoB 封頂但須誠實標治療期間/待全文、禁以記憶填全文）；(3) ANALYSIS_SPEC.md PDF 段改『標準成品格式·務必遵照』、manifest 更新 C1-C18 並指向 phases/04。負向測試證 C17/C18 確實抓得到違規；正向本案合規、verify_all 19 項全綠。
 
 ✅ 已修(使用者『之後 analysis 階段 PDF 跟 MD 都比照此模式』):把 Cochrane 6 段＋升級 SoF（每千人+NNT+CI+腳註+meta_analysis）定為 analysis 標準格式，PDF 與 MD 統一——(1) `build_grade_pdf.py` 預設 `--layout cochrane5`（舊 8 段保留為 `--layout default`）；(2) `build_reports.py` final_report() 重寫為同 6 段結構（特徵表/RoB2/統合MA含I²/GRADE/SoF含每千人+NNT+CI+腳註+Authors'Conclusions+Ch15不下醫囑/臨床一句話），且寫完 MD 連帶呼叫 build_grade_pdf 產 PDF（--no-pdf 可關、缺 reportlab 只警告不中斷）；(3) `phases/04_output.md` 明定此為標準格式鐵律、通用資料驅動。實證：一道 build_reports.py 同時產 FINAL_REPORT.md＋.pdf，兩者同格式同資料源，render_smoketest＋verify_all 19 項全綠；legacy default 版型仍可用。
 

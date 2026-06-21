@@ -66,7 +66,7 @@ guardrails:
   nonreporting:             {applies_to: sr_ma,      trigger: "評讀 SR/MA 缺失證據"}
   computation_check:        {applies_to: all,        trigger: "輸出含 NNT/ARR"}
   output_selfcheck:         {applies_to: all,        trigger: "送出核心結論前"}
-  selfcheck_consistency:    {applies_to: synthesis,  trigger: "產統合報告前(硬 gate)", note: "tools/selfcheck_consistency.py C1-C10：①RoB2 overall=最不利 ②贊助者偏誤歸發表偏誤 ③SoF合併效應註來源 ④非全文不得low ⑤NNTH非NNH ⑥二分類附CI ⑦運算重算 ⑧連續結果須MID/再表達 ⑨HR結果須絕對欄 ⑩證據體GRADE須齊備。不過則擋渲染。"}
+  selfcheck_consistency:    {applies_to: synthesis,  trigger: "產統合報告前(硬 gate)", note: "tools/selfcheck_consistency.py C1-C18：①RoB2 overall=最不利 ②贊助者偏誤歸發表偏誤 ③SoF合併效應註來源 ④非全文不得low ⑤NNTH非NNH ⑥二分類附絕對+CI ⑦運算重算 ⑧連續須MID ⑨HR須絕對欄 ⑩-⑯證據體/critical必列/跨呈現一致/NNT CI/受試者數/concern註明 ⑰降級必附腳註 ⑱≥2試驗必含meta_analysis。標準格式硬 gate，不過則擋渲染。"}
   model_choice:             {applies_to: sr_ma,       trigger: "outcome 來自 MA", note: "固定vs隨機選擇：禁以 I²/Chi² 決定模型；不對稱下隨機效應放大偏誤(Ch10 §10.10.4.1)"}
   rare_events:              {applies_to: sr_ma,       trigger: "罕見事件/罕見 harms", note: "雙臂零事件略去、避免固定0.5校正與DL隨機效應、<1%偏好Peto、RD不適用(Ch10 §10.4.4)"}
   time_to_event:            {applies_to: all,         trigger: "HR/存活/至首次事件", note: "HR≠RR、PH假設、HR→絕對風險再表達(absrisk hr)；SoF須絕對欄(Ch6 §6.8、Ch14 §14.1.5.2)"}
