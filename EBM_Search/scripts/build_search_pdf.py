@@ -88,19 +88,32 @@ def build(infile, out, font=None):
     # ── 段3 PRISMA 流程數據 ──
     S.append(H("三、PRISMA 文獻篩選流程數據"))
     # 漏斗表（流程圖已移除，僅保留表格）。最後一步固定補「納入分析文獻 Included」——
-    # 由產生器確定性附加（不靠手動編 funnel），數量取 prisma_flow.included（缺則由 included_studies 報告數推算）；
-    # funnel 內若已含『納入分析』步先濾掉，避免重複。
+    # ★ 2026-06 使用者糾正：『納入分析文獻 Included』只計**真正納入下游評讀分析者**＝
+    #   (a) 核心 RCT＋子研究（included_studies 中 type 含『核心』的群，其報告數總和）
+    #   (b) SR/MA（背景表 background 中型態為 Meta-Analysis／Systematic Review 者）
+    #   **不再把背景/進行中/他族群/綜述等非納入類別列進 Included 下**（那些是分流統計、非納入分析）。
+    #   數量與明細皆由產生器確定性計算（資料驅動，換主題自適用），不靠手編 included_breakdown。
     funnel=[s for s in (data.get("funnel") or []) if "納入分析" not in str(s.get("step",""))]
-    inc_n=(data.get("prisma_flow") or {}).get("included")
-    if inc_n in (None, ""):
-        inc_n=sum(len(g.get("reports",[])) for g in data.get("included_studies",[]))
+    core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
+    core_n=sum(len(g.get("reports",[])) for g in core_groups)
+    SRMA={"Meta-Analysis","Systematic Review","meta-analysis","systematic review",
+          "SR/MA","統合分析","系統性回顧","Meta-analysis"}
+    srma_rows=[r for r in (data.get("background") or []) if len(r)>3 and str(r[3]).strip() in SRMA]
+    srma_n=len(srma_rows)
+    inc_n=core_n+srma_n
     funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
-                   "change":"交接 corpus_seed 進 EBM 評讀；分類後各類篇數如下"})
+                   "change":"交接 corpus_seed 進 EBM 評讀；僅計實際納入分析者，明細如下"})
     fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
-    # 末步「納入分析文獻」之後，逐類列出『分類後各類篇數』(included_breakdown)——由產生器確定性附加，
-    # 讓 PRISMA 末步詳述 ⑤b 分類結果(核心RCT/SR-MA/其他RCT/各背景)，總和須＝Included。
-    for lab,cnt in (data.get("included_breakdown") or []):
-        fr.append([f"　└ {lab}", str(cnt)])
+    # Included 明細：只列『核心 RCT＋子研究』與『SR/MA』兩類，並**簡短列出是哪幾篇**——
+    #   核心：逐 Study 名＋報告數（細目見段4）；SR/MA：逐篇短標題＋PMID（資料驅動，換主題自適用）。
+    core_detail="、".join(f"{g.get('study','')} {len(g.get('reports',[]))}" for g in core_groups)
+    fr.append(["　└ 核心 RCT＋子研究", f"{core_n}（{core_detail}）" if core_detail else str(core_n)])
+    fr.append(["　└ SR/MA", str(srma_n)])
+    for r in srma_rows:
+        short=str(r[0])[:44]+("…" if len(str(r[0]))>44 else "")
+        pmid=str(r[1]) if len(r)>1 and str(r[1]).strip() else "—"
+        fr.append([f"　　• {short}", f"PMID {pmid}"])
+
     if len(fr)>1:
         t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))

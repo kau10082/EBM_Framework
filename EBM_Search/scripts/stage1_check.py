@@ -53,6 +53,22 @@ def check(data):
         if as_ == "have" and not str(c.get("abstract") or "").strip():
             fails.append("%s abstract_status=have 但 abstract 內容空（Bug2：②b 須對標題+摘要篩，"
                          "標記有摘要卻無實體內容＝只能憑標題；應實際回填摘要或改判 none→awaiting）" % tag)
+        # 防『只憑 OA/PMC 旗標標 have、未實抓解析』漏洞（2026-06 使用者糾正：違反 ②c『實抓+解析』鐵律）：
+        # fulltext_status=have 但無任何已解析內容（abstract 空）且非登錄結構化內容(registry)＝只信了 OA 旗標、
+        # 沒真的把全文抓下來解析 → 此筆其實「線上能否讀到全文」未定，不該標 have 漏進 Stage B；
+        # 須在 ②c 實抓解析全文（PMC fullTextXML／OA HTML/PDF→正文），取得正文才標 have、線上讀不到則改判 awaiting。
+        # （此即把『have 須實抓驗證』從後段 verify_have_fetchable 前移到 ②c 內容分類的邊界守門；
+        #  與 check_partition_provenance〔③ 才觸發〕互補——本關在『進 ③ 之前』就攔下 OA-flag-only 的假 have。）
+        if fs == "have" and as_ == "none":
+            ch = str(c.get("fulltext_channel") or "").lower()
+            has_parsed = bool(str(c.get("abstract") or "").strip()) or \
+                         isinstance(c.get("fulltext_chars"), int) and c.get("fulltext_chars", 0) >= 1500 or \
+                         c.get("fulltext_verified")
+            if ch != "registry" and not has_parsed:
+                fails.append("%s 標 fulltext_status=have 但無任何已解析正文（abstract 空、非 registry、無 fulltext_chars≥1500/"
+                             "fulltext_verified）：疑似只憑 OA/PMC 旗標標 have、未實抓解析＝違反 ②c『實抓+解析』鐵律。"
+                             "須在 ②c 真的抓 PMC fullTextXML／OA HTML/PDF 並解析出正文才標 have；"
+                             "線上讀不到（防爬蟲/僅PDF/非OA）則改判 awaiting（待人工補全文，online_read_attempted=true）" % tag)
         if fs == "none" and as_ == "none":
             fails.append("%s 無全文又無摘要卻列 candidate：應移 awaiting（待評估屬 Stage A，不進 Stage B 篩選）" % tag)
         if c.get("verdict") != "candidate":
