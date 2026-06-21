@@ -1,152 +1,310 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "EBM_Search → EBM_Analysis 交接包 (_corpus_seed.json)",
-  "description": "EBM_Search 收尾(Phase 1 ⑥ PDF 之後)寫出的交接契約，與全文 PDF 同放 fulltext 資料夾。EBM_Analysis 的 Phase 0 讀此檔，把 PDF 拉進 inputs/、預填 cache/_corpus.json 草稿；所有映射僅為『建議值(suggested)』，Analysis 仍在 Phase 0 斷點讓使用者覆核確認，不靜默納入。生產者(EBM_Search)持有此契約。",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "topic", "search_date", "review_question_seed", "papers"],
-  "properties": {
-    "schema_version": {
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "EBM_Search → EBM_Analysis 交接包 (_corpus_seed.json)",
+ "description": "EBM_Search 收尾(Phase 1 ⑥ PDF 之後)寫出的交接契約，與全文 PDF 同放 fulltext 資料夾。EBM_Analysis 的 Phase 0 讀此檔，把 PDF 拉進 inputs/、預填 cache/_corpus.json 草稿；所有映射僅為『建議值(suggested)』，Analysis 仍在 Phase 0 斷點讓使用者覆核確認，不靜默納入。生產者(EBM_Search)持有此契約。",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "schema_version",
+  "topic",
+  "search_date",
+  "review_question_seed",
+  "papers"
+ ],
+ "properties": {
+  "schema_version": {
+   "type": "string",
+   "const": "1.0",
+   "description": "交接契約版本；Analysis ingester 以此判相容性。"
+  },
+  "topic": {
+   "type": "string",
+   "description": "原始檢索主題(使用者原問句/題目)。"
+  },
+  "search_date": {
+   "type": "string",
+   "description": "檢索日(YYYY-MM-DD)；對齊 EBM_Search 報告的『記檢索日』。"
+  },
+  "engine_version": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "產生此 seed 的 EBM_Search 版本(如 v0.20)。"
+  },
+  "review_question_seed": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "statement",
+    "P",
+    "I",
+    "C",
+    "O"
+   ],
+   "description": "由 EBM_Search 的『必含連言軸』映成的 PICO 雛形。注意 EBM_Search 設計上不以結果(O)為檢索/篩選軸，故 O 通常為空陣列，留待 Analysis Phase 0 與使用者共同補定。全部欄位皆為『待確認』雛形。",
+   "properties": {
+    "statement": {
+     "type": "string",
+     "description": "回顧問題敘述(可由 topic 帶入)。"
+    },
+    "P": {
+     "type": "string",
+     "description": "族群/疾病軸(對應必含軸的疾病軸)。"
+    },
+    "I": {
+     "type": "string",
+     "description": "介入軸(對應必含軸的介入/藥物軸)。"
+    },
+    "C": {
+     "type": "string",
+     "description": "對照軸；EBM_Search 未必鎖此軸，可留空字串。"
+    },
+    "O": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "結果軸；EBM_Search 不以 O 為軸，預設 []，由 Analysis 補定。"
+    }
+   }
+  },
+  "fulltext_dir": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "全文 PDF 所在資料夾的絕對路徑(通常即本檔所在資料夾)。pdf_file 為相對此目錄的檔名。"
+  },
+  "axis_synonyms": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "description": "選填：各必含軸的判定同義詞清單(來自 EBM_Search 報告『主旨軸篩選字眼』)，供 Analysis 判間接性/族群參考。鍵=軸名，值=同義詞陣列。",
+   "additionalProperties": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   }
+  },
+  "papers": {
+   "type": "array",
+   "minItems": 1,
+   "description": "交接的文獻清單。預設＝『納入一起分析』者(PRISMA Included＝核心RCT+子研究 + 納入分析的 SR/MA；verdict=included 且 suggested.grade_track∈{full,targeted_harms,light_summary})。背景(background)與僅登錄端/待評估(grade_track=none)預設不進交接(它們是分流脈絡、非評讀單位)；build_corpus_seed.py 以 --include-background 可改回連背景全帶。驗證不符/主旨不符/撤稿者一律不進交接。",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "paper_id",
+     "title",
+     "verdict",
+     "fulltext_status",
+     "suggested"
+    ],
+    "properties": {
+     "paper_id": {
       "type": "string",
-      "const": "1.0",
-      "description": "交接契約版本；Analysis ingester 以此判相容性。"
-    },
-    "topic": {
+      "description": "穩定識別碼。建議＝對應 PDF 的檔名主幹(去副檔名)，使 Analysis 能把 inputs/<paper_id>.pdf 對回此筆。"
+     },
+     "title": {
       "type": "string",
-      "description": "原始檢索主題(使用者原問句/題目)。"
-    },
-    "search_date": {
-      "type": "string",
-      "description": "檢索日(YYYY-MM-DD)；對齊 EBM_Search 報告的『記檢索日』。"
-    },
-    "engine_version": {
-      "type": ["string", "null"],
-      "description": "產生此 seed 的 EBM_Search 版本(如 v0.20)。"
-    },
-    "review_question_seed": {
+      "description": "原始英文標題(照錄不翻譯)。"
+     },
+     "first_author": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "year": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "doi": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "pmid": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "journal": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "sjr_quartile": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "期刊 SJR 分位(如 Q1/Q2/未收錄)；EBM_Search SR 模式只標註不篩，僅供參考。"
+     },
+     "verdict": {
+      "enum": [
+       "included",
+       "background"
+      ],
+      "description": "EBM_Search 報告的用途分流：included＝表二納入(後續要分析)；background＝表三背景(當背景/對照參考)。對齊 Zotero 標籤 verdict:included / verdict:background。"
+     },
+     "study": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "試驗名/Study 標籤(對齊 Zotero study:<試驗名>)。同一試驗多份報告共用同一 study；供 Analysis 去重(overlap_with/included_trials)。"
+     },
+     "evidence_level": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "L1",
+       "L2",
+       "L3",
+       "L4",
+       "L5",
+       "未分類",
+       null
+      ],
+      "description": "EBM_Search 標的文獻『類型』等級(非支持強度)。"
+     },
+     "design_hint": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "研究設計提示(RCT/SR-MA/NRSI/Phase I/review/mechanism…)，供 Analysis 起始確定性與角色判定。"
+     },
+     "fulltext_status": {
+      "enum": [
+       "have",
+       "have_manual",
+       "ai_summary_only",
+       "none"
+      ],
+      "description": "全文取得狀態(帶自 EBM_Search 最終表的『全文狀態』欄)：have＝自動取得 OA 全文；have_manual＝使用者人工補入全文；ai_summary_only＝僅 AI 合成摘要；none＝無全文無摘要。only 'have'/'have_manual' 會有可用 PDF。"
+     },
+     "pdf_file": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "相對 fulltext_dir 的 PDF 檔名(如 <paper_id>.pdf)。fulltext_status∈{have,have_manual} 時應有；否則 null(Analysis 標 light_summary 或待人工補)。"
+     },
+     "fulltext_channel": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "online",
+       "local",
+       "ai_synthesis",
+       "none",
+       null
+      ],
+      "description": "★全文取得管道(交班重點，三選一)：online=網路可讀全文(OA／PMC／機構綠色 OA／出版商；Analysis 沿 fulltext_url 線上重讀)；local=本機 PDF(使用者人工補入)；ai_synthesis=無全文、僅 AI 合成摘要(★Analysis 務必特別標註、data_source=ai_synthesis、視為二手並 registry-backfill＋確定性封頂)；none=皆無。Analysis 每次分析皆沿管道『重新讀取原始來源』再萃取，以降低幻覺/失誤。"
+     },
+     "fulltext_url": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "online 時填全文可讀的實際 URL(供 Analysis 每次直接重讀，不必再查；機構綠色 OA 填典藏 PDF 連結)。local/ai_synthesis/none 可留 null。"
+     },
+     "cross_check": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "選填：PubMed/Crossref 雙源交叉檢核狀態摘要(僅呈現，非篩選依據)。"
+     },
+     "included_trials": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "type": "string"
+      },
+      "description": "僅 meta_analysis/SR：其納入的原始試驗 id/名稱(供 Analysis 統合去重)。"
+     },
+     "suggested": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["statement", "P", "I", "C", "O"],
-      "description": "由 EBM_Search 的『必含連言軸』映成的 PICO 雛形。注意 EBM_Search 設計上不以結果(O)為檢索/篩選軸，故 O 通常為空陣列，留待 Analysis Phase 0 與使用者共同補定。全部欄位皆為『待確認』雛形。",
+      "required": [
+       "relevance",
+       "role",
+       "grade_track"
+      ],
+      "description": "EBM_Search 對 Analysis Phase 0 欄位的『建議映射』。Analysis 預填後仍須使用者覆核——非最終分類。映射規則見 EBM_Framework/INTEGRATION.md。",
       "properties": {
-        "statement": { "type": "string", "description": "回顧問題敘述(可由 topic 帶入)。" },
-        "P": { "type": "string", "description": "族群/疾病軸(對應必含軸的疾病軸)。" },
-        "I": { "type": "string", "description": "介入軸(對應必含軸的介入/藥物軸)。" },
-        "C": { "type": "string", "description": "對照軸；EBM_Search 未必鎖此軸，可留空字串。" },
-        "O": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "結果軸；EBM_Search 不以 O 為軸，預設 []，由 Analysis 補定。"
-        }
+       "relevance": {
+        "enum": [
+         "direct",
+         "indirect",
+         "background",
+         "excluded"
+        ],
+        "description": "對應 phase0_corpus 的 relevance。included→通常 direct；background→background。"
+       },
+       "role": {
+        "enum": [
+         "pivotal_efficacy",
+         "meta_analysis",
+         "safety",
+         "supportive_secondary",
+         "mechanism_pd",
+         "pharmacokinetic",
+         "narrative_review",
+         "other"
+        ],
+        "description": "對應 phase0_corpus 的 role。"
+       },
+       "grade_track": {
+        "enum": [
+         "full",
+         "targeted_harms",
+         "light_summary",
+         "none"
+        ],
+        "description": "對應 phase0_corpus 的 grade_track。included 樞紐 RCT/MA→full；background→light_summary。"
+       },
+       "rationale": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "選填：此建議的一句話理由(如『verdict=included＋RCT＋L1 → full/pivotal_efficacy』)。"
+       }
       }
-    },
-    "fulltext_dir": {
-      "type": ["string", "null"],
-      "description": "全文 PDF 所在資料夾的絕對路徑(通常即本檔所在資料夾)。pdf_file 為相對此目錄的檔名。"
-    },
-    "axis_synonyms": {
-      "type": ["object", "null"],
-      "description": "選填：各必含軸的判定同義詞清單(來自 EBM_Search 報告『主旨軸篩選字眼』)，供 Analysis 判間接性/族群參考。鍵=軸名，值=同義詞陣列。",
-      "additionalProperties": { "type": "array", "items": { "type": "string" } }
-    },
-    "papers": {
-      "type": "array",
-      "minItems": 1,
-      "description": "交接的文獻清單＝EBM_Search 表二(納入)＋表三背景(background)。表三的『驗證不符/主旨不符/品質閘剔除』者不進交接(已被排除)。",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["paper_id", "title", "verdict", "fulltext_status", "suggested"],
-        "properties": {
-          "paper_id": {
-            "type": "string",
-            "description": "穩定識別碼。建議＝對應 PDF 的檔名主幹(去副檔名)，使 Analysis 能把 inputs/<paper_id>.pdf 對回此筆。"
-          },
-          "title": { "type": "string", "description": "原始英文標題(照錄不翻譯)。" },
-          "first_author": { "type": ["string", "null"] },
-          "year": { "type": ["integer", "null"] },
-          "doi": { "type": ["string", "null"] },
-          "pmid": { "type": ["string", "null"] },
-          "journal": { "type": ["string", "null"] },
-          "sjr_quartile": {
-            "type": ["string", "null"],
-            "description": "期刊 SJR 分位(如 Q1/Q2/未收錄)；EBM_Search SR 模式只標註不篩，僅供參考。"
-          },
-          "verdict": {
-            "enum": ["included", "background"],
-            "description": "EBM_Search 報告的用途分流：included＝表二納入(後續要分析)；background＝表三背景(當背景/對照參考)。對齊 Zotero 標籤 verdict:included / verdict:background。"
-          },
-          "study": {
-            "type": ["string", "null"],
-            "description": "試驗名/Study 標籤(對齊 Zotero study:<試驗名>)。同一試驗多份報告共用同一 study；供 Analysis 去重(overlap_with/included_trials)。"
-          },
-          "evidence_level": {
-            "type": ["string", "null"],
-            "enum": ["L1", "L2", "L3", "L4", "L5", "未分類", null],
-            "description": "EBM_Search 標的文獻『類型』等級(非支持強度)。"
-          },
-          "design_hint": {
-            "type": ["string", "null"],
-            "description": "研究設計提示(RCT/SR-MA/NRSI/Phase I/review/mechanism…)，供 Analysis 起始確定性與角色判定。"
-          },
-          "fulltext_status": {
-            "enum": ["have", "have_manual", "ai_summary_only", "none"],
-            "description": "全文取得狀態(帶自 EBM_Search 最終表的『全文狀態』欄)：have＝自動取得 OA 全文；have_manual＝使用者人工補入全文；ai_summary_only＝僅 AI 合成摘要；none＝無全文無摘要。only 'have'/'have_manual' 會有可用 PDF。"
-          },
-          "pdf_file": {
-            "type": ["string", "null"],
-            "description": "相對 fulltext_dir 的 PDF 檔名(如 <paper_id>.pdf)。fulltext_status∈{have,have_manual} 時應有；否則 null(Analysis 標 light_summary 或待人工補)。"
-          },
-          "fulltext_channel": {
-            "type": ["string", "null"],
-            "enum": ["online", "local", "ai_synthesis", "none", null],
-            "description": "★全文取得管道(交班重點，三選一)：online=網路可讀全文(OA／PMC／機構綠色 OA／出版商；Analysis 沿 fulltext_url 線上重讀)；local=本機 PDF(使用者人工補入)；ai_synthesis=無全文、僅 AI 合成摘要(★Analysis 務必特別標註、data_source=ai_synthesis、視為二手並 registry-backfill＋確定性封頂)；none=皆無。Analysis 每次分析皆沿管道『重新讀取原始來源』再萃取，以降低幻覺/失誤。"
-          },
-          "fulltext_url": {
-            "type": ["string", "null"],
-            "description": "online 時填全文可讀的實際 URL(供 Analysis 每次直接重讀，不必再查；機構綠色 OA 填典藏 PDF 連結)。local/ai_synthesis/none 可留 null。"
-          },
-          "cross_check": {
-            "type": ["string", "null"],
-            "description": "選填：PubMed/Crossref 雙源交叉檢核狀態摘要(僅呈現，非篩選依據)。"
-          },
-          "included_trials": {
-            "type": ["array", "null"],
-            "items": { "type": "string" },
-            "description": "僅 meta_analysis/SR：其納入的原始試驗 id/名稱(供 Analysis 統合去重)。"
-          },
-          "suggested": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["relevance", "role", "grade_track"],
-            "description": "EBM_Search 對 Analysis Phase 0 欄位的『建議映射』。Analysis 預填後仍須使用者覆核——非最終分類。映射規則見 EBM_Framework/INTEGRATION.md。",
-            "properties": {
-              "relevance": {
-                "enum": ["direct", "indirect", "background", "excluded"],
-                "description": "對應 phase0_corpus 的 relevance。included→通常 direct；background→background。"
-              },
-              "role": {
-                "enum": ["pivotal_efficacy", "meta_analysis", "safety", "supportive_secondary",
-                         "mechanism_pd", "pharmacokinetic", "narrative_review", "other"],
-                "description": "對應 phase0_corpus 的 role。"
-              },
-              "grade_track": {
-                "enum": ["full", "targeted_harms", "light_summary", "none"],
-                "description": "對應 phase0_corpus 的 grade_track。included 樞紐 RCT/MA→full；background→light_summary。"
-              },
-              "rationale": {
-                "type": ["string", "null"],
-                "description": "選填：此建議的一句話理由(如『verdict=included＋RCT＋L1 → full/pivotal_efficacy』)。"
-              }
-            }
-          },
-          "notes": { "type": ["string", "null"] }
-        }
-      }
-    },
-    "handoff_notes": {
-      "type": ["string", "null"],
-      "description": "整體交接備註(如：哪些 background 為次級分析、整體重疊風險、待人工補全文者清單)。"
+     },
+     "notes": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
     }
+   }
+  },
+  "handoff_notes": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "整體交接備註(如：哪些 background 為次級分析、整體重疊風險、待人工補全文者清單)。"
   }
+ }
 }
