@@ -87,7 +87,16 @@ def build(infile, out, font=None):
 
     # ── 段3 PRISMA 流程數據 ──
     S.append(H("三、PRISMA 文獻篩選流程數據"))
-    fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in data.get("funnel",[])]
+    # 漏斗表（流程圖已移除，僅保留表格）。最後一步固定補「納入分析文獻 Included」——
+    # 由產生器確定性附加（不靠手動編 funnel），數量取 prisma_flow.included（缺則由 included_studies 報告數推算）；
+    # funnel 內若已含『納入分析』步先濾掉，避免重複。
+    funnel=[s for s in (data.get("funnel") or []) if "納入分析" not in str(s.get("step",""))]
+    inc_n=(data.get("prisma_flow") or {}).get("included")
+    if inc_n in (None, ""):
+        inc_n=sum(len(g.get("reports",[])) for g in data.get("included_studies",[]))
+    funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
+                   "change":"核心原始 RCT 報告＋SR/MA＋背景（交接 corpus_seed 進 EBM 評讀）"})
+    fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
     if len(fr)>1:
         t=Table(fr,colWidths=[60*mm,W-60*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
