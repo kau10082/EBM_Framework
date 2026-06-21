@@ -38,9 +38,19 @@ fresh-clone / 自測：
 
 想被重點看：(a) gate 要求的三必試管道 {local_pdf,pmc_fulltextxml,unpaywall_oa} 是否合理（manual_supplement 容許 skipped）；(b) 「標 full_text 卻無 fulltext_obtained 證據→FAIL」會否誤傷『本機 PDF 直接讀』情境（local_pdf 取得也記 fulltext_obtained，應不誤傷）；(c) 與既有 registry_backfill／selfcheck C4「非全文不得 low」是否衝突；(d) analysis_scope 把 Zotero 範圍縮成『只分析集、不含背景』是否與既有『Zotero≡報告』規則衝突（按：EBM_Search ⑤c 已 deprecated 移 Phase 0，此為新權威範圍，無衝突）。
 
+本輪 Claude Code 自我覆核追加微調（3 項，均已 py_compile＋快測通過；皆落在上方已列審查範圍的檔內）：
+- **A. `tools/verify_all.py` 顯示標籤過時**：彙總畫面與 docstring 寫「selfcheck C1-C15」，但 selfcheck 早已實作 C1-C18（C17 降級必附腳註／C18 ≥2 試驗須含統合分析段）且確實擋關——只是名稱沒跟上。改為 C1-C18。**純顯示字串、零行為變更。**
+- **B. `phases/01_extract.md` 步驟0 補明全文證據鐵律**：`data_source` 含 `full_text` 時，`fulltext_attempts` 至少要一筆 `result=fulltext_obtained`（記下從哪個管道讀到全文），與 `fulltext_gate.py` 反向檢查對齊。schema 把 `fulltext_attempts` 列為選用，但本鐵律＋gate 在 `full_text` 情形下視為必填——明文寫「以 gate 為準」，消除「schema 過得了、gate 過不了」的落差。**僅文件，無程式行為變更。**
+- **C. `tools/analysis_scope.py` 加防呆 `warnings`**：full track 的 Study 若『無任一報告有全文』又『無任一主報告進 must』（多半是 Phase 0 漏標 `is_primary_report`），其全文需求原會被靜默漏列（全掉 optional）。新增主動警示請回 Phase 0 補標主報告（**不阻擋**）。`compute()` 回傳新增 `warnings` 鍵、`_print` 末段印出；`--json`/`--write` 一併帶出。快測證實：漏標主報告的 Study 正確觸發警示、有主報告者不誤報。
+  想被重點看(e)：此防呆只警示、不阻擋，且 Study 標籤取自 notes 的 `study=` regex（取不到記 `—` 並略過警示，避免雜訊）——是否同意此「警示不擋關」的安全傾向。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
+（本塊初審：0 🔴，無任何未解決問題。各項判定明細已移入「## 已處理」。）
+
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+✅ 初審通過(Antigravity,2026-06-22):本塊「分析階段『全文為準』機器強制＋analysis_scope＋PDF/格式統一」15 檔審畢，**0 🔴**、邏輯縝密無錯誤。自我存疑點與追加微調判定——(a)三必試管道 {local_pdf,pmc_fulltextxml,unpaywall_oa} 合理、manual_supplement 容許 skipped〔⚪〕；(b)「標 full_text 卻無 fulltext_obtained→FAIL」不誤傷本機 PDF（local_pdf 記 fulltext_obtained 即通過）〔⚪〕；(c)與 registry_backfill／selfcheck C4 無衝突、相輔相成（退二手強制 status=needs_review，呼應 C4『非全文不得 low』）〔⚪〕；(d)analysis_scope 把 Zotero 範圍縮成只分析集＝架構優秀決策（不再被背景文獻污染）〔🟡〕；(e)A/B/C 三項微調皆妥當，其中 C 的「警示不擋關」安全傾向正確（避免 study= regex 命名不規範引發假陽性死鎖）〔🟡〕。全數無需修改。
 
 ✅ 已修:① 關報告誤含引文搜索語意（SEARCH_SPEC.md 第①關停頓點新增「廣蒐去重不含引文搜索」鐵律）
 ✅ 已修:報告策略時未主動問 SR filter（SEARCH_SPEC.md `check_strategy_approved` 段新增鐵律）

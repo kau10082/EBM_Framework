@@ -82,9 +82,23 @@ def compute(corpus, cache_dir, inputs_dir, include_background=False):
                 must.append(rec)
     must.sort(key=lambda r: (0 if r["grade_track"] == "full" else 1, r["study"], r["paper_id"]))
     optional.sort(key=lambda r: (r["study"], r["paper_id"]))
+    # ★ 防呆：full track 的 Study 若『無任一報告有全文』又『無任一主報告進 must』，
+    #   多半是 Phase 0 漏標 is_primary_report → 該 Study 的全文需求會被靜默漏列（全掉 optional）。
+    #   這裡主動警示，請回 Phase 0 為該 Study 標一篇主報告（is_primary_report=true）。
+    must_full_studies = {r["study"] for r in must if r["grade_track"] == "full"}
+    full_by_study = {}
+    for r in analysis_set:
+        if r["grade_track"] == "full" and r["study"] != "—":
+            full_by_study.setdefault(r["study"], []).append(r)
+    warnings = []
+    for s, recs in full_by_study.items():
+        if not any(r["has_fulltext"] for r in recs) and s not in must_full_studies:
+            warnings.append(f"Study「{s}」：{len(recs)} 篇 full 報告皆無全文，且無任一標 is_primary_report"
+                            f"→ 全文需求被漏列（全掉 optional）；請於 Phase 0 為此 Study 標一篇主報告(is_primary_report=true)")
     return {"analysis_set": analysis_set,
             "need_manual_fulltext": must,            # 補這些即可（增進分析的最小集）
-            "optional_fulltext": optional}           # full 次級 overlap 報告，補了不增進核心 GRADE
+            "optional_fulltext": optional,           # full 次級 overlap 報告，補了不增進核心 GRADE
+            "warnings": warnings}                    # 防呆警示（需回 Phase 0 修；不阻擋）
 
 
 def _print(scope):
@@ -106,6 +120,11 @@ def _print(scope):
         print(f"  {tier}  {r['paper_id']:<34} {r['study']:<8} {r['title'][:60]}")
     print(f"\n== ○ 選補（full 次級/overlap 報告，補了不增進核心 GRADE）：{len(opt)} 報告 ==")
     print("   （同 Study 的 congress/cost/子分析；分析以主報告全文為錨點，這些當 overlap，不強求補。）")
+    warns = scope.get("warnings") or []
+    if warns:
+        print(f"\n== ⚠️ 防呆警示（需回 Phase 0 修；不阻擋）：{len(warns)} 項 ==")
+        for w in warns:
+            print("  - " + w)
 
 
 def main(argv):

@@ -13,6 +13,7 @@ guardrails: [fulltext_authoritative, data_honesty, outcome_nature, extraction_co
 
 ## 步驟
 0. **窮盡全文管道 → 標 `data_source` ＋ `fulltext_attempts`**：先依上鐵律逐管道實試全文（local_pdf→PMC→Unpaywall 全 locations→manual_supplement），把每管道 `{channel,result}` 記入 `fulltext_attempts`。取得全文＝`data_source` 含 `full_text`、以全文抽取；真的全部取不到才退 `abstract/registry_results/ai_synthesis`。退用時或缺 RoB/各臂N/AE/CI → **再套用 [registry_backfill] 補救**（查 ClinicalTrials.gov API、PROSPERO、FDA/EMA），補來源於 source_locators 分列。
+   - **★ 全文也必留證據（`fulltext_gate` 反向檢查，否則 FAIL）**：只要 `data_source` 含 `full_text`，`fulltext_attempts` 就**至少要有一筆 `result=fulltext_obtained`**（記下是從哪個管道讀到全文，如 `{channel:local_pdf, result:fulltext_obtained}` 或 `{channel:pmc_fulltextxml, result:fulltext_obtained}`）。標了 `full_text` 卻沒有任何 `fulltext_obtained` 證據＝『全文標記無依據』，機器 gate 會擋下。（schema 把 `fulltext_attempts` 列為選用、但本鐵律與 `tools/fulltext_gate.py` 把它在 `full_text` 情形下變必填——以 gate 為準。）
 1. 套用 [data_honesty]：未明確標註的數值（I^2、ITT、N…）一律標 `[Not Stated in Source]`，嚴禁推估。PICO 任一核心要素缺漏 → 該項標 ⚠️ 資料缺漏。
 2. 判定研究設計：SR-MA / RCT / NRSI / case-report / other；RCT/原始研究確認是否「多中心」。
 3. 抽取 PICO 錨點：
