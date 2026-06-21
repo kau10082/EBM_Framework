@@ -106,10 +106,13 @@ def build(infile, out, font=None):
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
     S.append(Spacer(1,3*mm))
 
-    # ── 段4 最終納入證據清單 ──
-    S.append(H("四、最終納入的證據清單（核心 RCT／重要 MA）"))
-    S.append(P("欄位：研究名稱｜標題｜DOI｜PMID｜PubMed/Crossref 驗證",8.5,col="#555",sp=3))
-    for grp in data.get("included_studies",[]):
+    # ── 段4 最終納入證據清單（只列核心 RCT）──
+    # 2026-06 使用者要求：本表只列『核心原始 RCT（三合一 vs LABA/LAMA）』，不列其他原始 RCT／SR-MA
+    #（後兩者見 PRISMA 分類統計與交接包 corpus_seed）。以群組 type 含『核心』為核心群篩選條件。
+    core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
+    S.append(H("四、最終納入的核心 RCT 證據清單（三合一 vs LABA/LAMA）"))
+    S.append(P("僅列核心原始 RCT；其他原始 RCT／SR-MA／背景見第三節分類統計與交接包｜欄位：研究名稱｜標題｜DOI｜PMID｜PubMed/Crossref 驗證",8.5,col="#555",sp=3))
+    for grp in core_groups:
         head=P(f"<b>● {grp.get('study','')}（{grp.get('type','')}，{len(grp.get('reports',[]))} 報告）</b>",9.5,sp=1)
         tr=[["標題","DOI","PMID","驗證"]]+[[cell(r[0],7.5),cell(r[2],7),cell(r[1],7.5),cell(r[3],7.5)] for r in grp.get("reports",[])]
         t=Table(tr,colWidths=[W-92*mm,40*mm,22*mm,30*mm]); t.setStyle(tstyle())

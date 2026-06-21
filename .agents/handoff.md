@@ -46,4 +46,6 @@ fresh-clone / 自測：
 ✅ 已修(使用者糾正):⑤b 核心/非核心 RCT 判準誤判——scripts/classify_units.py：(a) 對照軸偵測先正規化 en/em-dash→hyphen＋β→b（修 ETHOS/KRONOS `glycopyrrolate–formoterol` 假陰）、(b) 遮蔽三合一藥名跨度(R_TRIP.sub)再掃 R_DUAL＋R_TRIP 補 FF/UMEC/VI·BGF·BDP/FF/G 縮寫（修 `FF/UMEC/VI⊃UMEC/VI` 子字串假陽）、(c) **核心/非核心是試驗設計屬性、非單篇報告屬性**→對已知樞紐試驗以 trial-level 權威表 `PIVOTAL_LABALAMA_ARM` 定案（IMPACT/ETHOS/KRONOS/TRIBUTE=核心；FULFIL/TRILOGY/TRINITY=非核心 vs ICS/LABA），非樞紐才回退 regex。實證：7 大樞紐全部歸位正確；核心報告 59→53。
 ✅ 已修(使用者要求『逐筆核對＋修 regex』):⑤b 非樞紐『獨立核心 RCT』誤判——逐筆核對 24 篇後發現只 6 篇真核心（其餘＝綜述/藥物簡介 8、觀察/before-after 3、藥動/機轉 2、對照=MITT/usual-care 2、off-topic/非三合一 2、無摘要會議短摘 1）。修法：(1) scripts/classify_units.py 設計判別新增 `R_REVIEW_STRONG`/`R_PK_STRONG`（無 RCT pubtype 而命中綜述體/藥動訊號者先歸背景，避免綜述描述他人試驗含 randomized 字樣→誤判 RCT）＋`R_PRIM2` 回退路徑加 `R_RAND`（須確有隨機化證據）＋`R_OBS` 補 before-after/pharmacoepidemiolog；實證 regex 自動更正 11/18。(2) 殘餘 7 以本案逐筆核對結果覆寫 g7_units（run-specific 資料）。核心報告 53→32（4 樞紐＋6 真獨立）。下游 report/breakdown/corpus_seed/PDF 同步重建。
 
+✅ 已修(使用者要求):⑥ PDF 段四「最終納入的證據清單」改為**只列核心 RCT**——scripts/build_search_pdf.py 段4 以群組 type 含『核心』篩選 `included_studies`，只渲染核心原始 RCT（三合一 vs LABA/LAMA）群組，排除『其他三合一 RCT』與 SR/MA 群組（後兩者見第三節分類統計與交接包）；標題改「四、最終納入的核心 RCT 證據清單」。report_check/gate_guard 綠。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
