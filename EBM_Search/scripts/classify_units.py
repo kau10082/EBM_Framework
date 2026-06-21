@@ -60,6 +60,18 @@ R_PK_STRONG = re.compile(r"population pharmacokinetic|pharmacokinetic (analysis|
 # 2026-06 使用者糾正：一篇 ERS congress-2020 摘要(無 PMID)被誤判為獨立核心 RCT。
 R_CONF_DOI = re.compile(r"congress-\d|/conference|meetingabstract|ajrccm-conference|\.congress\.|abstract-\d", re.I)
 R_CONF_TITLE = re.compile(r"\bposter\b|\bP\d{2,4}\b|congress abstract|conference abstract|^synopsis:", re.I)
+# 研究計畫書（無結果）強訊號：protocol 描述會含 randomized/double-blind→會誤觸 R_RCT；故須能蓋過 RCT。
+# 2026-06 使用者(外部 Claude)逐筆核對立：ANTES B+、日本 RCT 皆為 protocol(無 outcome)，誤入核心。
+R_PROTO_STRONG = re.compile(r"\bstudy protocol\b|\bprotocol for a\b|\btrial protocol\b|rationale and design|"
+    r"results (are |will be )?(expected|anticipated|pending|reported (in|by|during))|"
+    r"will be (randomi[sz]ed|enrolled|recruited|assigned|conducted)|recruitment (began|will begin|started|commenced|is ongoing|is expected)|"
+    r"first (patient|participant|subject)\b.{0,50}(20[2-9]\d)|enrol(l)?ment (began|will|is expected|started)|"
+    r"this (study|trial) (will|aims to|is designed to) (enrol|recruit|randomi|assess|investigate|evaluate)", re.I)
+# ICS 退階/移除設計（回答『能否撤 ICS』≠『起始三合一 vs 雙支擴』）→ 核心但須打 design=ICS-withdrawal 標籤，
+# 避免下游 meta 把『退階』與『起始』方向性混算。2026-06 使用者(外部 Claude)核對 SUNSET/WISDOM 立。
+R_ICS_WD = re.compile(r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of fluticasone|"
+    r"de-?escalat|step(ping)?[\s\-]?down|stepwise (withdrawal|removal)|discontinu(e|ation|ing) (of )?(the )?(ics|inhaled cortico)|"
+    r"removing (the )?inhaled cortico|direct (de-escalation|change) from (long-term )?triple", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
@@ -155,7 +167,8 @@ def classify(cache, out="g7_units.json"):
         #   字樣→會誤觸 R_RCT；故無 RCT pubtype 而命中強綜述/PK 訊號者先歸背景，避免把綜述/藥動誤拉成 RCT。
         elif (not is_rct_pt) and R_REVIEW_STRONG.search(text): design="背景:綜述/其他次級"
         elif (not is_rct_pt) and R_PK_STRONG.search(text) and not R_RAND.search(ab): design="背景:藥學/裝置/方法學"
-        elif R_PROTO.search(text) and not R_RCT.search(ab): design="進行中/試驗計畫書"
+        # 研究計畫書(無結果)優先於 RCT：protocol 含 randomized 字樣會誤觸 R_RCT，故強訊號須能蓋過。
+        elif R_PROTO_STRONG.search(text) or R_PROTO.search(title) or (R_PROTO.search(text) and not R_RCT.search(ab)): design="進行中/試驗計畫書"
         elif is_rct_pt or (R_RCT.search(text) and not R_OBS.search(text)): design="原始研究:RCT"
         elif trip_ctx and R_RCT2ND.search(text) and not R_OBS.search(text): design="原始研究:RCT"  # 試驗事後/次級分析＝該試驗報告
         elif has(pt,"Observational Study") or R_OBS.search(text): design="背景:觀察性/真實世界"
@@ -201,6 +214,10 @@ def classify(cache, out="g7_units.json"):
                 row["core_basis"]="conference_abstract_awaiting"
             else:
                 row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
+            # ★ ICS 退階/移除設計標記：凡判為核心(含樞紐)且命中 ICS-withdrawal 訊號者，改記為獨立子型，
+            #   下游 meta 不得與『起始三合一 vs 雙支擴』混算（回答的是『能否撤 ICS』這個不同臨床問題）。
+            if str(row.get("unit","")).startswith("核心") and R_ICS_WD.search(dtext):
+                row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["design_subtype"]="ICS-withdrawal"
             studies[trial or "(未辨識試驗)"].append(row)
             buckets[row["unit"]]+=1
         else:

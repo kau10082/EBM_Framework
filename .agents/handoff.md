@@ -52,4 +52,6 @@ fresh-clone / 自測：
 
 ✅ 已修(使用者要求『確認之後會確實執行』):核心 RCT 判定邏輯已寫成可攜定版規則入 SEARCH_SPEC.md（⑦/⑤b 段新增「★ 核心 RCT 判定邏輯(定版,鐵律)」）——載明 (L1)設計判別先擋綜述/PK/觀察(R_REVIEW_STRONG/R_PK_STRONG/R_OBS)、回退須 R_RAND；(L2)會議摘要→待評估、樞紐用 PIVOTAL_LABALAMA_ARM 權威表、非樞紐 regex trip∧dual(先正規化分隔符+遮蔽三合一藥名)、NCT 經 --enrich CT.gov 介入核對；(L3)殘餘交 Phase 0 人工覆核；並明令『⑤b 須以 --enrich 執行』。確保換 session/別人 clone 也照此執行（規則入 repo、非只在對話）。對應實作全在 scripts/classify_units.py（已 commit）。
 
+✅ 已修(使用者/外部 Claude 逐筆核對):⑤b 核心 RCT 再精進兩類——(A) **研究計畫書(無結果)不得當核心**：scripts/classify_units.py 新增 `R_PROTO_STRONG`(study protocol/rationale and design/results expected/will be randomised/first patient 20XX…)，且 protocol 強訊號**蓋過 R_RCT**(protocol 含 randomized 字樣會誤觸 RCT)→ ANTES B+、日本 RCT 由核心移到『進行中/試驗計畫書(待結果)』。(B) **ICS 退階/移除設計≠起始三合一 vs 雙支擴**：新增 `R_ICS_WD`(withdrawal of ICS/de-escalation/step-down/discontinue ICS…)，凡核心且命中者改記 `核心:ICS 退階試驗` 並打 `design_subtype=ICS-withdrawal`→ SUNSET、WISDOM 與起始試驗分開、下游 meta 不混算。實證：核心起始 IMPACT/ETHOS/KRONOS/TRIBUTE=27 報告、ICS 退階 2、計畫書移出 2；corpus_seed included 31→29。下游 report/breakdown/seed/PDF 同步重建、全關綠。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
