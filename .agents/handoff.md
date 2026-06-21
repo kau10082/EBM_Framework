@@ -50,4 +50,6 @@ fresh-clone / 自測：
 
 ✅ 已修(使用者糾正):⑤b 會議摘要被誤判為獨立核心 RCT——scripts/classify_units.py 新增 `R_CONF_DOI`/`R_CONF_TITLE` 偵測會議摘要(ERS congress-/conference/poster/synopsis 等)；依 Cochrane/MECIR 會議摘要＝『待評估研究』，**獨立會議摘要(無對應完整論文)不得當核心**→歸 `待評估:會議摘要(未完整發表)`；惟已納入樞紐試驗(有完整論文)的子報告即使是摘要仍保留為該試驗支持性報告。實證：1 篇 ERS congress-2020 摘要(無 PMID,n=104)由核心移出；核心報告 32→31。下游同步重建。
 
+✅ 已修(使用者要求『確認之後會確實執行』):核心 RCT 判定邏輯已寫成可攜定版規則入 SEARCH_SPEC.md（⑦/⑤b 段新增「★ 核心 RCT 判定邏輯(定版,鐵律)」）——載明 (L1)設計判別先擋綜述/PK/觀察(R_REVIEW_STRONG/R_PK_STRONG/R_OBS)、回退須 R_RAND；(L2)會議摘要→待評估、樞紐用 PIVOTAL_LABALAMA_ARM 權威表、非樞紐 regex trip∧dual(先正規化分隔符+遮蔽三合一藥名)、NCT 經 --enrich CT.gov 介入核對；(L3)殘餘交 Phase 0 人工覆核；並明令『⑤b 須以 --enrich 執行』。確保換 session/別人 clone 也照此執行（規則入 repo、非只在對話）。對應實作全在 scripts/classify_units.py（已 commit）。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
