@@ -188,7 +188,7 @@ def main():
     print(("  ✅" if not _wok else "  ❌") + " Stage A 待評估合法分類應通過（防誤報）：" + ("通過" if not _wok else str(_wok)))
     allok &= (not _wok)
 
-    import gate_guard, tempfile, json, io, shutil, os
+    import gate_guard, tempfile, json, io, shutil
     # 反坍縮：偽造一筆無內容卻在 screened
     tmp = Path(tempfile.mkdtemp())
     json.dump([{"uid":"u0","abstract":"","title":"no-content"}], io.open(tmp/"g2c_FINAL_content.json","w",encoding="utf-8"))
@@ -329,11 +329,11 @@ def main():
     _d = B1.build(str(tmpb))
     _ct = [c for c in _d["candidates"] if c.get("title")=="NCT trial"]
     _ok1 = bool(_ct) and _ct[0]["fulltext_status"]=="have"
-    print(("  ✅" if _ok1 else "  ❌")+" build_stage1：登錄試驗(無摘要)歸 candidate/have："+("通過" if _ok1 else f"FAIL"))
+    print(("  ✅" if _ok1 else "  ❌")+" build_stage1：登錄試驗(無摘要)歸 candidate/have："+("通過" if _ok1 else "FAIL"))
     allok &= _ok1
     _none = [a for a in _d["awaiting"] if a.get("title")=="no-id"]
     _ok2 = bool(_none) and _none[0]["reason"]=="兩者皆無"
-    print(("  ✅" if _ok2 else "  ❌")+" build_stage1：兩者皆無 reason 不被 channels_exhausted 竄改："+("通過" if _ok2 else f"FAIL"))
+    print(("  ✅" if _ok2 else "  ❌")+" build_stage1：兩者皆無 reason 不被 channels_exhausted 竄改："+("通過" if _ok2 else "FAIL"))
     allok &= _ok2
     shutil.rmtree(tmpb, ignore_errors=True)
 

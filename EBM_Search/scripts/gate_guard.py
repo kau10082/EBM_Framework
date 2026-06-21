@@ -18,7 +18,7 @@ gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 S
   python gate_guard.py --auto                      # 自動從 run_state 找 cache；無則靜默放行
   python gate_guard.py --auto --quiet              # Stop hook 用：PASS 不輸出
 """
-import sys, os, json, argparse, time
+import sys, os, json, argparse
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))

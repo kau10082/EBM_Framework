@@ -11,7 +11,7 @@ verify_memory_claims.py — 「長期記憶 vs 程式現況」漂移檢查（根
 
 用法：python verify_memory_claims.py
 """
-import os, re, sys, subprocess
+import re, sys, subprocess
 from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass

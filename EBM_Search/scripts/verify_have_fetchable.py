@@ -16,7 +16,7 @@ verify_have_fetchable.py — 『判 have 必須實抓得到全文』驗證器（
 用法：python verify_have_fetchable.py --in <papers.json|corpus_seed> [--min-chars 3000] [--only-included]
 程式內：import verify_have_fetchable as v; res = v.verify(papers)
 """
-import sys, os, re, json, argparse, urllib.request, urllib.parse, time
+import sys, re, json, argparse, urllib.request, urllib.parse, time
 from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass

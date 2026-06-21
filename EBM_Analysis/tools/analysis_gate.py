@@ -20,7 +20,7 @@ analysis_gate.py — 分析端『輕量 Stop-hook 守門』（Bug8：最終 PDF 
   python tools/analysis_gate.py --auto --hook          # Stop hook：FAIL→stderr＋exit 2
   python tools/analysis_gate.py --selftest             # 證明守門會 FAIL
 """
-import sys, os, json, argparse
+import sys, json, argparse
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))

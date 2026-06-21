@@ -12,7 +12,7 @@ corpus、cache、outputs、reports、fulltext、各成品 PDF/MD 在哪，不必
         --seed <path> --stage phase4_complete           # 更新欄位(只覆寫有給的)
   在程式內：import run_state; run_state.update(stage="phase3_done", corpus={...})
 """
-import json, sys, os, argparse
+import json, sys, argparse
 from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass

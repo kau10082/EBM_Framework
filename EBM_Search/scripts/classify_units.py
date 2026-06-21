@@ -213,7 +213,6 @@ def main():
     a=ap.parse_args()
     if a.enrich: enrich(a.cache)
     o=classify(a.cache,a.out)
-    from collections import Counter
     print(f"⑦ 精確分類（n={o['n']}，其中無摘要僅標題 {o['title_only_no_abstract']}）：")
     for k,v in sorted(o["buckets"].items(),key=lambda x:-x[1]): print(f"  {v:>5}  {k}")
     print("\nRCT 依 NCT/試驗名歸併為 Study：")
