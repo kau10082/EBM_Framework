@@ -55,3 +55,4 @@ config.local.json
 
 # ── 作業系統雜項（補既有 .DS_Store 未涵蓋者）─────────────────────────────────
 Thumbs.db
+_reports_out/
