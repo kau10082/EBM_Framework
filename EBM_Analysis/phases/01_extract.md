@@ -3,14 +3,16 @@ id: phase01_extract
 title: 第一階段 — 結構化數據提取 (PICO & N)
 input: 單篇文獻全文（PDF 抽取之純文字）
 output_schema: schema/phase1_extract.json
-guardrails: [data_honesty, outcome_nature, extraction_conventions, registry_backfill]
+guardrails: [fulltext_authoritative, data_honesty, outcome_nature, extraction_conventions, registry_backfill]
 ---
 
 ## 目標
 從單篇文獻的《Methods》與《Results》抽取結構化錨點，作為後續分級依據。**只抽取、不評斷。**
 
+> **★ 分析階段一切以『全文』為準（鐵律,2026-06 使用者糾正；機器強制 `tools/fulltext_gate.py`）：** 到了評讀階段，**抽取一律以全文資訊為準**；摘要、登錄庫數字、AI 合成摘要都是二手/不完整來源，**只有在『各種管道都真的無法閱讀全文』時才退用**。抽取前**必先逐一實試全文管道並把結果記進 `fulltext_attempts`**：①本機 `inputs/` PDF（`local_pdf`）→ ②PMC `fullTextXML`（`pmc_fulltextxml`）→ ③Unpaywall 全部 `oa_locations`（`unpaywall_oa`）→ ④人工補全文資料夾（`manual_supplement`）。**取得可解析全文 → `data_source` 標 `full_text` 並以全文重抽**；唯有 ①–③ 全部試過皆非 `fulltext_obtained` 才可把 `data_source` 設 `abstract/registry_results/ai_synthesis`，此時 `extraction_validation.status` 必為 `needs_review`、並連動 [registry_backfill] 補欄＋Phase 3 確定性封頂（[selfcheck C4「非全文不得 low」]）。詳見 [fulltext_authoritative] 護欄。
+
 ## 步驟
-0. **標 `data_source`**（full_text／registry_results／regulatory_doc／abstract／ai_synthesis）。若來源僅摘要/AI 合成、或缺 RoB/各臂N/AE/CI → **先套用 [registry_backfill] 補救**（查 ClinicalTrials.gov API、PROSPERO、FDA/EMA），補來源於 source_locators 分列。
+0. **窮盡全文管道 → 標 `data_source` ＋ `fulltext_attempts`**：先依上鐵律逐管道實試全文（local_pdf→PMC→Unpaywall 全 locations→manual_supplement），把每管道 `{channel,result}` 記入 `fulltext_attempts`。取得全文＝`data_source` 含 `full_text`、以全文抽取；真的全部取不到才退 `abstract/registry_results/ai_synthesis`。退用時或缺 RoB/各臂N/AE/CI → **再套用 [registry_backfill] 補救**（查 ClinicalTrials.gov API、PROSPERO、FDA/EMA），補來源於 source_locators 分列。
 1. 套用 [data_honesty]：未明確標註的數值（I^2、ITT、N…）一律標 `[Not Stated in Source]`，嚴禁推估。PICO 任一核心要素缺漏 → 該項標 ⚠️ 資料缺漏。
 2. 判定研究設計：SR-MA / RCT / NRSI / case-report / other；RCT/原始研究確認是否「多中心」。
 3. 抽取 PICO 錨點：

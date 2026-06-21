@@ -49,6 +49,7 @@ guardrails:
   no_effect_interpretation: {applies_to: all,        trigger: "CI 跨無效線"}
   data_honesty:             {applies_to: all,        trigger: always}
   extraction_conventions:   {applies_to: all,        trigger: always, note: "跨篇一致規則：多臂/AE 粒度/效應量選擇/方向"}
+  fulltext_authoritative:   {applies_to: "full,targeted_harms", trigger: "進入評讀每篇要抽取者", note: "分析階段一切以全文為準；退摘要/登錄/AI合成前須窮盡全文管道(local_pdf/PMC/Unpaywall)並記 fulltext_attempts。機器強制 tools/fulltext_gate.py（併入 verify_all）"}
   registry_backfill:        {applies_to: all,        trigger: "僅摘要/AI合成或缺RoB/各臂N/AE/CI", note: "固定補救：查 ClinicalTrials.gov/PROSPERO/FDA/EMA；補不到則確定性封頂"}
   selective_reporting:      {applies_to: all,        trigger: "有 NCT/EudraCT/PROSPERO 號", note: "比對註冊 outcomes vs 發表，餵 RoB領域5/非報告偏誤"}
   sof_table:                {applies_to: synthesis,  trigger: "產統合報告", note: "Summary of Findings 表＋絕對效應（Cochrane Ch14）"}

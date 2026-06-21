@@ -79,6 +79,17 @@ def main():
             print("      ⚠️ " + w)
     except Exception as e:
         results.append(("selfcheck", False, str(e))); print("  ❌ selfcheck 例外:", e)
+    # 2b) 全文為準 gate（fulltext_authoritative）：退摘要/登錄/AI 合成前須窮盡全文管道
+    try:
+        import fulltext_gate
+        ff = fulltext_gate.check(str(CACHE))
+        ok = not ff
+        results.append(("全文為準 fulltext_gate", ok, "\n".join(ff)))
+        print(f"  {'✅' if ok else '❌'} 全文為準 fulltext_gate" + ("" if ok else f"（{len(ff)} 項）"))
+        for x in ff: print("      -", x)
+    except Exception as e:
+        results.append(("全文為準 fulltext_gate", False, str(e)[:200])); print("  ❌ fulltext_gate 例外（fail-closed）:", str(e)[:60])
+
     # 3) absrisk selftest
     _run("absrisk --selftest", [str(HERE / "absrisk.py"), "--selftest"])
     # 4) quote_verify（網路）

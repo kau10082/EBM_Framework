@@ -13,6 +13,20 @@
       "description": "本次抽取用到的資料來源（registry_backfill 護欄）；ai_synthesis 與 abstract 須誠實標記",
       "items": { "enum": ["full_text", "registry_results", "regulatory_doc", "abstract", "ai_synthesis"] }
     },
+    "fulltext_attempts": {
+      "type": "array",
+      "description": "fulltext_authoritative 護欄：退網路/AI 合成前，逐一實試的全文取得管道與結果。data_source 不含 full_text 時，須涵蓋 local_pdf/pmc_fulltextxml/unpaywall_oa 三管道（result≠skipped）。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "result"],
+        "properties": {
+          "channel": { "enum": ["local_pdf", "pmc_fulltextxml", "unpaywall_oa", "manual_supplement", "publisher", "other"] },
+          "result": { "enum": ["fulltext_obtained", "no_access", "not_found", "parse_failed", "skipped"] },
+          "detail": { "type": ["string", "null"] }
+        }
+      }
+    },
     "design": {
       "type": "object",
       "additionalProperties": false,

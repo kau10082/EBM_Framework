@@ -1,22 +1,27 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【初審】功能塊：把「Zotero 匯入」與「人工補全文」從 EBM_Search 移到 EBM_Analysis Phase 0（使用者 2026-06-21 糾正：最終分析哪幾篇要到 Phase 0 分流定稿才確定，故這兩步權威版該在 Phase 0 做）
+【初審】功能塊：分析階段『全文為準』機器強制（使用者 2026-06-21 糾正：到分析階段一切以全文資訊為準，真的各管道都讀不到全文才退網路/AI 合成）
 
-本輪審查範圍：僅以下 3 檔
-- `EBM_Analysis/phases/00_triage.md`
-- `EBM_Search/SEARCH_SPEC.md`
-- `config/settings.example.yaml`
+本輪審查範圍：僅以下 5 檔
+- `EBM_Analysis/guardrails/fulltext_authoritative.md`（新增護欄）
+- `EBM_Analysis/tools/fulltext_gate.py`（新增機器 gate）
+- `EBM_Analysis/tools/verify_all.py`（接線）
+- `EBM_Analysis/schema/phase1_extract.json`（新增 `fulltext_attempts` 欄）
+- `EBM_Analysis/phases/01_extract.md` ＋ `EBM_Analysis/manifest.yaml`（規格/登錄）
 
-改了什麼（3 條）：
-1. **Phase 0 新增步驟 5（人工補全文）、步驟 6（Zotero 匯入）**（`EBM_Analysis/phases/00_triage.md`）：分流定稿後才做——補全文以 `grade_track∈{full,targeted_harms}`（真正要評讀者）為準（取全文順序 PMC fullTextXML→Unpaywall 全 oa_locations→本機 PDF，仍缺則實際建補全文資料夾＋寫 `需補全文清單.txt`）；Zotero 匯入鏡像 `_corpus.json` 全集、以 `relevance:`／`role:`／`grade_track:`／`study:` 標籤對齊分流。理由寫進文件：退階試驗（如 SUNSET/WISDOM）最後只當背景 light_summary 就不必補全文，故必須以 Phase 0 定稿名單為準，避免在 EBM_Search 對未定稿名單白補/重複匯入。斷點同步更新（分流→補全文→Zotero→Phase 1）。
-2. **SEARCH_SPEC ⑤c/⑤d 標『權威版移到 Phase 0』**（`EBM_Search/SEARCH_SPEC.md`）：⑤c/⑤d 段首新增鐵律——⑤c 預設不匯 Zotero、⑤d 至多做 handoff 前初步可得性盤點（標 `fulltext_status` 帶下游），權威執行改在 Phase 0；原 (a)(b) 細節保留為「使用者在 EBM_Search 階段明確要求即時做」時用，預設略過。
-3. **settings 範本補 `analysis.fulltext_dir`**（`config/settings.example.yaml`）：給 Phase 0 補全文資料夾用，留空回退 `EBM_Analysis/inputs/_fulltext_supplement/`。
+改了什麼（5 條）：
+1. **新增護欄 `fulltext_authoritative.md`**：分析階段以全文為準；退 abstract/registry/ai_synthesis 前須逐一實試 local_pdf→PMC fullTextXML→Unpaywall 全 oa_locations→manual_supplement 並記 `fulltext_attempts`；取得全文→標 `full_text` 以全文重抽；唯全部取不到才退二手，且 status=needs_review＋Phase 3 確定性封頂（連動 registry_backfill／selfcheck C4）。
+2. **新增機器 gate `tools/fulltext_gate.py`**：逐 `*.p1.json`——data_source 不含 full_text 卻用二手者，須 `fulltext_attempts` 涵蓋 local_pdf/pmc_fulltextxml/unpaywall_oa 三管道（result≠skipped）且無任一 fulltext_obtained、status=needs_review，否則 FAIL；反向「標 full_text 卻無 fulltext_obtained 證據」亦 FAIL。附 `--selftest`。
+3. **`verify_all.py` 接線**：新增「全文為準 fulltext_gate」一關（fail-closed）。
+4. **schema `phase1_extract.json` 加 `fulltext_attempts`**（陣列：channel∈{local_pdf,pmc_fulltextxml,unpaywall_oa,manual_supplement,publisher,other}、result∈{fulltext_obtained,no_access,not_found,parse_failed,skipped}、detail）。
+5. **規格/登錄**：`phases/01_extract.md` 步驟0 改「先窮盡全文管道→標 data_source＋fulltext_attempts」＋front-matter 加 guardrail；`manifest.yaml` 登錄 `fulltext_authoritative`。
 
 fresh-clone / 自測：
-- 本輪純文件/設定範本改動（無程式邏輯變更）。`python EBM_Search/scripts/selftest_guards.py` 仍 ✅（守門腳本未動）；COPD cache `gate_guard.py` 仍全關綠。
-- 不影響既有流程：EBM_Search 不再預設在 ⑤c/⑤d 動 Zotero/補全文，與下游 Phase 0 不重工。
+- `python EBM_Analysis/tools/fulltext_gate.py --selftest` → ✅（壞例被抓、好例放行、full_text 證據一致性檢查有效）。
+- 實跑 COPD analysis cache：4 篇核心試驗 p1（IMPACT/ETHOS/KRONOS/TRIBUTE）先全部 abstract-only → gate **FAIL（正確抓出未窮盡全文）**；補實試三管道（local_pdf=not_found、PMC=not_found〔NEJM/Lancet 非 OA、不在 PMC，已重試排除 503〕、Unpaywall=not_found/parse_failed〔僅 Manchester 典藏 landing 頁、非 PDF〕）記入 fulltext_attempts 後 → schema ✅＋gate **PASS**。證明 gate 屬實有效、且 4 篇全文確實線上不可得（退 abstract 合法、status=needs_review、Phase 3 封頂）。
+- `verify_all.py`/`fulltext_gate.py` 語法＋import OK。
 
-想被重點看：Phase 0 步驟 5/6 的措辭是否與 ANALYSIS_SPEC、ingest_seed 交接邏輯一致；SEARCH_SPEC ⑤c/⑤d 的「預設略過、改 Phase 0」與其他段（⑦交接包、Zotero≡報告表二三）是否仍自洽無矛盾（交接包仍含 verdict 供 Phase 0 預填，不受影響）。
+想被重點看：(a) gate 要求的三必試管道 {local_pdf,pmc_fulltextxml,unpaywall_oa} 是否合理（manual_supplement 容許 skipped，因使用者可能跳過補全文）；(b) 「標 full_text 卻無 fulltext_obtained 證據→FAIL」會否誤傷『本機 PDF 直接讀、未經線上管道』情境（目前 local_pdf 取得也會記 fulltext_obtained，應不誤傷，但請確認）；(c) 與既有 registry_backfill／selfcheck C4「非全文不得 low」是否重複或衝突。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
@@ -46,5 +51,7 @@ fresh-clone / 自測：
 ✅ 已修(使用者『避免下次再犯』總結教訓):⑤b classify_units 新增**主動覆核防線 `core_review_flags`**——classify() 收尾自動把『高風險核心判定』攤出來寫 g7_review_flags.json 並於 main 顯著警示:(1)非樞紐核心(純 regex,無權威表背書)、(2)無 PMID(疑會議摘要/未完整發表)、(3)DOI 疑會議摘要、(4)ICS 退階子型、(5)標題含 protocol 訊號。**教訓＝我一再信任自動化結果就當定稿、靠使用者抓錯;此防線把不確定性主動逼出來覆核(對齊框架『rapid-review 須人工覆核』『機器守門優先於記性』),下次同類風險會自動浮現而非等下游爆。** 本案實測 flag 出 SUNSET/WISDOM(非樞紐+ICS退階)＋2 筆 conf-DOI 樞紐子報告。
 
 ✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
+
+✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
