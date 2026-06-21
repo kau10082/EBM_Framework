@@ -228,6 +228,24 @@ def classify(cache, out="g7_units.json"):
              "rct_studies":{k:len(v) for k,v in studies.items()},
              "core_rct_studies":sorted({r["trial"] for r in core if r["trial"]!="(未辨識)"}),
              "rows":rows}
+    # ★ 主動覆核防線（2026-06 使用者『避免下次再犯』）：把『不確定/高風險的核心判定』攤出來逼人工覆核，
+    #   不要等下游才被抓。核心列只要落入下列任一風險即列入待覆核，寫 g7_review_flags.json 並在 main 警示：
+    #   (1) 非樞紐核心(無權威表背書,純 regex)；(2) 無 PMID(疑會議摘要/未完整發表)；(3) DOI 像會議摘要；
+    #   (4) 帶 ICS-withdrawal 子型(設計不同,需確認方向)；(5) 摘要含 protocol 字樣(疑無結果)。
+    review_flags=[]
+    for r in rows:
+        if not str(r.get("unit","")).startswith("核心"): continue
+        reasons=[]
+        if r.get("trial") not in PIVOTAL_LABALAMA_ARM: reasons.append("非樞紐核心(regex判定,須覆核對照臂)")
+        if not r.get("pmid"): reasons.append("無PMID(疑會議摘要/未完整發表)")
+        if R_CONF_DOI.search(str(r.get("doi") or "").lower()): reasons.append("DOI疑會議摘要")
+        if r.get("design_subtype")=="ICS-withdrawal": reasons.append("ICS退階設計(勿與起始混算)")
+        if R_PROTO_STRONG.search((r.get("title") or "")): reasons.append("標題含protocol訊號(疑無結果)")
+        if reasons:
+            review_flags.append({"uid":r.get("uid"),"pmid":r.get("pmid"),"title":(r.get("title") or "")[:90],
+                                 "trial":r.get("trial"),"unit":r.get("unit"),"flags":reasons})
+    out_obj["core_review_flags"]=review_flags
+    (cache/"g7_review_flags.json").write_text(json.dumps(review_flags,ensure_ascii=False,indent=1),encoding="utf-8")
     (cache/out).write_text(json.dumps(out_obj,ensure_ascii=False),encoding="utf-8")
     return out_obj
 
@@ -297,6 +315,12 @@ def main():
     print("\nRCT 依 NCT/試驗名歸併為 Study：")
     for k,v in sorted(o["rct_studies"].items(),key=lambda x:-x[1]): print(f"  ● {k}: {v} 報告")
     print("\n核心『三合一 vs LABA/LAMA』Study：", ", ".join(o["core_rct_studies"]))
+    rf=o.get("core_review_flags") or []
+    if rf:
+        print(f"\n⚠️  核心待人工覆核 {len(rf)} 筆（rapid-review 不可逕信，須逐筆核對；明細 g7_review_flags.json）：")
+        for x in rf[:30]:
+            print(f"   - [{x.get('pmid') or '無PMID'}] {x['title']} ｜ {'、'.join(x['flags'])}")
+        print("   → 非樞紐核心/無PMID/會議摘要/ICS退階/protocol 訊號者，務必人工或 Phase 0 覆核後才當核心證據。")
 
 if __name__=="__main__":
     main()

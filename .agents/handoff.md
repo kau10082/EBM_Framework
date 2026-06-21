@@ -54,4 +54,6 @@ fresh-clone / 自測：
 
 ✅ 已修(使用者/外部 Claude 逐筆核對):⑤b 核心 RCT 再精進兩類——(A) **研究計畫書(無結果)不得當核心**：scripts/classify_units.py 新增 `R_PROTO_STRONG`(study protocol/rationale and design/results expected/will be randomised/first patient 20XX…)，且 protocol 強訊號**蓋過 R_RCT**(protocol 含 randomized 字樣會誤觸 RCT)→ ANTES B+、日本 RCT 由核心移到『進行中/試驗計畫書(待結果)』。(B) **ICS 退階/移除設計≠起始三合一 vs 雙支擴**：新增 `R_ICS_WD`(withdrawal of ICS/de-escalation/step-down/discontinue ICS…)，凡核心且命中者改記 `核心:ICS 退階試驗` 並打 `design_subtype=ICS-withdrawal`→ SUNSET、WISDOM 與起始試驗分開、下游 meta 不混算。實證：核心起始 IMPACT/ETHOS/KRONOS/TRIBUTE=27 報告、ICS 退階 2、計畫書移出 2；corpus_seed included 31→29。下游 report/breakdown/seed/PDF 同步重建、全關綠。
 
+✅ 已修(使用者『避免下次再犯』總結教訓):⑤b classify_units 新增**主動覆核防線 `core_review_flags`**——classify() 收尾自動把『高風險核心判定』攤出來寫 g7_review_flags.json 並於 main 顯著警示:(1)非樞紐核心(純 regex,無權威表背書)、(2)無 PMID(疑會議摘要/未完整發表)、(3)DOI 疑會議摘要、(4)ICS 退階子型、(5)標題含 protocol 訊號。**教訓＝我一再信任自動化結果就當定稿、靠使用者抓錯;此防線把不確定性主動逼出來覆核(對齊框架『rapid-review 須人工覆核』『機器守門優先於記性』),下次同類風險會自動浮現而非等下游爆。** 本案實測 flag 出 SUNSET/WISDOM(非樞紐+ICS退階)＋2 筆 conf-DOI 樞紐子報告。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
