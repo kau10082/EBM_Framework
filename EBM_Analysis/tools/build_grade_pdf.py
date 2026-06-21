@@ -50,11 +50,10 @@ def _safe(t):
     return s
 
 
-def build(infile, out, font=None):
+def build(infile, out, font=None, layout="cochrane5"):
     data = json.loads(Path(infile).read_text(encoding="utf-8"))
     syn = data.get("synthesis", data)
     pp = data.get("per_paper", [])
-    layout = (globals().get("_LAYOUT") or "default")
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
     from reportlab.lib import colors
@@ -258,11 +257,9 @@ def main():
     ap.add_argument("--in", dest="infile", default=None)
     ap.add_argument("--out", default=None)
     ap.add_argument("--font", default=None)
-    ap.add_argument("--layout", default="default", choices=["default", "cochrane5"],
-                    help="default=8 段；cochrane5=Cochrane 後半段 5 核心數據段（特徵表/RoB2/統合/GRADE/SoF+結論）")
+    ap.add_argument("--layout", default="cochrane5", choices=["cochrane5", "default"],
+                    help="cochrane5（預設，標準版）＝Cochrane 6 段（特徵表/RoB2/統合MA/GRADE/SoF含每千人+NNT+CI/臨床一句話）；default=舊 8 段")
     a = ap.parse_args()
-    global _LAYOUT
-    _LAYOUT = a.layout
     try:
         sys.path.insert(0, str(HERE)); import workdir
         cache = workdir.cache_dir(); outputs = workdir.outputs_dir()
@@ -274,7 +271,7 @@ def main():
         import reportlab  # noqa
     except Exception:
         sys.stderr.write("需要 reportlab：pip install reportlab\n"); sys.exit(1)
-    build(infile, out, a.font)
+    build(infile, out, a.font, a.layout)
 
 
 if __name__ == "__main__":

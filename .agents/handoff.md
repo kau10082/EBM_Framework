@@ -13,6 +13,8 @@
 - `EBM_Analysis/phases/00_triage.md`（步驟 5/6 範圍改用 analysis_scope；手機可跳過實執行）
 - `EBM_Analysis/tools/build_grade_pdf.py`（新增 PDF 產生器＋`--layout cochrane5` Cochrane 後半段 5 段版型）
 - `EBM_Analysis/schema/phase4_output.json`（新增選用 `meta_analysis` 欄：池化合併效應＋I^2）
+- `EBM_Analysis/tools/build_reports.py`（MD 改 Cochrane 6 段＋連帶產 PDF）
+- `EBM_Analysis/phases/04_output.md`（明定標準 6 段 PDF/MD 統一格式）
 
 改了什麼（5 條）：
 1. **新增護欄 `fulltext_authoritative.md`**：分析階段以全文為準；退 abstract/registry/ai_synthesis 前須逐一實試 local_pdf→PMC fullTextXML→Unpaywall 全 oa_locations→manual_supplement 並記 `fulltext_attempts`；取得全文→標 `full_text` 以全文重抽；唯全部取不到才退二手，且 status=needs_review＋Phase 3 確定性封頂（連動 registry_backfill／selfcheck C4）。
@@ -64,6 +66,8 @@ fresh-clone / 自測：
 ✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
 
 ✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
+
+✅ 已修(使用者『之後 analysis 階段 PDF 跟 MD 都比照此模式』):把 Cochrane 6 段＋升級 SoF（每千人+NNT+CI+腳註+meta_analysis）定為 analysis 標準格式，PDF 與 MD 統一——(1) `build_grade_pdf.py` 預設 `--layout cochrane5`（舊 8 段保留為 `--layout default`）；(2) `build_reports.py` final_report() 重寫為同 6 段結構（特徵表/RoB2/統合MA含I²/GRADE/SoF含每千人+NNT+CI+腳註+Authors'Conclusions+Ch15不下醫囑/臨床一句話），且寫完 MD 連帶呼叫 build_grade_pdf 產 PDF（--no-pdf 可關、缺 reportlab 只警告不中斷）；(3) `phases/04_output.md` 明定此為標準格式鐵律、通用資料驅動。實證：一道 build_reports.py 同時產 FINAL_REPORT.md＋.pdf，兩者同格式同資料源，render_smoketest＋verify_all 19 項全綠；legacy default 版型仍可用。
 
 ✅ 新增(使用者指定數據呈現黃金守則):SoF 升級為 Cochrane Ch14/15 精確呈現——絕對效應『每 1000 人』＋相對效應＋NNTB/NNTH 並附 95% CI；跨無效線/資料不足者明寫『無顯著差異/資料不足→不計 NNT』（非寫 NNT=∞）；新增 GRADE 降級腳註 a/b/c/d。schema/phase4 加選用 `sof_footnotes`。實證：肺炎 NNTH 84(95% CI 48–200)、惡化減少 264 次/1000 人年(率結果不套 NNT)。selfcheck C5/C6/C7/C14 與 verify_all 19 項全綠。
 

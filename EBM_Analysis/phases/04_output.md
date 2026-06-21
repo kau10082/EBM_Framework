@@ -29,3 +29,13 @@ guardrails: [adversarial_review, sof_table, report_completeness, computation_che
 - **[nma]**（若含網絡統合／間接比較）。
 - 證據對抗：高確定性文獻不一致 → 列衝突點，比較定義嚴謹度與研究年代。
 - 終極權重裁決：依 GRADE 確定性＋RoB＋效果一致性；⚠️ 不以 N 規模／期刊名裁權。
+
+## ★ 標準成品格式（PDF＋MD 統一，鐵律，2026-06 使用者定）
+analysis 階段最終報告（`outputs/FINAL_REPORT.md` 與 `FINAL_REPORT.pdf`）**一律照 Cochrane Handbook 第 III 章後半段「6 段」版型**，PDF 與 MD **同格式、同資料源**（皆由 `cache/_synthesis.json` 渲染）：
+1. **納入研究特徵摘要表**（Ch9）：設計／基準風險／介入·對照精確內容／追蹤。
+2. **個別試驗偏誤風險評估 RoB 2**（Ch8）：逐篇逐領域＋對 some concerns/high 點出瑕疵來源。
+3. **數據綜整／統合分析**（Ch10）：逐核心結局**池化合併效應＋I²**（`synthesis.meta_analysis`）；未池化者註明理由。
+4. **GRADE 證據確定性評級**（Ch14）：逐結局五下調領域結算（`body_of_evidence`）。
+5. **SoF 表＋臨床建議**（Ch14·15）：SoF **必『相對＋絕對（每 1000 人）＋NNTB/NNTH』並列、全附 95% CI**；**跨無效線/資料不足者明寫『無顯著差異／不計 NNT』，不得寫 NNT=∞**；附 **GRADE 降級腳註 a/b/c…**（`sof_footnotes`）；Authors' Conclusions 平衡利弊＋MCID，**不下強制醫囑**（Ch15）。
+6. **給臨床的一句話**（Clinical Bottom Line）。
+- 渲染器：MD＝`tools/build_reports.py`（會連帶呼叫 PDF）；PDF＝`tools/build_grade_pdf.py`（**預設 `--layout cochrane5`**）。NNT/絕對效應一律經 `tools/absrisk.py` 計算、`selfcheck_consistency` C5/C6/C7/C14 覆驗，禁手算。**通用、資料驅動，換任何主題（PICO）自動適用。**
