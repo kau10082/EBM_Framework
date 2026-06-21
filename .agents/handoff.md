@@ -65,6 +65,8 @@ fresh-clone / 自測：
 
 ✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
 
+✅ 新增(使用者指定數據呈現黃金守則):SoF 升級為 Cochrane Ch14/15 精確呈現——絕對效應『每 1000 人』＋相對效應＋NNTB/NNTH 並附 95% CI；跨無效線/資料不足者明寫『無顯著差異/資料不足→不計 NNT』（非寫 NNT=∞）；新增 GRADE 降級腳註 a/b/c/d。schema/phase4 加選用 `sof_footnotes`。實證：肺炎 NNTH 84(95% CI 48–200)、惡化減少 264 次/1000 人年(率結果不套 NNT)。selfcheck C5/C6/C7/C14 與 verify_all 19 項全綠。
+
 ✅ 新增(使用者指定 Cochrane 後半段 5 段版型):`build_grade_pdf.py --layout cochrane5` 渲染 Cochrane Handbook 第 III 章報告規範之 5 核心數據段（1 納入研究特徵表／2 RoB2 逐篇逐領域／3 數據綜整·統合分析含池化 RR＋I^2／4 GRADE Evidence Profile／5 SoF 絕對效應換算+燈號+Authors' Conclusions 含 Ch15『不下強制醫囑』聲明）；通用、資料驅動換主題即用。配套 schema/phase4 新增選用 `meta_analysis` 欄（固定/隨機/未池化＋I^2）。實證：本案中重度惡化固定效應合併 RR 0.76 (0.72–0.81)、I^2=0%（IMPACT/ETHOS/TRIBUTE 3 試驗），肺炎標 not_pooled（HR vs % 不同型、族群相依）。通過 render_smoketest＋verify_all 19 項。
 
 ✅ 新增(補 repo 缺口):`tools/build_grade_pdf.py`——評讀端 GRADE 報告 PDF 產生器（reportlab，資料驅動、CJK 字型 fallback、TOFU 淨化對齊 render_smoketest、SoF 橫向、GRADE ●○ 標示）。repo 原本只有檢索端 build_search_pdf、評讀端無 PDF 渲染器（spec 只說「用 reportlab 自建」）。實證：產出 outputs/FINAL_REPORT.pdf 通過 render_smoketest（無磚塊/章節連續/SoF 含死亡+SAE/列數一致）＋ verify_all 19 項全綠。

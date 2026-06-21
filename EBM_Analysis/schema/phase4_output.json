@@ -151,6 +151,7 @@
           }
         },
         "prisma_attest": { "type": ["object", "null"], "additionalProperties": { "type": "string" }, "description": "PRISMA 2020 人工聲明項(鍵=項號字串，如 \"24\")，供 prisma_audit 將回顧層 MANUAL 項(註冊/資金/利益衝突/資料蒐集流程/可得性)轉 ATTEST。" },
+        "sof_footnotes": { "type": "array", "items": { "type": "string" }, "description": "GRADE 降級腳註(a/b/c…，Ch14 §14.2)：對應 SoF 各列 certainty 之降級理由，逐條列示(偏誤/不一致/間接/不精確/發表偏誤或資料不足)。" },
         "publication_bias": { "type": ["string", "null"], "description": "發表偏誤/缺失證據聲明（<10 不畫漏斗圖）" },
         "subgroup_implications": { "type": ["string", "null"], "description": "次群組＋對研究的意涵" },
         "baseline_risk_strata": {

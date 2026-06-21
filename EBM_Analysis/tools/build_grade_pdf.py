@@ -142,6 +142,8 @@ def build(infile, out, font=None):
                          cell(o.get("absolute_effect", ""), 7), cell(o.get("relative_effect", ""), 7), cell(o.get("n_participants_studies", ""), 7),
                          cell(f"{CERT_DOT.get(c,'')} {CERT_TXT.get(c,c)}", 7.5), cell(o.get("comment", "") or "", 7)])
         t = Table(rows, colWidths=FR(0.11, 0.11, 0.09, 0.16, 0.17, 0.09, 0.07, 0.20)); t.setStyle(tstyle()); S.append(t)
+        for fn in (syn.get("sof_footnotes") or []):
+            S.append(P("　" + fn, 7.5, col="#555", sp=1))
         S.append(Spacer(1, 2 * mm))
         S.append(P("<b>臨床建議底線（Authors' Conclusions）</b>", 11, sp=3))
         for b in (syn.get("bottom_line") or []):
