@@ -42,5 +42,6 @@ fresh-clone / 自測：
 ✅ 已修:⑤b --enrich 找不到介入軸→CT.gov 交叉核對靜默跳過（scripts/classify_units.py enrich 改穩健尋找介入軸 I/I_*/role；補跑 CT.gov 核對 34 NCT，核心 RCT 正確歸併、非核心歸背景）
 ✅ 已修(使用者要求):⑥ PDF PRISMA 段移除流程圖、只保留漏斗表格（scripts/build_search_pdf.py 刪除段3 的 Drawing/box/arrow 流程圖區塊，保留 funnel 表＋二分閉合；report_check/gate_guard 仍綠）
 ✅ 已修(使用者要求):⑥ PDF PRISMA 漏斗表最後一步固定補「納入分析文獻 Included」——由產生器確定性附加（非手動編 funnel）：scripts/build_search_pdf.py 段3 先濾掉 funnel 內既有『納入分析』步、再附加一行，數量取 prisma_flow.included（缺則由 included_studies 報告數推算）；已驗：移除 _search_report.json 手動步後 PDF 仍渲染出該末步（423），report_check/gate_guard 綠
+✅ 已修(使用者要求):⑥ PDF PRISMA 末步須詳述『分類後各類篇數』——scripts/build_search_pdf.py 段3 於 Included 步後逐類渲染 `included_breakdown`（核心RCT/SR-MA/其他RCT/各背景，總和=Included）為縮排子列；breakdown 由 ⑤b g7_units.buckets 計算寫入 _search_report.json（本案 59/64/45/143/89/23=423）。report_check/gate_guard 綠
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

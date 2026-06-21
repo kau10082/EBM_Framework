@@ -95,10 +95,14 @@ def build(infile, out, font=None):
     if inc_n in (None, ""):
         inc_n=sum(len(g.get("reports",[])) for g in data.get("included_studies",[]))
     funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
-                   "change":"核心原始 RCT 報告＋SR/MA＋背景（交接 corpus_seed 進 EBM 評讀）"})
+                   "change":"交接 corpus_seed 進 EBM 評讀；分類後各類篇數如下"})
     fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
+    # 末步「納入分析文獻」之後，逐類列出『分類後各類篇數』(included_breakdown)——由產生器確定性附加，
+    # 讓 PRISMA 末步詳述 ⑤b 分類結果(核心RCT/SR-MA/其他RCT/各背景)，總和須＝Included。
+    for lab,cnt in (data.get("included_breakdown") or []):
+        fr.append([f"　└ {lab}", str(cnt)])
     if len(fr)>1:
-        t=Table(fr,colWidths=[60*mm,W-60*mm]); t.setStyle(tstyle()); S.append(t)
+        t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
     S.append(Spacer(1,3*mm))
 
