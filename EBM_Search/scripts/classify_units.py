@@ -170,7 +170,16 @@ def enrich(cache, mailto="test@example.com"):
     換主題時自動依該主題 g0 的 I 軸判定，不必改碼。"""
     cache=Path(cache)
     g0=json.loads((cache/"g0_strategy.json").read_text(encoding="utf-8"))
-    axes=g0.get("axes",{}); I=axes.get("I",{})
+    axes=g0.get("axes",{})
+    # ★ 介入軸不一定鍵名叫 "I"（可能是 I_triple、I_intervention…）：穩健地依鍵名/role 找出介入軸，
+    #   否則 enrich 會靜默拿到空 isyn → 所有 NCT 介入判為不在範圍 → 全部 RCT 誤丟背景（2026-06 使用者糾正）。
+    I=axes.get("I")
+    if not isinstance(I,dict) or not I.get("synonyms"):
+        for k,v in axes.items():
+            if not isinstance(v,dict): continue
+            if k=="I" or k.upper().startswith("I_") or "intervention" in str(v.get("role","")).lower():
+                I=v; break
+    I=I if isinstance(I,dict) else {}
     isyn=[_norm(s) for s in (I.get("synonyms") or []) if s and len(s)>3]
     # 四軸展開的成分清單（若有）：用『各類別成分各命中≥1』作為組合介入(如三合一)的通用判準
     fae=g0.get("four_axis_expansion",{}).get("axisC_class_INN_devcode_brand",{})
