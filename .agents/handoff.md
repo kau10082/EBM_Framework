@@ -11,6 +11,7 @@
 - `EBM_Analysis/tools/analysis_scope.py`（新增：算進入分析集／需補全文最小集）
 - `EBM_Analysis/schema/phase0_corpus.json`（新增 `is_primary_report` 欄）
 - `EBM_Analysis/phases/00_triage.md`（步驟 5/6 範圍改用 analysis_scope；手機可跳過實執行）
+- `EBM_Analysis/tools/build_grade_pdf.py`（新增：GRADE 報告 PDF 產生器，補 repo 原缺的評讀端 PDF 渲染器）
 
 改了什麼（5 條）：
 1. **新增護欄 `fulltext_authoritative.md`**：分析階段以全文為準；退 abstract/registry/ai_synthesis 前須逐一實試 local_pdf→PMC fullTextXML→Unpaywall 全 oa_locations→manual_supplement 並記 `fulltext_attempts`；取得全文→標 `full_text` 以全文重抽；唯全部取不到才退二手，且 status=needs_review＋Phase 3 確定性封頂（連動 registry_backfill／selfcheck C4）。
@@ -62,6 +63,8 @@ fresh-clone / 自測：
 ✅ 已修(使用者糾正『最終分析名單在 Phase 0 才定，Zotero 匯入/人工補全文應移到這裡』):把 ⑤c Zotero 匯入、⑤d 人工補全文的**權威執行從 EBM_Search 移到 EBM_Analysis Phase 0**——(1) `EBM_Analysis/phases/00_triage.md` 分流定稿後新增步驟 5（補全文，以 grade_track∈full/targeted_harms 為準）、步驟 6（Zotero 匯入，鏡像 _corpus.json 全集＋分流標籤），斷點改「分流→補全文→Zotero→Phase 1」；(2) `EBM_Search/SEARCH_SPEC.md` ⑤c/⑤d 段標『預設不在此匯/補，權威版在 Phase 0』；(3) `config/settings.example.yaml` 補 `analysis.fulltext_dir`。理由：退階試驗（SUNSET/WISDOM）等到 Phase 0 才決定只當背景，補全文/匯入須以定稿名單為準，避免白補與重複匯入。
 
 ✅ 已修(使用者糾正『分析階段一切以全文為準，真的各管道讀不到才退網路/AI 合成』):新增 `fulltext_authoritative` 護欄＋機器 gate `tools/fulltext_gate.py`（併入 verify_all），phase1 schema 加 `fulltext_attempts`，phases/01_extract.md＋manifest 同步。強制：退二手前須實試 local_pdf/PMC/Unpaywall 三管道並記錄，取得全文須以全文重抽；唯全部取不到才退 abstract/registry/ai_synthesis 且 status=needs_review＋確定性封頂。實證 gate 抓出我原本 4 篇 abstract-only 未窮盡全文（FAIL）→補實試（4 篇 NEJM/Lancet 全文確線上不可得）後 PASS。
+
+✅ 新增(補 repo 缺口):`tools/build_grade_pdf.py`——評讀端 GRADE 報告 PDF 產生器（reportlab，資料驅動、CJK 字型 fallback、TOFU 淨化對齊 render_smoketest、SoF 橫向、GRADE ●○ 標示）。repo 原本只有檢索端 build_search_pdf、評讀端無 PDF 渲染器（spec 只說「用 reportlab 自建」）。實證：產出 outputs/FINAL_REPORT.pdf 通過 render_smoketest（無磚塊/章節連續/SoF 含死亡+SAE/列數一致）＋ verify_all 19 項全綠。
 
 ✅ 已修(使用者『只匯入/只補進入分析那幾篇』):新增 `tools/analysis_scope.py` 確定性算『進入分析集(Zotero 範圍)＝full+targeted_harms』『需補全文最小集＝每 Study 主報告(is_primary_report)＋真 harms』『選補＝full 次級 overlap』；schema phase0 加 `is_primary_report`；phases/00_triage.md 步驟 5/6 範圍改用 analysis_scope（補全文只補 need_manual、Zotero 只匯 analysis_set 不含背景）並註明手機可暫跳過實執行。實證：本案進入分析 51 報告(4 核心 Study＋23 harms)、需補全文 4 核心主報告為主。
 
