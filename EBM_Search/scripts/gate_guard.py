@@ -262,6 +262,47 @@ def check_2b_stop(cache):
     return []
 
 
+def check_citation_stop(cache):
+    """④ 引文追蹤完成後須停下報告、經使用者核准才可進 ⑤a 交叉驗證（防搶跑）。
+    落地：使用者確認後在 g4_checkpoint.json 設 approved_by_user=true。
+    ⑤a 產物 g6_verified.json 已產出但 ④ 未核准＝搶跑 → FAIL。
+    （2026-06 使用者定版：④/⑤a/⑤b 三關各須停下報告、核准後續，與 ⓪→①、②b→③ 對稱。）"""
+    down = _load(cache / "g6_verified.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g4_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["g6_verified.json(⑤a) 已產出，但 g4_checkpoint.json 未標 approved_by_user=true："
+                "④ 引文追蹤完成後須先停下報告、經使用者核准才可進 ⑤a 交叉驗證（防搶跑）"]
+    return []
+
+
+def check_xref_stop(cache):
+    """⑤a 交叉驗證＋撤稿完成後須停下報告、經使用者核准才可進 ⑤b 決定納入單位（防搶跑）。
+    落地：g6_checkpoint.json approved_by_user=true。⑤b 產物 g7_units.json 已產出但 ⑤a 未核准 → FAIL。"""
+    down = _load(cache / "g7_units.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g6_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["g7_units.json(⑤b) 已產出，但 g6_checkpoint.json 未標 approved_by_user=true："
+                "⑤a 交叉驗證/撤稿完成後須先停下報告、經使用者核准才可進 ⑤b 決定納入單位（防搶跑）"]
+    return []
+
+
+def check_units_stop(cache):
+    """⑤b 決定納入單位完成後須停下報告、經使用者核准才可進 ⑥ 三表/報告（防搶跑）。
+    落地：g7_checkpoint.json approved_by_user=true。⑥ 產物 _search_report.json 已產出但 ⑤b 未核准 → FAIL。"""
+    down = _load(cache / "_search_report.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g7_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["_search_report.json(⑥) 已產出，但 g7_checkpoint.json 未標 approved_by_user=true："
+                "⑤b 決定納入單位完成後須先停下報告、經使用者核准才可進 ⑥ 三表/報告（防搶跑）"]
+    return []
+
+
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
     man = _load(cache / "g1_legs_manifest.json")
@@ -476,6 +517,9 @@ def _all_checks(cache):
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
             _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
+            _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
+            _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
+            _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),

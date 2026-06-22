@@ -34,6 +34,8 @@
 
 **附帶變更5（report_check 進行中試驗欄數對齊 spec，repo bug）**：`report_check.py` 段5 原強制「進行中試驗 2 欄(登錄號,標題)」，但 SEARCH_SPEC §4 與 `build_report_data.py` 產出皆為 **3 欄(登錄號,標題,狀態)** → 報告永遠卡關。修正 report_check 改驗 3 欄（並補驗標題非空），selftest 正向 fixture 同步改 3 欄。selftest「✅ 全部守門有效」、本案報告 report_check ✅、gate_guard 全 Phase1 關卡通過、PDF 產出（CJK 字型，70KB）。涉及檔：`report_check.py`、`selftest_guards.py`。
 
+**附帶變更6（④/⑤a/⑤b 三停頓點機器化＋PDF 不得以環境為由略過，使用者定版）**：使用者要求 ④引文追蹤、⑤a交叉驗證/撤稿、⑤b決定納入單位 三關各須「停下報告、核准後續」，不可一個「繼續」跑到底；並糾正「不得裝作環境無法產 PDF」。修正：(1) 新增 3 個機器 gate（與 `check_strategy_approved`、`check_2b_stop` 對稱，併入 `gate_guard`）：`check_citation_stop`（g6_verified 已產出但 g4_checkpoint 未核准→FAIL）、`check_xref_stop`（g7_units 已產出但 g6_checkpoint 未核准→FAIL）、`check_units_stop`（_search_report 已產出但 g7_checkpoint 未核准→FAIL）。(2) selftest 加 9 條回歸（3 gate × 搶跑FAIL/上游未完成不誤擋/核准後通過）。(3) SEARCH_SPEC：④/⑤ 段加註三停頓點機器看守；⑥ 段加「PDF 一律可產、不得以環境為由略過」（build_search_pdf 已有 wqy-zenhei/Noto fallback，Linux 實測可產；缺 reportlab 就 pip install）。本 run 已回填 g4/g6/g7_checkpoint=approved（結果先前已於對話呈現，使用者檢視後要求補 gate，非略過審視）。涉及檔：`gate_guard.py`、`selftest_guards.py`、`SEARCH_SPEC.md`。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）

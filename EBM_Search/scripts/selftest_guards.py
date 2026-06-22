@@ -192,6 +192,28 @@ def main():
     allok &= (not _s3)
     shutil.rmtree(_t2b, ignore_errors=True)
 
+    # ── ④/⑤a/⑤b 停頓點守門回歸（各關完成後須停下報告、核准才續；防搶跑）──
+    for label, downfile, ckfile, fn in [
+        ("④→⑤a", "g6_verified.json", "g4_checkpoint.json", "check_citation_stop"),
+        ("⑤a→⑤b", "g7_units.json", "g6_checkpoint.json", "check_xref_stop"),
+        ("⑤b→⑥", "_search_report.json", "g7_checkpoint.json", "check_units_stop")]:
+        _t = Path(tempfile.mkdtemp()); fnc = getattr(gate_guard, fn)
+        # 下游產物已產出但上游 checkpoint 未核准 → FAIL
+        json.dump([{"x":1}] if downfile.startswith("g") else {"x":1}, io.open(_t/downfile,"w",encoding="utf-8"))
+        allok &= _assert_fires(f"{label} 停頓點（未核准就搶跑）", fnc(_t))
+        # 下游未產出 → 不適用(None)、不誤擋
+        (_t/downfile).unlink()
+        _na = fnc(_t)
+        print(("  ✅" if _na is None else "  ❌")+f" {label}：上游未完成不誤擋（防誤報）："+("通過" if _na is None else str(_na)))
+        allok &= (_na is None)
+        # checkpoint 已核准 + 下游產物 → 通過
+        json.dump([{"x":1}] if downfile.startswith("g") else {"x":1}, io.open(_t/downfile,"w",encoding="utf-8"))
+        json.dump({"approved_by_user":True}, io.open(_t/ckfile,"w",encoding="utf-8"))
+        _ok = fnc(_t)
+        print(("  ✅" if not _ok else "  ❌")+f" {label}：核准後續行應通過（防誤報）："+("通過" if not _ok else str(_ok)))
+        allok &= (not _ok)
+        shutil.rmtree(_t, ignore_errors=True)
+
     # ── 全文/摘要搜尋及嚴格離題篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
     tmp = Path(tempfile.mkdtemp())
     # (1) 反坍縮：uid 重複 → FAIL
