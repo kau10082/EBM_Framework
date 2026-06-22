@@ -30,6 +30,8 @@
 
 **附帶變更3（『全文及摘要皆無』必須真查過 Unpaywall，使用者糾正）**：使用者問「全文及摘要皆無的部分，是否有查過 unpaywall？」——查核發現本輪 Tier3 是手刻、只試了 EuropePMC PMC fullTextXML，**沒跑 Crossref 摘要／Unpaywall** 就把 23 筆標 `channels_exhausted=true`。用 repo 既有 `fulltext_exhaust.py`（PMC→Crossref 摘要→Unpaywall 全部 oa_locations）實跑後，**13/23 其實取得到內容**（多為 Crossref 摘要、部分 PMC 全文）→ 該桶誤判。修正：(1) 強化機器 gate `check_nocontent_bucket`——『全文及摘要皆無』且有 DOI 者，須帶 `unpaywall_checked=true`，否則 FAIL（不可只試 PMC 就宣稱三層皆失敗）；(2) SEARCH_SPEC.md line 31 加註此要求＋指明用 `fulltext_exhaust.py` 跑完整管道；(3) selftest 加 2 條回歸（有 DOI 無 unpaywall_checked→FAIL；查過→通過）。涉及檔：`gate_guard.py`、`selftest_guards.py`、`SEARCH_SPEC.md`（皆已在本輪範圍內）。run-local 的 ③ Tier3（待 ②b 核准後重跑）會改用 `fulltext_exhaust` 完整管道。
 
+**附帶變更4（把 Unpaywall 拆成獨立 Tier 4，使用者定版）**：使用者要求把「Tier 3 後仍『摘要及全文皆無』者」明確升級到**獨立 Tier 4＝用 Unpaywall 查 OA 全文並判離題**，避免 Unpaywall 被埋在 Tier 3 內部而被略過（正是附帶變更3 的 bug 成因）。修正：(1) SEARCH_SPEC.md v0.22 分層升級段由 3 層改 4 層——Tier 3＝Crossref 摘要＋PMC fullTextXML；**Tier 4＝Unpaywall 全部 oa_locations 探查**；『全文及摘要皆無』只能在 Tier 4 也失敗後定案（標 unpaywall_checked=true、tier=4）；『離題』可在 Tier 3／Tier 4 定案。(2) `check_nocontent_bucket` docstring/訊息改述為「Tier 4 未跑＝FAIL」（機器訊號仍是 DOI 者須 unpaywall_checked=true，與附帶變更3 同一檢查，語意對齊 Tier 4）。(3) run-local tier3.py 對走過 Unpaywall 的記錄標 tier=4。selftest 仍「✅ 全部守門有效」。涉及檔：`SEARCH_SPEC.md`、`gate_guard.py`（皆已在本輪範圍內）。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）

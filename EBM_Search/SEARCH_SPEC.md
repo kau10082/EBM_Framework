@@ -26,9 +26,10 @@ description: |
 > - **分層升級（命中即停，但只有『切題』可早停）：**
 >   1. **Tier 1（摘要）**：以既有摘要嚴格判 P∧I∧C。**切題→定案**；不切題或無法判定→Tier 2。
 >   2. **Tier 2（CT.gov 登錄欄位 Condition+InterventionName／AI 合成摘要 Consensus·OE）**：判。**切題→定案**；仍不切題或仍無法判定→Tier 3。
->   3. **Tier 3（強制實取全文：`fulltext_exhaust.py --force`，Crossref 摘要欄→PMC fullTextXML→Unpaywall OA 下載解析）**：重判。切題→切題；**判得出且有內容→離題**；三層皆取不到可判內容（無摘要、非登錄/AI、全文實取失敗）→**全文及摘要皆無**。
-> - **鐵律：『離題』只能在 Tier 3（實取全文）後定案**——只有『切題』可在 Tier 1/2 早停；暫判離題或無法判定者一律升到下一層，拼到全文才可判離題（高 recall，避免薄摘要誤殺）。
-> - **守門（gate_guard）對應**：`check_screen_partition`（單一產物三桶分割閉合＋反坍縮＋切題/離題須有內容證明）、`check_excl_requires_fulltext`（離題須 tier==3/fulltext_parse_attempted）、`check_nocontent_bucket`（全文及摘要皆無須 fulltext_parse_attempted∧channels_exhausted∧無內容；**且有 DOI 者須 `unpaywall_checked=true`**——2026-06 使用者糾正：曾把 13/23『全文及摘要皆無』誤判，實際只試了 PMC、漏跑 Crossref 摘要／Unpaywall，那些其實取得到內容。故宣稱『三層皆失敗』前必須跑完整管道 `fulltext_exhaust.py`（PMC fullTextXML→Crossref 摘要→Unpaywall 全部 oa_locations），不可手刻只試 PMC 就 punt）。**舊守門 stage1_check／awaiting_channels_check／awaiting_stage_check／build_stage1_corpus 已移除。**
+>   3. **Tier 3（實取全文：Crossref 摘要欄→PMC fullTextXML）**：重判。切題→切題；**判得出且有內容→離題**；Tier 3 仍取不到可判內容→**強制升 Tier 4（不得在此逕判『皆無』）**。
+>   4. **Tier 4（Unpaywall OA 探查：`fulltext_exhaust.py` 跑 Unpaywall 全部 `oa_locations` 下載解析）**：對 Tier 3 後仍『摘要及全文皆無』者，**一律先用 Unpaywall 查是否有 OA 全文**。取得可判內容→判 切題／離題；**唯 Unpaywall 後仍取不到任何可判內容（無摘要、非登錄/AI、PMC＋Unpaywall 實取皆失敗）→才定案『全文及摘要皆無』**（並標 `unpaywall_checked=true`、`tier=4`）。
+> - **鐵律：『離題』只能在實取全文後（Tier 3／Tier 4）定案**——只有『切題』可在 Tier 1/2 早停；暫判離題或無法判定者一律升到下一層，拼到全文才可判離題（高 recall，避免薄摘要誤殺）。**『全文及摘要皆無』只能在 Tier 4（Unpaywall 也查過）之後定案**（2026-06 使用者定版：明確把 Unpaywall 拆成獨立 Tier 4，避免它被埋進 Tier 3 內部而被略過）。
+> - **守門（gate_guard）對應**：`check_screen_partition`（單一產物三桶分割閉合＋反坍縮＋切題/離題須有內容證明）、`check_excl_requires_fulltext`（離題須 tier≥3/fulltext_parse_attempted）、`check_nocontent_bucket`（全文及摘要皆無須 fulltext_parse_attempted∧channels_exhausted∧無內容；**且有 DOI 者須 `unpaywall_checked=true`＝確有跑過 Tier 4**——2026-06 使用者糾正：曾把 13/23『全文及摘要皆無』誤判，實際只試了 PMC、漏跑 Crossref 摘要／Unpaywall，那些其實取得到內容。故宣稱『皆無』前必須跑完 Tier 4 `fulltext_exhaust.py`（PMC fullTextXML→Crossref 摘要→Unpaywall 全部 oa_locations），不可手刻只試 PMC 就 punt）。**舊守門 stage1_check／awaiting_channels_check／awaiting_stage_check／build_stage1_corpus 已移除。**
 > - 下文（停頓點 ②c/③、Stage A/B、待評估各 鐵律）為 v0.21 歷史脈絡，**語意已被本區塊取代**；保留供理解演進，但執行以本區塊與守門為準。
 >
 > ## ★ 執行規範(v0.12,務必遵守)

@@ -110,9 +110,11 @@ def check_excl_requires_fulltext(cache):
     return []
 
 def check_nocontent_bucket(cache):
-    """全文/摘要搜尋及嚴格離題篩選：『全文及摘要皆無』桶必須真的三層皆取不到可判內容——每筆須帶
+    """全文/摘要搜尋及嚴格離題篩選：『全文及摘要皆無』桶必須真的『Tier 3＋Tier 4』皆取不到可判內容——每筆須帶
     fulltext_parse_attempted=true ∧ channels_exhausted=true，且無 abstract/全文摘錄、非登錄(registry)、
-    非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。取代舊『待評估雙桶』。"""
+    非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。
+    **且有 DOI 者須帶 unpaywall_checked=true（＝確有跑過 Tier 4 的 Unpaywall OA 探查）**：
+    Unpaywall 是獨立 Tier 4，『皆無』只能在 Tier 4 也查過後定案，不可只試 PMC（Tier 3）就 punt。取代舊『待評估雙桶』。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
@@ -138,9 +140,9 @@ def check_nocontent_bucket(cache):
         out.append(f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
                    f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}")
     if no_unpaywall:
-        out.append(f"③ 有 {len(no_unpaywall)} 筆判『全文及摘要皆無』且有 DOI 卻無 unpaywall_checked："
-                   f"channels_exhausted 須真的查過 Unpaywall（PMC→Crossref 摘要→Unpaywall 全部 oa_locations），"
-                   f"不可只試 PMC 就宣稱三層皆失敗（用 fulltext_exhaust.py 跑完整管道再判）：{no_unpaywall[:5]}")
+        out.append(f"③ 有 {len(no_unpaywall)} 筆判『全文及摘要皆無』且有 DOI 卻無 unpaywall_checked（未跑 Tier 4）："
+                   f"『皆無』只能在 Tier 4（Unpaywall 全部 oa_locations 探查）也失敗後定案，"
+                   f"不可只試 PMC（Tier 3）就 punt（用 fulltext_exhaust.py 跑完 Tier 4 再判）：{no_unpaywall[:5]}")
     return out
 
 def check_screen_partition(cache):
