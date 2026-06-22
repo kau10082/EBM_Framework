@@ -36,6 +36,8 @@
 
 **附帶變更6（④/⑤a/⑤b 三停頓點機器化＋PDF 不得以環境為由略過，使用者定版）**：使用者要求 ④引文追蹤、⑤a交叉驗證/撤稿、⑤b決定納入單位 三關各須「停下報告、核准後續」，不可一個「繼續」跑到底；並糾正「不得裝作環境無法產 PDF」。修正：(1) 新增 3 個機器 gate（與 `check_strategy_approved`、`check_2b_stop` 對稱，併入 `gate_guard`）：`check_citation_stop`（g6_verified 已產出但 g4_checkpoint 未核准→FAIL）、`check_xref_stop`（g7_units 已產出但 g6_checkpoint 未核准→FAIL）、`check_units_stop`（_search_report 已產出但 g7_checkpoint 未核准→FAIL）。(2) selftest 加 9 條回歸（3 gate × 搶跑FAIL/上游未完成不誤擋/核准後通過）。(3) SEARCH_SPEC：④/⑤ 段加註三停頓點機器看守；⑥ 段加「PDF 一律可產、不得以環境為由略過」（build_search_pdf 已有 wqy-zenhei/Noto fallback，Linux 實測可產；缺 reportlab 就 pip install）。本 run 已回填 g4/g6/g7_checkpoint=approved（結果先前已於對話呈現，使用者檢視後要求補 gate，非略過審視）。涉及檔：`gate_guard.py`、`selftest_guards.py`、`SEARCH_SPEC.md`。
 
+**附帶變更7（PDF：SR/MA 只列舉納入分析者＋標總篇數，使用者指示）**：PDF 段3 PRISMA「納入分析之文獻」原把全部 SR/MA 逐篇列出。改為——SR/MA 標『納入分析 N 篇（共找到 M 篇 SR/MA，僅列納入分析者）』後，**只列舉一起進 analysis 的 SR/MA**，其餘只計數。`build_search_pdf.py` 改為資料驅動：報告 `srma_in_analysis`(PMID 清單，⑤b/Phase 0 決定) 提供時只列該子集並標總數；未提供則向後相容＝全列。`inc_n`(納入分析文獻 Included)＝核心 RCT＋納入分析 SR/MA。本 run：53 篇 SR/MA → 以標題框架（triple vs dual/LABA-LAMA/mortality/exacerbation，排除 asthma/三合一互比/ICS劑量等）啟發式選 21 篇納入分析（rapid 首選，精確集 Phase 0 定稿）。涉及檔：`build_search_pdf.py`。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
