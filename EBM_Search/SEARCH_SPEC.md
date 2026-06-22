@@ -28,7 +28,7 @@ description: |
 >   2. **Tier 2（CT.gov 登錄欄位 Condition+InterventionName／AI 合成摘要 Consensus·OE）**：判。**切題→定案**；仍不切題或仍無法判定→Tier 3。
 >   3. **Tier 3（強制實取全文：`fulltext_exhaust.py --force`，Crossref 摘要欄→PMC fullTextXML→Unpaywall OA 下載解析）**：重判。切題→切題；**判得出且有內容→離題**；三層皆取不到可判內容（無摘要、非登錄/AI、全文實取失敗）→**全文及摘要皆無**。
 > - **鐵律：『離題』只能在 Tier 3（實取全文）後定案**——只有『切題』可在 Tier 1/2 早停；暫判離題或無法判定者一律升到下一層，拼到全文才可判離題（高 recall，避免薄摘要誤殺）。
-> - **守門（gate_guard）對應**：`check_screen_partition`（單一產物三桶分割閉合＋反坍縮＋切題/離題須有內容證明）、`check_excl_requires_fulltext`（離題須 tier==3/fulltext_parse_attempted）、`check_nocontent_bucket`（全文及摘要皆無須 fulltext_parse_attempted∧channels_exhausted∧無內容）。**舊守門 stage1_check／awaiting_channels_check／awaiting_stage_check／build_stage1_corpus 已移除。**
+> - **守門（gate_guard）對應**：`check_screen_partition`（單一產物三桶分割閉合＋反坍縮＋切題/離題須有內容證明）、`check_excl_requires_fulltext`（離題須 tier==3/fulltext_parse_attempted）、`check_nocontent_bucket`（全文及摘要皆無須 fulltext_parse_attempted∧channels_exhausted∧無內容；**且有 DOI 者須 `unpaywall_checked=true`**——2026-06 使用者糾正：曾把 13/23『全文及摘要皆無』誤判，實際只試了 PMC、漏跑 Crossref 摘要／Unpaywall，那些其實取得到內容。故宣稱『三層皆失敗』前必須跑完整管道 `fulltext_exhaust.py`（PMC fullTextXML→Crossref 摘要→Unpaywall 全部 oa_locations），不可手刻只試 PMC 就 punt）。**舊守門 stage1_check／awaiting_channels_check／awaiting_stage_check／build_stage1_corpus 已移除。**
 > - 下文（停頓點 ②c/③、Stage A/B、待評估各 鐵律）為 v0.21 歷史脈絡，**語意已被本區塊取代**；保留供理解演進，但執行以本區塊與守門為準。
 >
 > ## ★ 執行規範(v0.12,務必遵守)

@@ -117,6 +117,7 @@ def check_nocontent_bucket(cache):
     if g3 is None:
         return None
     bad = []
+    no_unpaywall = []
     for r in g3:
         if (r.get("verdict") or "") != "全文及摘要皆無":
             continue
@@ -126,10 +127,21 @@ def check_nocontent_bucket(cache):
         proven = r.get("fulltext_parse_attempted") and r.get("channels_exhausted")
         if has_content or not proven:
             bad.append((r.get("title") or r.get("uid") or "?")[:50])
+            continue
+        # 『channels_exhausted』必須真的查過 Unpaywall——有 DOI 卻無 unpaywall_checked＝
+        # 只試了 PMC 就宣稱『三層皆失敗』（2026-06 使用者糾正：13/23『全文及摘要皆無』其實
+        # 有 Crossref 摘要/OA 全文，因漏跑 Unpaywall/Crossref 而誤判）。
+        if r.get("doi") and not r.get("unpaywall_checked"):
+            no_unpaywall.append((r.get("title") or r.get("doi") or r.get("uid") or "?")[:50])
+    out = []
     if bad:
-        return [f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
-                f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}"]
-    return []
+        out.append(f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
+                   f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}")
+    if no_unpaywall:
+        out.append(f"③ 有 {len(no_unpaywall)} 筆判『全文及摘要皆無』且有 DOI 卻無 unpaywall_checked："
+                   f"channels_exhausted 須真的查過 Unpaywall（PMC→Crossref 摘要→Unpaywall 全部 oa_locations），"
+                   f"不可只試 PMC 就宣稱三層皆失敗（用 fulltext_exhaust.py 跑完整管道再判）：{no_unpaywall[:5]}")
+    return out
 
 def check_screen_partition(cache):
     """全文/摘要搜尋及嚴格離題篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：

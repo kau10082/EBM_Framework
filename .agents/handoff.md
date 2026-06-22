@@ -28,6 +28,8 @@
 - (1) 我把 SEARCH_SPEC 既有「additive、不損 recall」定版**改成**「DB 腿主檢不進語料庫」。取捨：真實世界觀察性研究（非 RCT、非 SR）較不易進池——這是依使用者明確決策做的，已在對話告知並提供「要的話把 Consensus 主檢觀察性加回背景池」。請確認此 spec 改寫無自相矛盾、且與 leg_exhaust（主檢仍須取盡）不衝突。
 - (2) gate 啟用條件用「union 是否存在」區分『SR 已啟用但語料庫未組（暫不適用）』vs『已組須稽核』，請看這個 None/[] 邏輯是否會漏擋。
 
+**附帶變更3（『全文及摘要皆無』必須真查過 Unpaywall，使用者糾正）**：使用者問「全文及摘要皆無的部分，是否有查過 unpaywall？」——查核發現本輪 Tier3 是手刻、只試了 EuropePMC PMC fullTextXML，**沒跑 Crossref 摘要／Unpaywall** 就把 23 筆標 `channels_exhausted=true`。用 repo 既有 `fulltext_exhaust.py`（PMC→Crossref 摘要→Unpaywall 全部 oa_locations）實跑後，**13/23 其實取得到內容**（多為 Crossref 摘要、部分 PMC 全文）→ 該桶誤判。修正：(1) 強化機器 gate `check_nocontent_bucket`——『全文及摘要皆無』且有 DOI 者，須帶 `unpaywall_checked=true`，否則 FAIL（不可只試 PMC 就宣稱三層皆失敗）；(2) SEARCH_SPEC.md line 31 加註此要求＋指明用 `fulltext_exhaust.py` 跑完整管道；(3) selftest 加 2 條回歸（有 DOI 無 unpaywall_checked→FAIL；查過→通過）。涉及檔：`gate_guard.py`、`selftest_guards.py`、`SEARCH_SPEC.md`（皆已在本輪範圍內）。run-local 的 ③ Tier3（待 ②b 核准後重跑）會改用 `fulltext_exhaust` 完整管道。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
