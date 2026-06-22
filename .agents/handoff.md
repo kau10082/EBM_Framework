@@ -17,4 +17,10 @@
    - 與舊 spec 文字的張力：SEARCH_SPEC §99「DB 腿的無過濾主檢若有實跑，只作為廣蒐取盡/稽核紀錄寫進 manifest」→ 使用者澄清語意為「**根本不要跑主檢**」（取代 audit-retain 寫法）。建議下次正式審查時一併更新 SEARCH_SPEC 措辭與 leg_exhaust_check 的 ≥4 計數假設（≥4 應以實際可跑之 SR/RCT/登錄腿為準，不靠主檢墊數）。
    - 本輪修改：g0_strategy.json 與 g1_legs_manifest.json **移除 Consensus-main、EuropePMC-main、OpenAlex-main**；不再 fetch/exhaust EP-main；語料庫腿＝PubMed(RCT)＋Consensus-SR＋OpenAlex-SR＋EuropePMC-SR＋ClinicalTrials.gov。
 
+✅ 已修：**③ 分層篩升級『鐵律』——只有切題可早停，其餘一律逐層往下推，不得偷懶**（本輪糾正）。
+   - 使用者定版鐵律：**Tier1 只要不是切題 → 全部進 Tier2；Tier2 只要不是切題 → 全部進 Tier3；Tier3 只要找不到全文 → 全部進 Tier4**。離題／皆無只能在記錄實際抵達的最底層定案。
+   - 問題（舊碼）：(1) 登錄(CT)/AI(Consensus) 記錄在 **Tier2 就逕判離題**、沒被推進 Tier3/Tier4；(2) 只有「帶摘要的 PM/EP」被升 Tier3，純標題等其他非切題未一律逐層推進。＝偷懶早停。
+   - 本輪修改（screen_3_run.py 重寫）：每筆非切題一律 Tier1→2→3→4 逐層累積內容、逐層判（命中切題才停）；登錄/AI 非切題也必須過 Tier3（全文嘗試）＋Tier4（Unpaywall）才可判離題；Tier3 找不到全文者**全部**進 Tier4 跑 Unpaywall。`tier` 欄記錄該筆實際抵達的最底層。
+   - 註：gate `check_excl_requires_fulltext` 對登錄/AI 有「免 Tier3」例外（因無全文可取）；本鐵律比 gate 更嚴（仍逐層推進），故 gate 必過、且更誠實。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
