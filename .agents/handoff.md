@@ -87,6 +87,6 @@
 ✅ 已修：**PRISMA『納入分析』明細：標籤不夾方法學附註、研究改用『作者+年份』非 PMID**（使用者本輪糾正）。
    - 問題：included_for_analysis 標籤夾『(grade=full；Phase 0 以 AMSTAR2/CCA 定非重疊基底)』方法學括註、SR/MA 明細用 PMID 清單。使用者要：附註拿掉、SR/MA 改作者+年份。
    - 本輪修改：_search_report.json included_for_analysis 標籤改乾淨類別名（Overview 基底 SR/MA／佐證原始 RCT）、SR/MA detail 改『第一作者 年份』（Hu 2026；Calderón-Montero 2025…，efetch 取）；移除 mode/note 等不顯示欄。
-   - **已持久化（committed）**：`SEARCH_SPEC.md` ⑥ 新增『★ PRISMA 納入分析明細列法』鐵律（標籤不夾方法學附註；研究以作者+年份非 PMID）。已渲染頁面實檢、report_check／gate_guard 全綠。
+   - **已持久化（committed code＋spec）**：(1) `SEARCH_SPEC.md` ⑥『★ PRISMA 納入分析明細列法』鐵律；(2) `scripts/build_search_pdf.py`：render included_for_analysis 時以 regex **剝除標籤的方法學附註括註**（grade/Phase 0/AMSTAR/CCA/ROBIS/重疊…），只留乾淨類別名；(3) `scripts/report_check.py`：**新增守門**——included_for_analysis 標籤夾方法學附註、或明細用『PMID …』＝FAIL（強制研究以作者+年份標示）。已驗：乾淨報告通過、違規輸入被攔。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

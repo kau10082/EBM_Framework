@@ -11,7 +11,7 @@ build_search_pdf.py — EBM_Search 規範版 PDF 產生器（v0.22 簡化版：5
 全部資料驅動（換主題不改碼）。字型 fallback：msjh.ttc → wqy-zenhei → Noto → Helvetica。
 依賴：reportlab。用法：python build_search_pdf.py --in _search_report.json --out <報告.pdf> [--font ..]
 """
-import sys, os, json, argparse
+import sys, os, re, json, argparse
 from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
@@ -104,8 +104,12 @@ def build(infile, out, font=None):
                        "change":"與交接包 corpus_seed(verdict=included) 一致；明細如下"})
         fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
         for b in iaf.get("breakdown",[]):
+            # ★ 標籤不夾方法學附註（2026-06 使用者定版）：render 時剝除『(grade…/Phase 0…/AMSTAR…/CCA…/ROBIS…/重疊…)』括註，
+            #   只留乾淨類別名（防附註溜進 PRISMA 明細欄）。研究明細以作者+年份(非 PMID)由產生端提供（見 report_check 守門）。
+            lbl = re.sub(r"\s*[（(][^）)]*(grade|grade_track|phase\s*0|amstar|ccaｓ?|cca|robis|重疊|定非重疊基底|池化)[^）)]*[）)]",
+                         "", str(b.get("label","")), flags=re.I).strip()
             val = f"{b.get('n')}（{b.get('detail')}）" if b.get("detail") else str(b.get("n"))
-            fr.append(["　└ "+str(b.get("label","")), val])
+            fr.append(["　└ "+lbl, val])
     else:
         core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
         core_n=sum(len(g.get("reports",[])) for g in core_groups)
