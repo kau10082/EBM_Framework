@@ -19,6 +19,10 @@ def _assert_fires(name, fails):
     print(("  ✅" if ok else "  ❌") + f" {name}：" + ("會 FAIL（守門有效）" if ok else "未 FAIL（守門失效！）"))
     return ok
 
+def _assert_true(name, cond):
+    print(("  ✅" if cond else "  ❌") + f" {name}：" + ("通過" if cond else "FAIL"))
+    return bool(cond)
+
 def main():
     allok = True
     print("守門自我驗證（餵壞資料，應全部 FAIL）：")
@@ -283,10 +287,33 @@ def main():
         awaiting_channels_check.check([{"paper_id":"A2","doi":"10.1/x","reason":"兩者皆無","abstract_checked":True}]))
     _acok = awaiting_channels_check.check([
         {"paper_id":"A3","pmid":"9","reason":"待人工補全文","abstract_checked":True,
-         "online_fulltext_checked":True,"unpaywall_checked":True,"channels_exhausted":True},
+         "online_fulltext_checked":True,"unpaywall_checked":True,"channels_exhausted":True,
+         "fulltext_parse_attempted":True},
         {"paper_id":"A4","reason":"兩者皆無","abstract_checked":True}])
     print(("  ✅" if not _acok else "  ❌") + " 待評估三管道：三管道全查盡應通過（防誤報）：" + ("通過" if not _acok else str(_acok)))
     allok &= (not _acok)
+    # 新增回歸：完整實抓解析未做（缺 fulltext_parse_attempted）即使三管道旗標齊也須 FAIL
+    allok &= _assert_fires("待評估未完整實抓解析(缺 fulltext_parse_attempted)",
+        awaiting_channels_check.check([{"paper_id":"A5","pmid":"9","reason":"待人工補全文",
+            "abstract_checked":True,"online_fulltext_checked":True,"unpaywall_checked":True,
+            "channels_exhausted":True}]))
+    # 新增回歸：帶 doi 的待評估缺 oa_urls_tried（未證明真的下載解析過 OA）須 FAIL
+    allok &= _assert_fires("待評估(有doi)缺 oa_urls_tried(未證明實抓OA)",
+        awaiting_channels_check.check([{"paper_id":"A6","doi":"10.1/z","reason":"待人工補全文",
+            "abstract_checked":True,"online_fulltext_checked":True,"unpaywall_checked":True,
+            "channels_exhausted":True,"fulltext_parse_attempted":True}]))
+    # fulltext_exhaust 防呆（🔴 審查）：OA 下載的 cookie/paywall 純文字(無科學特徵)不算真內容；真內容應通過
+    import fulltext_exhaust as _fx
+    _wall = ("We use cookies to improve your experience. By continuing you agree to our privacy "
+             "policy and terms of service. Please sign in or subscribe to access this article. "
+             "Copyright 2024 the publisher. All rights reserved. ") * 3
+    allok &= _assert_true("fulltext_exhaust 防呆：cookie/paywall 牆頁不算真內容",
+        not _fx._looks_like_content(_wall, 250))
+    _real = ("Background: patients with COPD. Methods: randomized double-blind trial of triple therapy "
+             "versus LABA/LAMA dual bronchodilator. Results: exacerbation rate ratio 0.75 (95% CI "
+             "0.70-0.81), p<0.001. Conclusions: efficacy demonstrated with higher pneumonia risk.")
+    allok &= _assert_true("fulltext_exhaust 防呆：真內容(含方法學特徵)應通過",
+        _fx._looks_like_content(_real, 120))
 
     # 待評估關責：③(g3) 出現待評估 → FAIL（待評估只能在 ②c 產生）
     import awaiting_stage_check
