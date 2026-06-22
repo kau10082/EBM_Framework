@@ -135,7 +135,9 @@ def build(infile, out, font=None):
             fr.append([f"　　• {short}", f"PMID {pmid}"])
 
     if len(fr)>1:
-        t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
+        # ★ 以 Paragraph(cell) 包每格→『數量/說明』長字串(納入分析明細)自動換行，不溢出與下列重疊。
+        fr_wrapped=[[cell(c, 8) for c in row] for row in fr]
+        t=Table(fr_wrapped,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
     S.append(P("二分閉合："+data.get("funnel_closure",""),9,col="#333",sp=4))
     S.append(Spacer(1,3*mm))
 

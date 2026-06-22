@@ -77,4 +77,9 @@
    - 結果：corpus_seed＝**52**（6 基底 SR/MA＋46 佐證 RCT），background 0；PRISMA「納入分析」52＝corpus_seed 52（斷言通過）；report_check／gate_guard 全綠。
    - 修正先前錯誤：上一版把 105 SR/MA 全標 grade_track=full 進池＝double-counting 偏誤，已改為 shortlist 制。
 
+✅ 已修：**PDF PRISMA 漏斗表『納入分析』明細欄過長、與下方文獻清單重疊**（使用者本輪糾正；已改 `build_search_pdf.py`）。
+   - 問題：funnel 表 `fr` 各格用『純字串』餵 reportlab Table→長字串（納入分析的基底 SR/MA＋RCT 明細）不換行、溢出與下一段（段4 最終納入清單）重疊。
+   - 本輪修改 `build_search_pdf.py`：funnel 表改以 `cell()`(Paragraph, wordWrap=CJK) 包每格→長明細自動換行、不溢出；並把 included_for_analysis 的 label/detail 收斂為精簡寫法。
+   - 已以 PyMuPDF 渲染頁面實檢：納入分析 52（基底 SR/MA 6＋佐證 RCT 46）明細換行正常、與『最終納入證據清單』表清楚分隔，無重疊。report_check／gate_guard 全綠。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
