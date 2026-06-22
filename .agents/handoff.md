@@ -65,4 +65,16 @@
    - 結果：核心 46（43 樞紐＋3 ICS 退階：WISDOM×2、SUNSET）｜灰色待覆核 0｜未辨識 0；corpus_seed=151（46 核心＋105 SR/MA，全 included/full），background 444 不交接；PRISMA included 151＝corpus_seed 151（斷言通過）；gate_guard 全綠。
    - 後果說明（安全傾向）：核心改『正向確認制』後，極少數『非樞紐、CT.gov 無法可靠確認對照臂』的真三合一-vs-雙支擴 RCT（如 BGF 影像子研究 34210340）會落背景而非核心；最壞後果＝下游少一兩篇支持性子研究，pivotal 主證據(IMPACT/ETHOS/KRONOS/TRIBUTE)＋105 SR/MA 不受影響。寧可如此，也不要灰色地帶或假陽核心。
 
+✅ 已修：**SR/MA 不可全納入分析（避免 double-counting）；依 Cochrane 方法學分模式處理**（使用者本輪定版方法學）。
+   - 鐵律（Cochrane Handbook Ch.4／Ch.V）：撈到的 SR/MA **絕不全進最終數據池**。
+     * 標準 SR（分析單位＝原始 RCT）：SR/MA 只當『引文追蹤種子』＋『討論區對照』，不進森林圖/GRADE 池。
+     * Overview/Rapid Overview（分析單位＝SR/MA）：仍須以 §V.3.2.1 四步挑選：①PICO 契合 ②檢索新鮮度 ③方法學品質(AMSTAR2/ROBIS) ④原始研究重疊率(CCA/證據矩陣)；只取最新+最佳+不重疊的 1～幾篇為基底。
+   - 本案使用者選 **Rapid Overview**。處置（改 run 層 build_seed.py，非框架碼）：
+     * **基底 SR/MA 候選 shortlist（6 篇，grade_track=full）**＝可從 metadata 判的條件挑出（檢索新鮮度≥2024、NMA/全族群、PICO 直接 triple-vs-dual、來源）：42237170/41998645(2026 NMA 綜合)、41425996/40139054(2025 NMA 死亡率/CV)、39649253/38877687(2024 NMA/比較效益)。**最終非重疊基底由 Phase 0 以 AMSTAR2/ROBIS＋CCA＋檢索日定稿**（本層只給候選）。
+     * **非基底 SR/MA（99 篇）→ 不進池**（verdict=background, grade_track=none）：用途＝引文追蹤(已於④做)＋討論對照。
+     * **核心 RCT（46）→ 佐證**（grade_track=light_summary, role=pivotal_efficacy）：驗證基底 SR/MA 數據＋關鍵試驗 RoB，不自行池化。
+     * 方法學示例：唯一 Cochrane review 40178181 為『dual vs 單方』＝PICO 不符，**故依步驟①排除**（不因是 Cochrane 就收）。
+   - 結果：corpus_seed＝**52**（6 基底 SR/MA＋46 佐證 RCT），background 0；PRISMA「納入分析」52＝corpus_seed 52（斷言通過）；report_check／gate_guard 全綠。
+   - 修正先前錯誤：上一版把 105 SR/MA 全標 grade_track=full 進池＝double-counting 偏誤，已改為 shortlist 制。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
