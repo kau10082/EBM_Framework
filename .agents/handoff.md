@@ -43,4 +43,10 @@
    - 本輪修改 `build_report_data.py`：背景迴圈對無 PMID 者改以 `DOI:<doi>` 當識別欄（標 preprint）、全文狀態記『需補』、檢核沿用 verdict，不再留空。
    - 結果：三表產出（核心 43／背景 SR-MA+指引 118／進行中 5），report_check 5 段全過、Phase1 PDF 產出且登記 pdf_path、gate_guard 全綠。
 
+✅ 已修：**PRISMA 最後一步『納入分析文獻 Included』須與交接包 corpus_seed 內容/細項一致**（使用者本輪糾正；已改 `build_search_pdf.py`）。
+   - 問題：build_search_pdf 自行以『核心 RCT＋srma_in_analysis』即時重算 Included，與 corpus_seed(verdict=included) 兩套來源各算各的 → 會漂移。本案實測：`srma_in_analysis=[]` 使 PDF Included＝43(核心)＋0，但 corpus_seed included＝168（43 pivotal＋105 SR/MA＋20 支持性）→ 不一致。
+   - 本輪修改 `build_search_pdf.py`：Included 步驟優先採用報告的 `included_for_analysis`（total＋breakdown），**該欄由產生 corpus_seed 的同一 ⑤b verdict=included 分類確定性計算**（同源→不可能漂移）；未提供才回退舊即時重算（向後相容）。
+   - 落地：`_search_report.json` 新增 `included_for_analysis`（total 168／核心RCT43[IMPACT22/ETHOS9/KRONOS9/ETHOS-ext2/TRIBUTE1]／SR/MA 105／支持性RCT 20），prisma_flow.included＝168，與 `_corpus_seed.json` verdict=included(168) 完全一致；report_check／gate_guard 全綠。
+   - 建議正式審查：可在 report_check 增一條硬 gate『_search_report.included_for_analysis.total == _corpus_seed verdict=included 數』把此一致性釘成機器檢查（本輪以同源計算＋斷言保證，尚未落為常駐 gate）。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）

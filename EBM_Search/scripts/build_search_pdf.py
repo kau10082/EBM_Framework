@@ -94,36 +94,45 @@ def build(infile, out, font=None):
     #   **不再把背景/進行中/他族群/綜述等非納入類別列進 Included 下**（那些是分流統計、非納入分析）。
     #   數量與明細皆由產生器確定性計算（資料驅動，換主題自適用），不靠手編 included_breakdown。
     funnel=[s for s in (data.get("funnel") or []) if "納入分析" not in str(s.get("step",""))]
-    core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
-    core_n=sum(len(g.get("reports",[])) for g in core_groups)
-    SRMA={"Meta-Analysis","Systematic Review","meta-analysis","systematic review",
-          "SR/MA","統合分析","系統性回顧","Meta-analysis"}
-    srma_rows=[r for r in (data.get("background") or []) if len(r)>3 and str(r[3]).strip() in SRMA]
-    srma_total=len(srma_rows)
-    # ★ 2026-06 使用者糾正：SR/MA 不必全部列舉——只列『一起進去 analysis 的 SR/MA』，
-    #   其餘只標總篇數。由報告 `srma_in_analysis`(PMID 清單，⑤b/Phase 0 決定) 驅動；
-    #   未提供時向後相容＝全列（舊行為）。
-    inset = data.get("srma_in_analysis")
-    if inset is not None:
-        inset = {str(x) for x in inset}
-        srma_analysis = [r for r in srma_rows if len(r)>1 and str(r[1]) in inset]
+    # ★ 2026-06 使用者糾正：PRISMA 最後一步『納入分析文獻 Included』的數量與細項，**必須與交接包
+    #   corpus_seed(verdict=included) 完全一致**。故優先採用報告提供的 `included_for_analysis`
+    #   (由產生 corpus_seed 的同一分類確定性計算)——同源→不可能漂移；未提供才回退舊即時重算(向後相容)。
+    iaf = data.get("included_for_analysis")
+    if iaf and iaf.get("total") is not None:
+        inc_n = iaf["total"]
+        funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
+                       "change":"與交接包 corpus_seed(verdict=included) 一致；明細如下"})
+        fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
+        for b in iaf.get("breakdown",[]):
+            val = f"{b.get('n')}（{b.get('detail')}）" if b.get("detail") else str(b.get("n"))
+            fr.append(["　└ "+str(b.get("label","")), val])
     else:
-        srma_analysis = srma_rows
-    srma_n=len(srma_analysis)
-    inc_n=core_n+srma_n   # 『納入分析』只計核心 RCT＋納入分析的 SR/MA
-    funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
-                   "change":"交接 corpus_seed 進 EBM 評讀；僅計實際納入分析者，明細如下"})
-    fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
-    # Included 明細：核心 RCT 逐 Study 名＋報告數（細目見段4）；SR/MA 標『納入分析 N 篇／共找到 M 篇』後只列納入分析者。
-    core_detail="、".join(f"{g.get('study','')} {len(g.get('reports',[]))}" for g in core_groups)
-    fr.append(["　└ 核心 RCT＋子研究", f"{core_n}（{core_detail}）" if core_detail else str(core_n)])
-    srma_label = (f"納入分析 {srma_n} 篇（共找到 {srma_total} 篇 SR/MA，僅列納入分析者）"
-                  if inset is not None else str(srma_total))
-    fr.append(["　└ SR/MA", srma_label])
-    for r in srma_analysis:
-        short=str(r[0])[:44]+("…" if len(str(r[0]))>44 else "")
-        pmid=str(r[1]) if len(r)>1 and str(r[1]).strip() else "—"
-        fr.append([f"　　• {short}", f"PMID {pmid}"])
+        core_groups=[g for g in data.get("included_studies",[]) if "核心" in str(g.get("type",""))]
+        core_n=sum(len(g.get("reports",[])) for g in core_groups)
+        SRMA={"Meta-Analysis","Systematic Review","meta-analysis","systematic review",
+              "SR/MA","統合分析","系統性回顧","Meta-analysis"}
+        srma_rows=[r for r in (data.get("background") or []) if len(r)>3 and str(r[3]).strip() in SRMA]
+        srma_total=len(srma_rows)
+        inset = data.get("srma_in_analysis")
+        if inset is not None:
+            inset = {str(x) for x in inset}
+            srma_analysis = [r for r in srma_rows if len(r)>1 and str(r[1]) in inset]
+        else:
+            srma_analysis = srma_rows
+        srma_n=len(srma_analysis)
+        inc_n=core_n+srma_n
+        funnel.append({"step":"納入分析文獻 Included","remain":str(inc_n),
+                       "change":"交接 corpus_seed 進 EBM 評讀；僅計實際納入分析者，明細如下"})
+        fr=[["階段","數量/說明"]]+[[s.get("step",""),str(s.get("remain",""))+(("｜"+s["change"]) if s.get("change") else "")] for s in funnel]
+        core_detail="、".join(f"{g.get('study','')} {len(g.get('reports',[]))}" for g in core_groups)
+        fr.append(["　└ 核心 RCT＋子研究", f"{core_n}（{core_detail}）" if core_detail else str(core_n)])
+        srma_label = (f"納入分析 {srma_n} 篇（共找到 {srma_total} 篇 SR/MA，僅列納入分析者）"
+                      if inset is not None else str(srma_total))
+        fr.append(["　└ SR/MA", srma_label])
+        for r in srma_analysis:
+            short=str(r[0])[:44]+("…" if len(str(r[0]))>44 else "")
+            pmid=str(r[1]) if len(r)>1 and str(r[1]).strip() else "—"
+            fr.append([f"　　• {short}", f"PMID {pmid}"])
 
     if len(fr)>1:
         t=Table(fr,colWidths=[78*mm,W-78*mm]); t.setStyle(tstyle()); S.append(t)
