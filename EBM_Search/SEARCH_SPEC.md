@@ -67,6 +67,12 @@ description: |
 >   > **(L3) 殘餘人工覆核**:rapid-review 定位,非樞紐『獨立核心 RCT』仍須逐筆覆核(本框架交 ebm-analysis Phase 0;個案核對結果屬 run 資料、不寫死進碼)。**因規則由 g0 軸＋權威表＋會議摘要偵測驅動,換主題自動適用;但 `PIVOTAL_LABALAMA_ARM` 為本題(COPD triple)curated,換題須以該題樞紐試驗對照臂事實重編。**
 >   > **(5) 對帳＋誠實殘餘**:Σ 各桶＝候選數;未連結 RCT 報告、未分型背景據實標待人工(rapid-review,人工覆核)。
 >   > 此流程因 triple-vs-dual COPD 案逐步校正而立(NCT 辨識 bug、寬鬆篩掃入他藥試驗、title-only 誤判等),已通用化;COPD 樞紐試驗 NCT/樣本數為選用 hint,缺亦不影響通用判定。
+>   > **★★ SR/MA 處置鐵律：撈到的 SR/MA『絕不全納入最終分析』(避免 double-counting)，依分析等級分模式(Cochrane Handbook Ch.4／Ch.V;2026-06 使用者定版)：**
+>   > **核心原則**：兩篇 SR/MA 內含的原始 RCT 大量重疊(同一批 IMPACT/ETHOS… 被一算再算)→ 直接把全部撈到的 SR/MA 都當『納入分析(grade_track=full)』池化＝**重複計算偏誤**，**嚴禁**。「提升 SR/MA 為主要綜合證據」≠「全部進池」。
+>   > **(模式 A) 標準 SR（分析單位＝原始 RCT，自跑森林圖/GRADE）**：SR/MA **不進數據池**，只當 ①引文追蹤種子(④已做)＋②討論區對照。corpus_seed 的『納入分析』＝核心原始 RCT；SR/MA 標 `verdict=background, grade_track=none`(交接僅供討論引用，非池化)。
+>   > **(模式 B) Overview/Rapid Overview（分析單位＝SR/MA）**：依 Cochrane Ch.V §V.3.2.1 **四步挑選**，**不可全收**：①PICO 契合度(整體族群者優先；只收輕症者排除) ②檢索新鮮度(同 PICO 取檢索截止日最新者；舊的排除) ③方法學品質(AMSTAR2／ROBIS；優先有註冊 protocol／評估發表偏誤者；如 Cochrane 出品) ④原始研究重疊率(畫證據矩陣、算 CCA；重疊高者只取最具代表性一篇之數據)。**只取最新＋最佳＋不重疊的『1～幾篇』為基底**(grade_track=full, role=meta_analysis)；其餘 SR/MA→`verdict=background, grade_track=none`(引文追蹤＋討論，不池化)；原始 RCT 退為**佐證**(role=pivotal_efficacy, grade_track=light_summary；驗證基底數據＋關鍵試驗 RoB，不自跑池化)。
+>   > **PICO 第①步示例(鐵律)**：縱使是 Cochrane review，**PICO 不符就排除**(本案 Cochrane 40178181＝『dual vs 單方』非 triple-vs-dual→排除)；不因『是 Cochrane』就收。
+>   > **檢索階段(⑤b/⑦)職責**：依『可從 metadata 判的條件(檢索新鮮度/NMA/PICO 直接/來源)』給**候選基底 shortlist**；**真正的 AMSTAR2/ROBIS 品質評分＋CCA 重疊定稿在下游 ebm-analysis Phase 0 讀全文才做**(檢索不越權做品質/重疊判定)。corpus_seed 與報告 PRISMA『納入分析』均**只列入池者**(模式 A＝核心 RCT；模式 B＝基底 SR/MA＋佐證 RCT)，非基底 SR/MA 與背景不進交接、不計入『納入分析』。**模式由使用者於收尾選定(預設詢問)。**
 >   > **★ Zotero 匯入範圍校正(鐵律,v0.20.1):** Zotero 匯入的**唯一相符範圍＝「表二納入＋表三背景」全匯**(即上句『恰等於表二+表三』)——只有它能保 Zotero≡報告。**`--dry-run→--commit` 是任何匯入都要走的執行步驟,不是一種『範圍』**(勿把它跟範圍選項並列)。若使用者要更窄範圍(只原始研究/只 4 Study/全部候選),**允許但須當面告知『這會讓 Zotero≠報告表二三』並取得同意**,不可預設。問法:先問「是否匯入(預設全匯=表二+表三)」,要匯入再確認是否縮範圍。
 >   (b) **提供一個本機「人工補全文」資料夾**(由根 `config/settings.yaml` 的 `report.fulltext_dir` 指定,現＝`OneDrive\文件\EBM_Framework\fulltext\<題目_日期>\`;留空才回退 Windows『文件』下 `EBM_fulltext\<題目_日期>\`),**逐筆列出「僅 AI 合成摘要／無全文無摘要」者**(檔名建議 = DOI 去斜線 或 PMID),讓使用者**人工把缺的全文 PDF 放進去**。使用者完成後,**重新掃描該資料夾、更新各篇全文狀態標記**(人工補入者改標「有全文(人工補)」),再請使用者確認。
 >   > **★ 補全文三鐵律(v0.20.1,因本階段連犯三錯而立):**
@@ -76,6 +82,7 @@ description: |
 >   **(a)(b) 都確認後才進 ⑥。**
 > **⑥ 三表 ＋ PDF 報告交付 → 停**。以 ⑤ 更新後的全文狀態標記產 PDF(三表＋全文狀態欄＋交叉檢核欄＋APA＋方法學註記)。**無 PDF 不算 Phase 1 完成。**
 > > **★ PDF 一律可產，不得以環境為由略過(2026-06 使用者糾正)：** `build_search_pdf.py` 已內建跨平台字型 fallback(msjh.ttc→**wqy-zenhei.ttc**→Noto CJK→Helvetica)，**Linux/遠端/容器同樣產得出中文 PDF**(實測 `/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc` 即可)。缺 reportlab 就 `pip install reportlab`；無 Windows 輸出資料夾就輸出到 cache 或當前目錄。**嚴禁宣稱『此環境無法產 PDF』而略過**——PDF 是 Phase 1 完成的硬要件。
+> > **★ PDF 表格長字串必換行(2026-06 使用者糾正)：** PRISMA 漏斗表『納入分析』明細(基底 SR/MA＋佐證 RCT 清單)等長字串，**必以 `cell()`(Paragraph, wordWrap=CJK) 包每格**餵 reportlab Table，不可餵純字串——純字串不換行會溢出、與下一段(最終納入清單)重疊。`build_search_pdf.py` 已落實(funnel 表 `fr` 以 `cell()` 包)。
 > **⑦ 寫交接包 ＋ 問是否續進 EBM 分析(v0.20,交接層) → 停**。三表/PDF 交付後,把本次「已決定的事」寫成 **交接包 `_corpus_seed.json`**(放全文資料夾,與 PDF 同處),供下游 **EBM_Analysis** 的 Phase 0 直接吃,免使用者手動搬 PDF、免 Claude 重定 PICO/分流。內容＝**必含軸→PICO 雛形** ＋ 每篇 **verdict(included=表二納入／background=表三背景)、study 標籤、證據等級、全文狀態、PDF 檔名、suggested(relevance/role/grade_track) 映射**。**交接包＝表二(納入)＋表三背景(background),與 Zotero 一致性規則同一真實來源(⑤a);驗證不符/主旨不符/品質閘剔除者不進交接。** 組好 seed dict 後以 `python scripts/build_corpus_seed.py --in seed.json --out-dir "<全文資料夾>"` **驗證契約並寫出**(契約正本 `references/corpus_seed_schema.json`;映射規則見 `EBM_Framework/INTEGRATION.md`)。寫出後**停下問使用者「是否繼續進入 EBM 分析?」**——回「**繼續/是**」即接力(切到 EBM_Analysis,Phase 0 讀交接包預填分流、仍在斷點讓使用者覆核);回「否」就停在此,交接包留存,日後對 Claude 說「繼續(進入 EBM 分析)」或指向該交接包即可接上(本框架已取消 `/ebm` 獨立啟動,評讀一律由本檢索接力)。
 > **跨 Phase 停頓點**:
 > 6. **Zotero 匯入完成** → 停,報匯入結果(成功幾筆),問「是否進 Phase 3 全文?」
