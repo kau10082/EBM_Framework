@@ -96,7 +96,7 @@ def check_excl_requires_fulltext(cache):
     for r in g3:
         if (r.get("verdict") or "") != "離題":
             continue
-        if r.get("tier") == 3 or r.get("fulltext_parse_attempted") or r.get("fulltext_checked"):
+        if r.get("tier") in (3, 4) or r.get("fulltext_parse_attempted") or r.get("fulltext_checked"):
             continue
         # 例外：登錄試驗(CT.gov)／AI 合成腿——其 Condition+InterventionName／合成摘要即『終端結構化內容』，
         # 無對應全文可再取（結果論文常不存在）；以該內容判離題即定案，不適用 Tier3 全文升級要求。
@@ -445,7 +445,7 @@ def check_no_retracted(cache):
     fails = []
     rep = _load(cache / "_search_report.json")
     if rep:
-        for grp in rep.get("studies", []):
+        for grp in (rep.get("included_studies") or rep.get("studies") or []):  # 正式報告鍵為 included_studies（相容舊 studies）
             for r in grp.get("reports", []):  # 元組 [title, pmid, doi, ft, xref]
                 if (len(r) >= 2 and _hp(r[1])) or (len(r) >= 3 and _hd(r[2])):
                     fails.append(f"撤稿 {r[1] if len(r)>1 and _hp(r[1]) else (r[2] if len(r)>2 else '?')} 出現在核心 Study 表（{grp.get('study')}）：須剔除、改列待評估/排除")

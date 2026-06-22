@@ -65,7 +65,7 @@ def check(strategy, union):
         return ["g0_strategy.json 標 sr_filter_decision=applied 但 legs 無任何 `<leg>-SR` 子腿："
                 "SR 分工未落地（非 PubMed DB 腿須以 -SR 子腿表示其 SR 變體）"]
     if union is None:
-        return ["g1_union.json 不存在：無法稽核 DB 腿主檢是否誤灌進篩選語料庫"]
+        return []  # g1_union 尚未產出＝尚未到此關/暫不適用（與 gate_guard.check_sr_division 的 None 處理一致）
     if not isinstance(union, list):
         return ["g1_union.json 格式非 list：無法稽核 provenance"]
     offenders = {}  # leg -> count

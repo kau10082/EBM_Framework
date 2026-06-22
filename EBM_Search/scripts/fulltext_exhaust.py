@@ -257,11 +257,13 @@ def main():
     ap.add_argument("--min-chars", type=int, default=250)
     ap.add_argument("--sleep", type=float, default=0.0)
     a = ap.parse_args()
-    recs = json.loads(Path(a.infile).read_text(encoding="utf-8"))
-    if isinstance(recs, dict): recs = recs.get("records") or recs.get("papers") or []
+    raw = json.loads(Path(a.infile).read_text(encoding="utf-8"))
+    # dict wrapper（如 {"papers":[...]}）只取出內層 list 解析；resolve 就地改 record 物件，
+    # 故寫回原 raw 可同時保留外層結構與更新，不破壞後游依賴該 schema 的腳本。
+    recs = (raw.get("records") or raw.get("papers") or []) if isinstance(raw, dict) else raw
     res = resolve(recs, min_chars=a.min_chars, sleep=a.sleep)
     out = a.outfile or a.infile
-    Path(out).write_text(json.dumps(recs, ensure_ascii=False), encoding="utf-8")
+    Path(out).write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     print("fulltext_exhaust：完整實抓解析完成 → have %d、awaiting %d（min_chars=%d, mail=%s）"
           % (res["have"], res["awaiting"], res["min_chars"], res["mail"]))
     print("  awaiting 者已標 fulltext_parse_attempted/channels_exhausted/oa_urls_tried 供守門核對。")
