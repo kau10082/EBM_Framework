@@ -18,7 +18,7 @@ fulltext_exhaust.py — ②c 的『完整實抓解析』工具（移到「待評
   fulltext_parse_attempted=True / oa_urls_tried=[...實際試過的URL] / channels_exhausted=True，
   並標 doc_type（correspondence/editorial＝來源本無摘要；unresolved＝抓取失敗）。
 
-force=True（融合式分層篩選 Tier 3 用）：即使已有 abstract 也不早停，強制實取全文以取得『比摘要更多
+force=True（全文/摘要搜尋及嚴格離題篩選 Tier 3 用）：即使已有 abstract 也不早停，強制實取全文以取得『比摘要更多
 的內容』——因『離題』只能在實取全文後定案；取得更長正文則升級 fulltext_excerpt，否則保留 abstract
 並照樣蓋 fulltext_parse_attempted（證明已試到全文）。
 

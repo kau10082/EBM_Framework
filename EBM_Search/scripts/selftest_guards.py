@@ -93,6 +93,24 @@ def main():
     print(("  ✅" if not _cpok else "  ❌") + " 對照軸純度：I 軸含 C 子字串不誤判（防誤報）：" + ("通過" if not _cpok else str(_cpok)))
     allok &= (not _cpok)
 
+    import sr_division_check
+    # SR filter 啟用、語料庫含『非 PubMed DB 腿主檢(EuropePMC)』→ FAIL（主檢噪音灌進池）
+    _sr_strat = {"sr_filter_decision":"applied","legs":[
+        {"leg":"PubMed"},{"leg":"EuropePMC"},{"leg":"EuropePMC-SR"},
+        {"leg":"Consensus-SR"},{"leg":"ClinicalTrials.gov"}]}
+    allok &= _assert_fires("Gate① SR分工（DB腿主檢EuropePMC灌進語料庫）",
+        sr_division_check.check(_sr_strat, [{"uid":"u1","legs":["EuropePMC"]}]))
+    # 防誤報：語料庫只含 PubMed(RCT)／-SR 變體／CT.gov → PASS
+    _srok = sr_division_check.check(_sr_strat, [
+        {"uid":"a","legs":["PubMed"]},{"uid":"b","legs":["EuropePMC-SR"]},
+        {"uid":"c","legs":["Consensus-SR"]},{"uid":"d","legs":["ClinicalTrials.gov"]}])
+    print(("  ✅" if not _srok else "  ❌") + " SR分工：只 -SR/PubMed/CT.gov 進池應通過（防誤報）：" + ("通過" if not _srok else str(_srok)))
+    allok &= (not _srok)
+    # 未啟用 SR filter（無 sr_filter_decision、無 -SR 子腿）→ 不適用、回 []（不誤擋）
+    _srna = sr_division_check.check({"legs":[{"leg":"PubMed"},{"leg":"EuropePMC"}]}, [{"uid":"x","legs":["EuropePMC"]}])
+    print(("  ✅" if not _srna else "  ❌") + " SR分工：未啟用SR filter不誤擋（防誤報）：" + ("通過" if not _srna else str(_srna)))
+    allok &= (not _srna)
+
     import strict_screen_check
     # 切題卻缺 C 軸證據（C=unknown）→ 放水 → FAIL
     allok &= _assert_fires("Gate③ 切題卻缺 C 軸（放水）",
@@ -125,7 +143,7 @@ def main():
              "search_strategy":[{"leg":"PubMed","query":"(COPD[tiab] OR emphysema[tiab]) AND (\"triple therapy\"[tiab] OR Trelegy[tiab])"}],
              "funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
              "included_studies":[{"study":"IMPACT","type":"RCT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","PubMed○/Crossref○"]]}],
-             "ongoing_trials":[["NCT00000000","A triple therapy trial"]],
+             "ongoing_trials":[["NCT00000000","A triple therapy trial","RECRUITING"]],
              "funnel_closure":"切題 5 + 離題 3 = 8",
              "prisma_flow":{"identification":100,"screening":80,"included":5}}
     no_prisma = dict(valid); no_prisma.pop("prisma_flow")
@@ -155,7 +173,48 @@ def main():
     allok &= (not _om)
 
     import gate_guard, tempfile, json, io, shutil
-    # ── 融合式分層篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
+    # ── ②b→③ 停頓點守門回歸（②b 完成後須經使用者確認才可進 ③，防搶跑）──
+    _t2b = Path(tempfile.mkdtemp())
+    json.dump([{"uid":"s1"}], io.open(_t2b/"g2b_survivors.json","w",encoding="utf-8"))
+    json.dump([{"uid":"s1","verdict":"切題","abstract":"x"}], io.open(_t2b/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    # g3 已產出但無 g2b_checkpoint 核准 → FAIL
+    allok &= _assert_fires("②b→③ 停頓點（③未經②b確認就搶跑）", gate_guard.check_2b_stop(_t2b))
+    # 正向1：②b 完成、尚未進 ③（無 g3）→ 不適用(None)、不誤擋
+    (_t2b/"g3_FINAL_screen.json").unlink()
+    _s2 = gate_guard.check_2b_stop(_t2b)
+    print(("  ✅" if _s2 is None else "  ❌")+" ②b→③：停在②b（無g3）不誤擋（防誤報）："+("通過" if _s2 is None else str(_s2)))
+    allok &= (_s2 is None)
+    # 正向2：g2b_checkpoint 已核准 + g3 → 通過
+    json.dump([{"uid":"s1","verdict":"切題","abstract":"x"}], io.open(_t2b/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    json.dump({"approved_by_user":True}, io.open(_t2b/"g2b_checkpoint.json","w",encoding="utf-8"))
+    _s3 = gate_guard.check_2b_stop(_t2b)
+    print(("  ✅" if not _s3 else "  ❌")+" ②b→③：②b已核准後進③應通過（防誤報）："+("通過" if not _s3 else str(_s3)))
+    allok &= (not _s3)
+    shutil.rmtree(_t2b, ignore_errors=True)
+
+    # ── ④/⑤a/⑤b 停頓點守門回歸（各關完成後須停下報告、核准才續；防搶跑）──
+    for label, downfile, ckfile, fn in [
+        ("④→⑤a", "g6_verified.json", "g4_checkpoint.json", "check_citation_stop"),
+        ("⑤a→⑤b", "g7_units.json", "g6_checkpoint.json", "check_xref_stop"),
+        ("⑤b→⑥", "_search_report.json", "g7_checkpoint.json", "check_units_stop")]:
+        _t = Path(tempfile.mkdtemp()); fnc = getattr(gate_guard, fn)
+        # 下游產物已產出但上游 checkpoint 未核准 → FAIL
+        json.dump([{"x":1}] if downfile.startswith("g") else {"x":1}, io.open(_t/downfile,"w",encoding="utf-8"))
+        allok &= _assert_fires(f"{label} 停頓點（未核准就搶跑）", fnc(_t))
+        # 下游未產出 → 不適用(None)、不誤擋
+        (_t/downfile).unlink()
+        _na = fnc(_t)
+        print(("  ✅" if _na is None else "  ❌")+f" {label}：上游未完成不誤擋（防誤報）："+("通過" if _na is None else str(_na)))
+        allok &= (_na is None)
+        # checkpoint 已核准 + 下游產物 → 通過
+        json.dump([{"x":1}] if downfile.startswith("g") else {"x":1}, io.open(_t/downfile,"w",encoding="utf-8"))
+        json.dump({"approved_by_user":True}, io.open(_t/ckfile,"w",encoding="utf-8"))
+        _ok = fnc(_t)
+        print(("  ✅" if not _ok else "  ❌")+f" {label}：核准後續行應通過（防誤報）："+("通過" if not _ok else str(_ok)))
+        allok &= (not _ok)
+        shutil.rmtree(_t, ignore_errors=True)
+
+    # ── 全文/摘要搜尋及嚴格離題篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
     tmp = Path(tempfile.mkdtemp())
     # (1) 反坍縮：uid 重複 → FAIL
     json.dump([{"uid":"u0","verdict":"切題","abstract":"x"},
@@ -201,6 +260,17 @@ def main():
     _nc=gate_guard.check_nocontent_bucket(tmp)
     print(("  ✅" if not _nc else "  ❌")+" ③『全文及摘要皆無』證明齊應通過（防誤報）："+("通過" if not _nc else str(_nc)))
     allok &= (not _nc)
+    # (3d)『全文及摘要皆無』有 DOI 卻無 unpaywall_checked（只試 PMC 就宣稱三層皆失敗）→ FAIL
+    json.dump([{"uid":"z4","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③『全文及摘要皆無』有DOI卻沒查Unpaywall",
+        [f for f in gate_guard.check_nocontent_bucket(tmp) if "unpaywall" in f.lower()])
+    # (3e) 正向：有 DOI 且 unpaywall_checked → 通過（防誤報）
+    json.dump([{"uid":"z5","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True,"unpaywall_checked":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    _nc2=gate_guard.check_nocontent_bucket(tmp)
+    print(("  ✅" if not _nc2 else "  ❌")+" ③『全文及摘要皆無』有DOI且查過Unpaywall應通過（防誤報）："+("通過" if not _nc2 else str(_nc2)))
+    allok &= (not _nc2)
     # 撤稿不得殘留
     json.dump([{"pmid":"999","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))

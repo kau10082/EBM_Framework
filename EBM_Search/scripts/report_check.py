@@ -98,11 +98,15 @@ def check(data):
         fails.append("段5 缺『進行中試驗』表（ongoing_trials 空）：CT.gov 招募中/未完成試驗須列")
     else:
         for r in ot:
-            if not isinstance(r, (list, tuple)) or len(r) != 2:
-                fails.append(f"段5 進行中試驗元組須 2 欄(登錄號,標題)，實得 {len(r) if hasattr(r,'__len__') else '?'}")
+            # 進行中試驗固定 3 欄（登錄號·標題·狀態）——對齊 SEARCH_SPEC §4「進行中 3 欄」與
+            # build_report_data.py 產出格式 [nct, title, status]（先前此處誤寫 2 欄，與 spec/產生器不一致）。
+            if not isinstance(r, (list, tuple)) or len(r) != 3:
+                fails.append(f"段5 進行中試驗元組須 3 欄(登錄號,標題,狀態)，實得 {len(r) if hasattr(r,'__len__') else '?'}")
                 continue
             if not str(r[0]).strip():
                 fails.append(f"段5 進行中試驗缺登錄號（標題={str(r[1])[:30]}）")
+            if not str(r[1]).strip():
+                fails.append(f"段5 進行中試驗缺標題（登錄號={str(r[0])[:20]}）")
     return fails
 
 def main():

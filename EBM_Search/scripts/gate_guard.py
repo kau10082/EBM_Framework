@@ -85,7 +85,7 @@ def _norm_doi(d):
     d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
 
 def check_excl_requires_fulltext(cache):
-    """融合式分層篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
+    """全文/摘要搜尋及嚴格離題篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
     Tier 1/2（摘要／CT.gov 登錄／AI 合成）早停。故每筆 verdict=離題 必須帶 tier==3 或
     fulltext_parse_attempted=true（證明已升級到實取全文才判離題），否則＝在薄摘要/登錄就把
     『可能切題』者誤殺 → FAIL（高 recall：拼到全文才可判離題；2026-06 使用者定版流程）。"""
@@ -110,13 +110,16 @@ def check_excl_requires_fulltext(cache):
     return []
 
 def check_nocontent_bucket(cache):
-    """融合式分層篩選：『全文及摘要皆無』桶必須真的三層皆取不到可判內容——每筆須帶
+    """全文/摘要搜尋及嚴格離題篩選：『全文及摘要皆無』桶必須真的『Tier 3＋Tier 4』皆取不到可判內容——每筆須帶
     fulltext_parse_attempted=true ∧ channels_exhausted=true，且無 abstract/全文摘錄、非登錄(registry)、
-    非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。取代舊『待評估雙桶』。"""
+    非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。
+    **且有 DOI 者須帶 unpaywall_checked=true（＝確有跑過 Tier 4 的 Unpaywall OA 探查）**：
+    Unpaywall 是獨立 Tier 4，『皆無』只能在 Tier 4 也查過後定案，不可只試 PMC（Tier 3）就 punt。取代舊『待評估雙桶』。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
     bad = []
+    no_unpaywall = []
     for r in g3:
         if (r.get("verdict") or "") != "全文及摘要皆無":
             continue
@@ -126,13 +129,24 @@ def check_nocontent_bucket(cache):
         proven = r.get("fulltext_parse_attempted") and r.get("channels_exhausted")
         if has_content or not proven:
             bad.append((r.get("title") or r.get("uid") or "?")[:50])
+            continue
+        # 『channels_exhausted』必須真的查過 Unpaywall——有 DOI 卻無 unpaywall_checked＝
+        # 只試了 PMC 就宣稱『三層皆失敗』（2026-06 使用者糾正：13/23『全文及摘要皆無』其實
+        # 有 Crossref 摘要/OA 全文，因漏跑 Unpaywall/Crossref 而誤判）。
+        if r.get("doi") and not r.get("unpaywall_checked"):
+            no_unpaywall.append((r.get("title") or r.get("doi") or r.get("uid") or "?")[:50])
+    out = []
     if bad:
-        return [f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
-                f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}"]
-    return []
+        out.append(f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
+                   f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}")
+    if no_unpaywall:
+        out.append(f"③ 有 {len(no_unpaywall)} 筆判『全文及摘要皆無』且有 DOI 卻無 unpaywall_checked（未跑 Tier 4）："
+                   f"『皆無』只能在 Tier 4（Unpaywall 全部 oa_locations 探查）也失敗後定案，"
+                   f"不可只試 PMC（Tier 3）就 punt（用 fulltext_exhaust.py 跑完 Tier 4 再判）：{no_unpaywall[:5]}")
+    return out
 
 def check_screen_partition(cache):
-    """融合式分層篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：
+    """全文/摘要搜尋及嚴格離題篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：
     g3 含全部 ②b 倖存者，每筆 verdict ∈ {切題, 離題, 全文及摘要皆無}。以 uid 獨立重算：
     uid 穩定唯一（防坍縮鍵污染）、verdict 合法、無重複；若有 g2b_screen.json 則與 ②b kept 對帳（恰覆蓋）。
     來源證明：切題/離題 無 abstract/全文摘錄且非登錄/AI 者，其 uid 須在 g3_fetched_by_uid 帶實抓解析證明。"""
@@ -227,6 +241,68 @@ def check_strategy_approved(cache):
                 "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
     return []
 
+def check_2b_stop(cache):
+    """②b→③ 停頓點（防 ③ 搶跑）：②b 高敏初篩完成（g2b_survivors.json 產出）後，
+    必須停下報告 ②b 結果、等使用者點頭，才可進 ③。
+    落地：使用者確認後在 g2b_checkpoint.json 設 approved_by_user=true。
+    g3_FINAL_screen.json 已產出但 ②b 未經使用者確認＝③ 搶跑 → FAIL。
+    （2026-06 使用者糾正：②b 完成後未停下報告即逕跑 ③；此 gate 即為此而立，
+      與 check_strategy_approved「⓪→① 防搶跑」對稱。）"""
+    g2b = _load(cache / "g2b_survivors.json")
+    if g2b is None:
+        return None  # 尚未到 ②b：此關不適用
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None  # 尚未進 ③（正常停在 ②b）：此關不適用
+    ckpt = _load(cache / "g2b_checkpoint.json")
+    if not ckpt or not ckpt.get("approved_by_user"):
+        return ["g3_FINAL_screen.json 已產出，但 g2b_checkpoint.json 未標 approved_by_user=true："
+                "②b 高敏初篩完成後必須先停下報告、經使用者點頭才可進 ③（防 ③ 搶跑；"
+                "使用者確認 ②b 結果後才在 g2b_checkpoint.json 設 approved_by_user=true）"]
+    return []
+
+
+def check_citation_stop(cache):
+    """④ 引文追蹤完成後須停下報告、經使用者核准才可進 ⑤a 交叉驗證（防搶跑）。
+    落地：使用者確認後在 g4_checkpoint.json 設 approved_by_user=true。
+    ⑤a 產物 g6_verified.json 已產出但 ④ 未核准＝搶跑 → FAIL。
+    （2026-06 使用者定版：④/⑤a/⑤b 三關各須停下報告、核准後續，與 ⓪→①、②b→③ 對稱。）"""
+    down = _load(cache / "g6_verified.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g4_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["g6_verified.json(⑤a) 已產出，但 g4_checkpoint.json 未標 approved_by_user=true："
+                "④ 引文追蹤完成後須先停下報告、經使用者核准才可進 ⑤a 交叉驗證（防搶跑）"]
+    return []
+
+
+def check_xref_stop(cache):
+    """⑤a 交叉驗證＋撤稿完成後須停下報告、經使用者核准才可進 ⑤b 決定納入單位（防搶跑）。
+    落地：g6_checkpoint.json approved_by_user=true。⑤b 產物 g7_units.json 已產出但 ⑤a 未核准 → FAIL。"""
+    down = _load(cache / "g7_units.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g6_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["g7_units.json(⑤b) 已產出，但 g6_checkpoint.json 未標 approved_by_user=true："
+                "⑤a 交叉驗證/撤稿完成後須先停下報告、經使用者核准才可進 ⑤b 決定納入單位（防搶跑）"]
+    return []
+
+
+def check_units_stop(cache):
+    """⑤b 決定納入單位完成後須停下報告、經使用者核准才可進 ⑥ 三表/報告（防搶跑）。
+    落地：g7_checkpoint.json approved_by_user=true。⑥ 產物 _search_report.json 已產出但 ⑤b 未核准 → FAIL。"""
+    down = _load(cache / "_search_report.json")
+    if down is None:
+        return None
+    ck = _load(cache / "g7_checkpoint.json")
+    if not ck or not ck.get("approved_by_user"):
+        return ["_search_report.json(⑥) 已產出，但 g7_checkpoint.json 未標 approved_by_user=true："
+                "⑤b 決定納入單位完成後須先停下報告、經使用者核准才可進 ⑥ 三表/報告（防搶跑）"]
+    return []
+
+
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
     man = _load(cache / "g1_legs_manifest.json")
@@ -250,6 +326,27 @@ def check_axis_expansion(cache):
         return axis_expansion_check.check(strat)
     except Exception as e:
         return [f"axis_expansion_check 載入失敗：{str(e)[:80]}"]
+
+def check_sr_division(cache):
+    """Gate ①：SR filter 分工——啟用 SR filter 時，有 SR 變體的非 PubMed DB 腿（EuropePMC/Consensus/OpenAlex）
+    只能以 `<leg>-SR` 結果進篩選語料庫 g1_union；其無過濾主檢（全文泛提及噪音）不得灌進池。
+    g0 未啟用 SR filter 或 g1_union 未產出 → 此關不適用。"""
+    strat = _load(cache / "g0_strategy.json")
+    if strat is None:
+        return None
+    union = _load(cache / "g1_union.json")
+    try:
+        import sr_division_check
+        # 未啟用 SR filter → check 回 []（通過/不適用）；但 union 尚未產出時，
+        # 若已啟用仍應提醒。以 union 是否存在區分『尚未到此關』與『已到、須稽核』。
+        if not sr_division_check._sr_applied(strat):
+            return None
+        if union is None:
+            return None  # SR 已啟用但語料庫尚未組（Gate ① 收尾才產），暫不適用
+        return sr_division_check.check(strat, union)
+    except Exception as e:
+        return [f"sr_division_check 載入/執行失敗：{e}"]
+
 
 def check_comparator_purity(cache):
     """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
@@ -418,6 +515,11 @@ def _all_checks(cache):
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
+            _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
+            _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
+            _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
+            _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
+            _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
