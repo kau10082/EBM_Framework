@@ -49,4 +49,10 @@
    - 落地：`_search_report.json` 新增 `included_for_analysis`（total 168／核心RCT43[IMPACT22/ETHOS9/KRONOS9/ETHOS-ext2/TRIBUTE1]／SR/MA 105／支持性RCT 20），prisma_flow.included＝168，與 `_corpus_seed.json` verdict=included(168) 完全一致；report_check／gate_guard 全綠。
    - 建議正式審查：可在 report_check 增一條硬 gate『_search_report.included_for_analysis.total == _corpus_seed verdict=included 數』把此一致性釘成機器檢查（本輪以同源計算＋斷言保證，尚未落為常駐 gate）。
 
+✅ 已修：**交接包只放『實際納入分析』者，背景不進交接包、也不進 PRISMA 末步『納入分析的文獻』**（使用者本輪定版）。
+   - 問題：我產 corpus_seed 時用了 `--include-background`，把 427 篇背景（觀察/經濟/綜述/指引/對照側 dual-only RCT/三合一 vs ICS-LABA/進行中）也塞進交接包（595 篇）。使用者定版：**沒有要進分析的（如背景）就不該出現在交接包，也不該出現在 PRISMA 末步**。
+   - 處置：移除 `--include-background`（回到 build_corpus_seed 正確預設＝只交接 verdict=included 且 grade_track∈{full,targeted_harms,light_summary}）。corpus_seed 由 595→**168**（核心RCT 43＋SR/MA 105＋候選三合一RCT 20），verdict=background 0；與報告 `included_for_analysis.total=168`／PRISMA 末步一致（已斷言）。
+   - 「實際納入分析」定版＝168：①4 樞紐 RCT(43 報告，RoB+outcome) ②105 SR/MA/NMA(主要綜合證據，GRADE pooled) ③20 候選三合一 RCT(待 Phase 0 全文確認對照臂)。背景 427 留在 g7_units／報告分流統計供追溯，不交接、不計入「納入分析」。
+   - 建議正式審查：可加一條機器 gate『_corpus_seed.json 不得含 verdict=background』＋『included_for_analysis.total == corpus_seed 篇數』把「交接包＝納入分析集、且與 PRISMA 末步一致」釘死（本輪以正確預設＋斷言保證）。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
