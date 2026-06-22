@@ -27,4 +27,9 @@
    - 問題：對話說明（如 ②b 收尾「③ 嚴格篩需先 ②c 抓摘要/全文，再進 ③」）仍把 ②c 與 ③ 當兩關講。**v0.22 定版已取消獨立 ②c**：舊「②c 搜尋全文/取得性」整個併入 **③「全文/摘要搜尋及嚴格離題篩選」**——③ 內含 Tier1 既有摘要、Tier2 登錄/AI、Tier3 實取全文、Tier4 Unpaywall，全文取得＝③ 的 Tier3/Tier4，不是前置的 ②c。
    - 本輪修改：後續說明一律稱「③（含 Tier1–4）」，不再出現「②c」字眼；「待評估」桶亦已取消（③ 三桶＝切題/離題/全文及摘要皆無）。管線編號＝① 廣蒐去重 → ② 篩選策略 → ②b 高敏初篩 → ③ 全文/摘要搜尋及嚴格離題篩選（Tier1–4） → ④ 引文追蹤 → ⑤ 收斂後處理 → ⑥ 三表+PDF → ⑦ 交接包。
 
+✅ 已修：**⑤b classify_units `--enrich` 的 nct_triple 過嚴，把核心試驗誤丟背景**（本輪發現並繞過）。
+   - 問題：`--enrich` 以 g0 I 軸同義詞比對 CT.gov `InterventionName` 判試驗是否三合一，但 CT.gov 多把介入列為**成分藥分項**（Budesonide／Glycopyrronium／Formoterol 各一筆，或「BGF MDI」），無單一字串含完整三合一名 → 57 NCT 僅 6 判 in-scope、50 判 non-triple。classify 內 `if key in nontriple: 歸背景 continue` 在 **PIVOTAL 權威表之前**，導致 KRONOS／TRIBUTE／BGF 藥名報告（30232048/29429593/32152869…）被誤丟「背景:非核心RCT」。
+   - 本輪處置：停用該 run 的 `nct_triple.json`（改名 .enrich_disabled），改靠 curated `PIVOTAL_LABALAMA_ARM` ＋ trip∧dual regex 判核心。重跑後核心 IMPACT 23／KRONOS 9／ETHOS 9(+ext1)／TRIBUTE 1＋BGF 藥名報告皆正確歸核心；對帳 57+105+415+18=595 平。
+   - 建議下次正式審查時修 `classify_units.enrich`：I 軸比對 CT.gov 介入時應**逐成分**判（ICS∧LABA∧LAMA 三類各命中即三合一），而非要求單一字串含完整三合一名；或把 nontriple override 移到 PIVOTAL 表之後。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
