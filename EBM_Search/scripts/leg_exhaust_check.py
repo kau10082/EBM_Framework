@@ -49,10 +49,15 @@ def check(legs, min_legs=4):
         n = _base(name)
         hit = leg.get("hitCount"); fetched = leg.get("fetched")
         exhaustible = leg.get("exhaustible")
-        # 跳過腿：唯一合法理由＝技術硬限制（MCP 未連/無金鑰/管轄封鎖）
+        # 跳過腿：唯一合法理由＝技術硬限制（MCP 未連/無金鑰/管轄封鎖/API 硬性限流封鎖）
         if leg.get("skipped"):
             if not leg.get("reason"):
                 fails.append(f"[{name}] 標 skipped 但未附硬理由（須為 MCP 未連/無金鑰/管轄封鎖；嚴禁『價值低/重疊高』主觀略過）")
+            elif (n in EXHAUSTIBLE_DEFAULT) and (n not in AI_CAPPED):
+                # 帶硬理由而跳過的『可窮盡類』來源＝『不能跑』（≠『能跑而未跑』），計入廣度不罰：
+                # 否則外部來源整個 session 硬性不可用（如 OpenAlex 全程 429、Epistemonikos 無 token）時，
+                # ≥min_legs 變成不可能達成的死結。主觀略過仍被上面『未附硬理由』那條擋下。
+                seen_exhaustible += 1
             continue
         if exhaustible is None:
             exhaustible = (n in EXHAUSTIBLE_DEFAULT) and (n not in AI_CAPPED)
