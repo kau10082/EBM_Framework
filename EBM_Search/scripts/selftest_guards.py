@@ -93,6 +93,24 @@ def main():
     print(("  ✅" if not _cpok else "  ❌") + " 對照軸純度：I 軸含 C 子字串不誤判（防誤報）：" + ("通過" if not _cpok else str(_cpok)))
     allok &= (not _cpok)
 
+    import sr_division_check
+    # SR filter 啟用、語料庫含『非 PubMed DB 腿主檢(EuropePMC)』→ FAIL（主檢噪音灌進池）
+    _sr_strat = {"sr_filter_decision":"applied","legs":[
+        {"leg":"PubMed"},{"leg":"EuropePMC"},{"leg":"EuropePMC-SR"},
+        {"leg":"Consensus-SR"},{"leg":"ClinicalTrials.gov"}]}
+    allok &= _assert_fires("Gate① SR分工（DB腿主檢EuropePMC灌進語料庫）",
+        sr_division_check.check(_sr_strat, [{"uid":"u1","legs":["EuropePMC"]}]))
+    # 防誤報：語料庫只含 PubMed(RCT)／-SR 變體／CT.gov → PASS
+    _srok = sr_division_check.check(_sr_strat, [
+        {"uid":"a","legs":["PubMed"]},{"uid":"b","legs":["EuropePMC-SR"]},
+        {"uid":"c","legs":["Consensus-SR"]},{"uid":"d","legs":["ClinicalTrials.gov"]}])
+    print(("  ✅" if not _srok else "  ❌") + " SR分工：只 -SR/PubMed/CT.gov 進池應通過（防誤報）：" + ("通過" if not _srok else str(_srok)))
+    allok &= (not _srok)
+    # 未啟用 SR filter（無 sr_filter_decision、無 -SR 子腿）→ 不適用、回 []（不誤擋）
+    _srna = sr_division_check.check({"legs":[{"leg":"PubMed"},{"leg":"EuropePMC"}]}, [{"uid":"x","legs":["EuropePMC"]}])
+    print(("  ✅" if not _srna else "  ❌") + " SR分工：未啟用SR filter不誤擋（防誤報）：" + ("通過" if not _srna else str(_srna)))
+    allok &= (not _srna)
+
     import strict_screen_check
     # 切題卻缺 C 軸證據（C=unknown）→ 放水 → FAIL
     allok &= _assert_fires("Gate③ 切題卻缺 C 軸（放水）",

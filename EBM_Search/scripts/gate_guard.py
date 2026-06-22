@@ -251,6 +251,27 @@ def check_axis_expansion(cache):
     except Exception as e:
         return [f"axis_expansion_check 載入失敗：{str(e)[:80]}"]
 
+def check_sr_division(cache):
+    """Gate ①：SR filter 分工——啟用 SR filter 時，有 SR 變體的非 PubMed DB 腿（EuropePMC/Consensus/OpenAlex）
+    只能以 `<leg>-SR` 結果進篩選語料庫 g1_union；其無過濾主檢（全文泛提及噪音）不得灌進池。
+    g0 未啟用 SR filter 或 g1_union 未產出 → 此關不適用。"""
+    strat = _load(cache / "g0_strategy.json")
+    if strat is None:
+        return None
+    union = _load(cache / "g1_union.json")
+    try:
+        import sr_division_check
+        # 未啟用 SR filter → check 回 []（通過/不適用）；但 union 尚未產出時，
+        # 若已啟用仍應提醒。以 union 是否存在區分『尚未到此關』與『已到、須稽核』。
+        if not sr_division_check._sr_applied(strat):
+            return None
+        if union is None:
+            return None  # SR 已啟用但語料庫尚未組（Gate ① 收尾才產），暫不適用
+        return sr_division_check.check(strat, union)
+    except Exception as e:
+        return [f"sr_division_check 載入/執行失敗：{e}"]
+
+
 def check_comparator_purity(cache):
     """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
     manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
@@ -418,6 +439,7 @@ def _all_checks(cache):
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
+            _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
