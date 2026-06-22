@@ -56,6 +56,16 @@ def check(data):
     fc = data.get("funnel_closure", "")
     if not re.search(r"切題.*離題|\d+\s*\+\s*\d+\s*=\s*\d+", fc):
         fails.append("段3 funnel_closure 缺『嚴格篩二分』算式（切題+離題=內容可篩數）")
+    # ── 段3 PRISMA『納入分析』明細列法（2026-06 使用者定版）──
+    #   (a) 標籤不夾方法學附註（grade/Phase 0/AMSTAR/CCA/ROBIS/重疊…）；(b) 研究明細以作者+年份，不用 PMID。
+    iaf = data.get("included_for_analysis")
+    if isinstance(iaf, dict):
+        for b in iaf.get("breakdown", []):
+            lbl = str(b.get("label", "")); det = str(b.get("detail", ""))
+            if re.search(r"grade|grade_track|phase\s*0|amstar|\bcca\b|robis|重疊|定非重疊基底|池化", lbl, re.I):
+                fails.append(f"段3『納入分析』標籤夾方法學附註『{lbl[:40]}』：標籤須乾淨類別名，方法學說明留交接包/內文")
+            if re.search(r"\bPMID\b\s*\d", det, re.I):
+                fails.append(f"段3『納入分析』明細用 PMID『{det[:40]}』：研究須以『第一作者 + 年份』標示（非 PMID）")
     # ── 段4 最終納入證據清單 ──
     inc = data.get("included_studies", [])
     if not inc:

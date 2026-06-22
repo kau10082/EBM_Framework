@@ -38,6 +38,8 @@ PIVOTAL_LABALAMA_ARM = {        # 三合一 vs LABA/LAMA：確有雙支擴對照
     "FULFIL": False,  # vs BUD/FORM(ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)
     "TRILOGY":False,  # vs BDP/FF(ICS/LABA) 唯一對照 → 非核心
     "TRINITY":False,  # vs tiotropium(LAMA 單方) ＋ open-triple → 非核心(對照非 LABA/LAMA 雙支擴)
+    "ETHOS-ext":True, # ETHOS 延伸（BGF vs GFF）→ 核心
+    "FULFIL-ext":False,
 }
 ACR = re.compile(r"\b(IMPACT|ETHOS|KRONOS|FULFIL|TRILOGY|TRIBUTE|TRINITY|TRIVERSYTI|TRISTAR)\b(?!\s+(?:of|on|study population)\b)")
 TRIALCTX = re.compile(r"\b(trial|study|randomi[sz]ed|cohort|programme|program)\b", re.I)
@@ -72,6 +74,13 @@ R_PROTO_STRONG = re.compile(r"\bstudy protocol\b|\bprotocol for a\b|\btrial prot
 R_ICS_WD = re.compile(r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of fluticasone|"
     r"de-?escalat|step(ping)?[\s\-]?down|stepwise (withdrawal|removal)|discontinu(e|ation|ing) (of )?(the )?(ics|inhaled cortico)|"
     r"removing (the )?inhaled cortico|direct (de-escalation|change) from (long-term )?triple", re.I)
+# ★ ICS 退階『核心』嚴格訊號：撤除/退階字眼須與 ICS／吸入糖皮質素鄰近共現（或明寫『triple→雙支擴 de-escalation』）。
+#   避免泛『step-up/step-down 管理策略』試驗（如 symptom-based management）被 R_ICS_WD 的裸『step-down』誤判為核心。
+ICS_WD_STRICT = re.compile(
+    r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of (inhaled )?glucocorticoid|"
+    r"(withdraw\w*|de-?escalat\w*|discontinu\w*|remov\w*|step(ping)?[\s\-]?down)[^.;]{0,40}\b(ics|inhaled cortico\w*|inhaled glucocortico\w*|inhaled steroid|fluticasone|budesonide|beclomet\w*)\b|"
+    r"\b(ics|inhaled cortico\w*|inhaled glucocortico\w*)\b[^.;]{0,40}(withdraw\w*|de-?escalat\w*|discontinu\w*|remov\w*|step(ping)?[\s\-]?down)|"
+    r"de-?escalat\w*[^.;]{0,40}(from )?(long-term )?triple|triple[^.;]{0,40}de-?escalat", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
@@ -140,11 +149,15 @@ def classify(cache, out="g7_units.json"):
     if pn.exists():
         try: names.update({k:v for k,v in json.loads(pn.read_text(encoding="utf-8")).items() if k not in NCT_TRIAL})
         except Exception: pass
-    # 以 CT.gov 介入判定的『非三合一試驗』NCT 集合：這些 NCT 的 RCT 報告＝介入非三合一→剔出核心
-    nontriple=set()
-    pt2=cache/"nct_triple.json"
-    if pt2.exists():
-        try: nontriple=set(json.loads(pt2.read_text(encoding="utf-8")).get("nontriple_nct",[]))
+    # CT.gov 逐成分臂資料（resolve_arms 產）：nct→{has_triple,has_dual_ll,acronym}；及標題補回的 uid→nct
+    nct_arms={}; uid_resolved={}
+    pa=cache/"nct_arms.json"
+    if pa.exists():
+        try: nct_arms=json.loads(pa.read_text(encoding="utf-8"))
+        except Exception: pass
+    pu=cache/"uid_resolved.json"
+    if pu.exists():
+        try: uid_resolved=json.loads(pu.read_text(encoding="utf-8"))
         except Exception: pass
     from collections import Counter, defaultdict
     buckets=Counter(); studies=defaultdict(list); rows=[]; title_only=0
@@ -163,6 +176,11 @@ def classify(cache, out="g7_units.json"):
         if is_ct: design="進行中/登錄試驗(CT.gov)"  # ★ 登錄腿記錄＝登錄試驗（不論有無合成摘要；修『給了合成摘要後 is_ct&not ab 失效→落未分型』）
         elif has(pt,"Meta-Analysis","Systematic Review") or R_SRMA.search(text): design="背景:SR/MA/network-meta"
         elif has(pt,"Guideline","Practice Guideline") or R_GUIDE_TITLE.search(title): design="背景:指引"
+        # ★ 即使帶 RCT pubtype 也非『核心效力 RCT』者，先擋下（群體藥動次分析、基因/生物標記關聯、純方法學工具）：
+        elif re.search(r"population pharmacokinetic|poppk|bioequivalence", text, re.I): design="背景:藥學/裝置/方法學"
+        elif re.search(r"\b(snp|single[- ]nucleotide|polymorphism|genetic variant|pharmacogenomic|\brs\d{4,}\b|gene[a-z ]{0,18}associated with)\b", text, re.I): design="背景:觀察性/真實世界"
+        elif re.search(r"composite (tool|index|measure)|is a (promising )?(composite )?(concept|tool)", title, re.I): design="背景:綜述/其他次級"
+        elif re.search(r"real[- ]life", text, re.I) and not has(pt,"Randomized Controlled Trial"): design="背景:觀察性/真實世界"
         # ★ 先擋『綜述體/藥動』再判 RCT（2026-06 使用者逐筆核對立）：綜述描述他人試驗常含 randomized/placebo-controlled
         #   字樣→會誤觸 R_RCT；故無 RCT pubtype 而命中強綜述/PK 訊號者先歸背景，避免把綜述/藥動誤拉成 RCT。
         elif (not is_rct_pt) and R_REVIEW_STRONG.search(text): design="背景:綜述/其他次級"
@@ -192,33 +210,56 @@ def classify(cache, out="g7_units.json"):
             trip=bool(R_TRIP.search(dtext))
             dual=bool(R_DUAL.search(R_TRIP.sub(" ", dtext)))
             trial,key=detect_trial(text,nct,names)
-            if key and key in nontriple:   # 該 NCT 經 CT.gov 介入判定為非三合一（他藥/雙合一）→ 歸背景（非核心），不丟棄
-                design="背景:非核心RCT(非三合一vs雙合一介入)"; row["design"]=design
-                row["trial"]=trial; row["nct"]=key; buckets[design]+=1; rows.append(row); continue
+            if not key and uid_resolved.get(uid):   # 摘要無 NCT → CT.gov 標題搜尋補回
+                key=uid_resolved[uid]
+                if not trial: trial=names.get(key, key)
+                row["linked_by"]="ctgov_title_search"
             if not trial:  # 無 NCT/縮寫上下文 → 試『縮寫(摘要)＋樣本數特徵』保守連結
                 sl=sig_link(text)
                 if sl: trial=sl; row["linked_by"]="signature"
-            row["trial"]=trial or "(未辨識)"; row["nct"]=key
+            arm=nct_arms.get(key or "")  # CT.gov 逐成分臂資料
+            if arm and not trial: trial=arm.get("acronym") or key
+            # ★ 不留『(未辨識)』：未連到試驗名者一律以 NCT 或 PMID 當穩定識別（每筆自成一 Study）。
+            row["trial"]=trial or key or ("研究-PMID" + str(v.get("pmid") or "?")); row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
-            # 核心/非核心：已知樞紐試驗以 trial-level 權威表定案（試驗設計屬性，不隨子報告摘要飄移）；
-            # 非樞紐才回退『標題+摘要 regex(trip∧dual)』。
             doi_l=str(v.get("doi") or "").lower()
             is_conf = bool(R_CONF_DOI.search(doi_l)) or bool(R_CONF_TITLE.search(title))
+            # 決策優先序（★ 定版：每筆 RCT 一律給出確定核心/背景，不留『待確認』灰色地帶）：
+            #   樞紐權威表 → ICS 退階設計 → CT.gov 雙支擴對照臂(has_dual_ll，可靠) → CT.gov 無三合一臂 →
+            #   會議摘要 → 其餘三合一 RCT 一律背景(具體理由：對照非雙支擴/未經權威確認)。
+            #   核心『只』由 樞紐表／ICS退階／CT.gov has_dual_ll 三條正向確認來源背書；
+            #   CT.gov has_triple=True 不採（跨臂/安慰劑描述污染假陽，如 ILLUMINATE/POWER）。
             if trial in PIVOTAL_LABALAMA_ARM:
-                # 樞紐試驗（有完整論文）的子報告即使是會議摘要也保留為該試驗報告（支持性）
                 row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
                 row["core_basis"]="pivotal_trial_design"
+            elif trip and ICS_WD_STRICT.search(dtext):
+                # ICS 退階/移除設計（三合一→雙支擴，如 WISDOM/SUNSET）＝核心子型；下游 meta 不與起始混算。
+                # ★ 須『撤除/退階』與『ICS/吸入糖皮質素』鄰近共現才算（避免泛『step-down 管理策略』如
+                #   symptom-based step-up/step-down 試驗被誤判為 ICS 退階核心）。
+                row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["core_basis"]="ICS_withdrawal"
+                row["design_subtype"]="ICS-withdrawal"
+            elif arm and not arm.get("has_triple"):
+                design="背景:對照側RCT(無三合一臂)"; row["design"]=design; row["unit"]=""
+                row["core_basis"]="ctgov_arms(no_triple)"; row["nct"]=key
+                buckets[design]+=1; rows.append(row); continue
             elif is_conf:
-                # 獨立會議摘要（無對應完整論文）＝待評估研究，不得當核心可分析 RCT（MECIR）
                 row["unit"]="待評估:會議摘要(未完整發表)"; row["design"]="背景:會議摘要(待評估)"
                 row["core_basis"]="conference_abstract_awaiting"
+            elif trip:
+                # 三合一 RCT 但對照臂未經 樞紐表/ICS退階/CT.gov has_dual_ll 任一正向確認為雙支擴
+                # → 確定歸背景(本題非核心)，具體理由標明；不留『待覆核』灰色桶。
+                design="背景:三合一RCT(對照非雙支擴或未確認,本題非核心)"; row["design"]=design; row["unit"]=""
+                row["core_basis"]="not_confirmed_dual_comparator"
+                buckets[design]+=1; rows.append(row); continue
             else:
-                row["unit"]= "核心:三合一 vs LABA/LAMA" if (trip and dual) else ("三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)" if trip else "RCT(待人工確認介入)")
-            # ★ ICS 退階/移除設計標記：凡判為核心(含樞紐)且命中 ICS-withdrawal 訊號者，改記為獨立子型，
-            #   下游 meta 不得與『起始三合一 vs 雙支擴』混算（回答的是『能否撤 ICS』這個不同臨床問題）。
-            if str(row.get("unit","")).startswith("核心") and R_ICS_WD.search(dtext):
+                design="背景:對照側RCT(無三合一臂)"; row["design"]=design; row["unit"]=""
+                buckets[design]+=1; rows.append(row); continue
+            # ★ ICS 退階/移除設計標記：非樞紐核心若命中 ICS-withdrawal 訊號→改記獨立子型（樞紐試驗為起始設計，
+            #   其子報告即使摘要提及 withdrawal 亦不得改判，避免如 IMPACT 死亡率報告被誤標退階）。
+            if (str(row.get("unit","")).startswith("核心") and row.get("core_basis")!="pivotal_trial_design"
+                    and row.get("design_subtype")!="ICS-withdrawal" and R_ICS_WD.search(dtext)):
                 row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["design_subtype"]="ICS-withdrawal"
-            studies[trial or "(未辨識試驗)"].append(row)
+            studies[trial or ("研究-PMID"+str(v.get("pmid") or "?"))].append(row)
             buckets[row["unit"]]+=1
         else:
             buckets[design]+=1
@@ -304,11 +345,120 @@ def enrich(cache, mailto="test@example.com"):
     json.dump({"triple_nct":triple,"nontriple_nct":nontrip},open(cache/"nct_triple.json","w",encoding="utf-8"),ensure_ascii=False)
     print(f"⑦ enrich：NCT 共 {len(ncts)}→ 命名 {len(names)}｜介入在範圍(I 軸) {len(triple)}｜不在範圍 {len(nontrip)}")
 
+# ── CT.gov 逐成分臂分類（取代舊 enrich 的『整串三合一名比對』，修核心試驗被誤丟背景）──
+ICS_DRUGS  = ("budesonide","fluticasone","beclomet","beclometh","mometasone","ciclesonide")
+LABA_DRUGS = ("formoterol","vilanterol","salmeterol","olodaterol","indacaterol","arformoterol")
+LAMA_DRUGS = ("umeclidinium","glycopyrron","glycopyrrol","tiotropium","aclidinium","revefenacin")
+# 品牌→類別（CT.gov 介入常只給品牌/代號）
+BRAND_CLASS = {
+    "trelegy":{"ICS","LABA","LAMA"},"trimbow":{"ICS","LABA","LAMA"},"breztri":{"ICS","LABA","LAMA"},
+    "enerzair":{"ICS","LABA","LAMA"},"bgf":{"ICS","LABA","LAMA"},
+    "anoro":{"LABA","LAMA"},"ultibro":{"LABA","LAMA"},"stiolto":{"LABA","LAMA"},"spiolto":{"LABA","LAMA"},
+    "duaklir":{"LABA","LAMA"},"bevespi":{"LABA","LAMA"},"gff":{"LABA","LAMA"},"umec/vi":{"LABA","LAMA"},
+    "symbicort":{"ICS","LABA"},"breo":{"ICS","LABA"},"relvar":{"ICS","LABA"},"seretide":{"ICS","LABA"},
+    "advair":{"ICS","LABA"},"foster":{"ICS","LABA"},"bff":{"ICS","LABA"},"ff/vi":{"ICS","LABA"},
+    "spiriva":{"LAMA"},"incruse":{"LAMA"},"seebri":{"LAMA"},"tudorza":{"LAMA"},
+}
+def _drug_classes(text):
+    t=_norm(text); cl=set()
+    if any(d in t for d in ICS_DRUGS):  cl.add("ICS")
+    if any(d in t for d in LABA_DRUGS): cl.add("LABA")
+    if any(d in t for d in LAMA_DRUGS): cl.add("LAMA")
+    for b,cs in BRAND_CLASS.items():
+        if b in t: cl|=cs
+    return cl
+
+def _ct_get(url, mailto):
+    try: return urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":f"EBM/0.22 (mailto:{mailto})"}),timeout=25).read()
+    except Exception: return None
+
+def _ct_arms(nct, mailto):
+    """回傳 {acronym, has_triple, has_dual_ll, interventions:[...]}：逐 intervention(名＋說明)判類別組合。"""
+    raw=_ct_get(f"https://clinicaltrials.gov/api/v2/studies/{nct}", mailto)
+    if not raw: return None
+    try: ps=json.loads(raw).get("protocolSection",{})
+    except Exception: return None
+    idm=ps.get("identificationModule",{}); aim=ps.get("armsInterventionsModule",{})
+    ivs=aim.get("interventions",[]) or []
+    intervention_classes=[]
+    for iv in ivs:
+        blob=(iv.get("name","") or "")+" "+(iv.get("description","") or "")
+        intervention_classes.append(_drug_classes(blob))
+    # 也看 armGroups（有時成分寫在 arm 描述）
+    for ag in (aim.get("armGroups",[]) or []):
+        blob=(ag.get("label","") or "")+" "+(ag.get("description","") or "")+" "+" ".join(ag.get("interventionNames",[]) or [])
+        c=_drug_classes(blob)
+        if c: intervention_classes.append(c)
+    has_triple = any({"ICS","LABA","LAMA"}<=c for c in intervention_classes)
+    has_dual_ll= any(c=={"LABA","LAMA"} for c in intervention_classes)
+    return {"acronym":idm.get("acronym","") or idm.get("briefTitle","")[:40],
+            "has_triple":has_triple,"has_dual_ll":has_dual_ll,
+            "classes":[sorted(c) for c in intervention_classes]}
+
+def _resolve_nct_by_title(title, mailto):
+    """CT.gov 以標題詞搜尋找回 NCT（給摘要無 NCT 的 RCT 報告用）。回傳最佳 NCT 或 ''。"""
+    if not title or len(title)<12: return ""
+    q=re.sub(r"[^a-zA-Z0-9 ]"," ",title)[:160]
+    raw=_ct_get("https://clinicaltrials.gov/api/v2/studies?pageSize=5&fields=NCTId,BriefTitle,OfficialTitle&query.term="+urllib.parse.quote(q+" COPD"), mailto)
+    if not raw: return ""
+    try: studies=json.loads(raw).get("studies",[])
+    except Exception: return ""
+    tnorm=_norm(title)
+    best=""; bestov=0
+    tw=set(w for w in tnorm.split() if len(w)>3)
+    for s in studies:
+        idm=s.get("protocolSection",{}).get("identificationModule",{})
+        ct_t=_norm((idm.get("briefTitle","") or "")+" "+(idm.get("officialTitle","") or ""))
+        ov=len(tw & set(ct_t.split()))
+        if ov>bestov and ov>=max(3,int(0.45*len(tw))): bestov=ov; best=idm.get("nctId","")
+    return best
+
+def resolve_arms(cache, mailto="test@example.com"):
+    """⑤b CT.gov 臂解析（逐成分）：對候選中的 RCT 報告，(1) 摘要無 NCT 者以標題搜 CT.gov 補 NCT，
+    (2) 對每個 NCT 抓臂/介入逐成分判 has_triple/has_dual_ll。寫 nct_arms.json、uid_resolved.json、nct_names.json。
+    取代舊 enrich『整串三合一名比對』（CT.gov 介入多為成分藥分項→整串比對全部誤判非三合一）。"""
+    cache=Path(cache)
+    content={c["uid"]:c for c in json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8"))}
+    g4ab=json.loads((cache/"g4_abstracts.json").read_text(encoding="utf-8")) if (cache/"g4_abstracts.json").exists() else {}
+    ver=json.loads((cache/"g6_verified.json").read_text(encoding="utf-8"))
+    union={r["uid"]:r for r in json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8"))}
+    ncts=set(); uid_resolved={}; rct_uids=[]
+    for v in ver:
+        if v.get("verdict")!="VERIFIED": continue
+        uid=v.get("uid"); ab=(content.get(uid,{}).get("abstract") or "") or (g4ab.get(uid) or ""); title=v.get("title") or ""
+        text=title+" "+ab; pt=v.get("pubtype_full","") or ""
+        found=[ "NCT"+re.sub(r"\D","",m) for m in NCTRE.findall(text)]
+        u=union.get(uid,{})
+        if u.get("nct"): found.append(u["nct"])
+        for n in found: ncts.add(n)
+        # RCT-ish 報告且無 NCT → 記下待標題搜尋
+        is_rct = has(pt,"Randomized Controlled Trial","Controlled Clinical Trial") or (R_RCT.search(text) and not R_OBS.search(text))
+        if is_rct and not found:
+            rct_uids.append((uid,title))
+    # 標題搜尋補 NCT（限 RCT 無 NCT 者）
+    for uid,title in rct_uids:
+        n=_resolve_nct_by_title(title, mailto)
+        if n: uid_resolved[uid]=n; ncts.add(n)
+        time.sleep(0.05)
+    names={}; arms={}
+    for k in sorted(ncts):
+        a=_ct_arms(k, mailto)
+        if not a: continue
+        names[k]=a["acronym"] or k; arms[k]=a
+        time.sleep(0.05)
+    json.dump(names,open(cache/"nct_names.json","w",encoding="utf-8"),ensure_ascii=False)
+    json.dump(arms,open(cache/"nct_arms.json","w",encoding="utf-8"),ensure_ascii=False)
+    json.dump(uid_resolved,open(cache/"uid_resolved.json","w",encoding="utf-8"),ensure_ascii=False)
+    nt=[k for k,a in arms.items() if a["has_triple"]]
+    print(f"⑤b CT.gov 臂解析：NCT {len(ncts)}｜抓到臂 {len(arms)}｜含三合一臂 {len(nt)}｜"
+          f"三合一∧雙支擴對照(核心) {sum(1 for a in arms.values() if a['has_triple'] and a['has_dual_ll'])}｜"
+          f"標題補回 NCT {len(uid_resolved)}")
+
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--cache",required=True); ap.add_argument("--out",default="g7_units.json")
-    ap.add_argument("--enrich",action="store_true",help="先線上查 CT.gov 補 NCT 名＋以 g0 I 軸判介入範圍(寫 nct_names/nct_triple)")
+    ap.add_argument("--enrich",action="store_true",help="先線上 CT.gov 逐成分臂解析(寫 nct_arms/uid_resolved/nct_names)")
     a=ap.parse_args()
-    if a.enrich: enrich(a.cache)
+    if a.enrich: resolve_arms(a.cache)
     o=classify(a.cache,a.out)
     print(f"⑦ 精確分類（n={o['n']}，其中無摘要僅標題 {o['title_only_no_abstract']}）：")
     for k,v in sorted(o["buckets"].items(),key=lambda x:-x[1]): print(f"  {v:>5}  {k}")
