@@ -74,6 +74,13 @@ R_PROTO_STRONG = re.compile(r"\bstudy protocol\b|\bprotocol for a\b|\btrial prot
 R_ICS_WD = re.compile(r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of fluticasone|"
     r"de-?escalat|step(ping)?[\s\-]?down|stepwise (withdrawal|removal)|discontinu(e|ation|ing) (of )?(the )?(ics|inhaled cortico)|"
     r"removing (the )?inhaled cortico|direct (de-escalation|change) from (long-term )?triple", re.I)
+# ★ ICS 退階『核心』嚴格訊號：撤除/退階字眼須與 ICS／吸入糖皮質素鄰近共現（或明寫『triple→雙支擴 de-escalation』）。
+#   避免泛『step-up/step-down 管理策略』試驗（如 symptom-based management）被 R_ICS_WD 的裸『step-down』誤判為核心。
+ICS_WD_STRICT = re.compile(
+    r"withdrawal of (inhaled )?(gluco)?cortico-?steroid|\bics withdrawal\b|withdrawal of (inhaled )?glucocorticoid|"
+    r"(withdraw\w*|de-?escalat\w*|discontinu\w*|remov\w*|step(ping)?[\s\-]?down)[^.;]{0,40}\b(ics|inhaled cortico\w*|inhaled glucocortico\w*|inhaled steroid|fluticasone|budesonide|beclomet\w*)\b|"
+    r"\b(ics|inhaled cortico\w*|inhaled glucocortico\w*)\b[^.;]{0,40}(withdraw\w*|de-?escalat\w*|discontinu\w*|remov\w*|step(ping)?[\s\-]?down)|"
+    r"de-?escalat\w*[^.;]{0,40}(from )?(long-term )?triple|triple[^.;]{0,40}de-?escalat", re.I)
 R_ECON  = re.compile(r"cost-?(effectiveness|utility|benefit|saving|minimi)|budget impact|economic (evaluation|model|analysis)|\bqaly|pharmacoeconomic|incremental cost", re.I)
 R_REVIEW= re.compile(r"\breview\b|narrative|reappraisal|perspective|editorial|commentary|update on|state of the art|in (the )?management of|pharmacotherap|expert opinion|where are we", re.I)
 # 對照臂：三合一 vs 雙支擴 LABA/LAMA（讀摘要方法學；此處允許 umec/vil 等藥對作為『對照臂』訊號）
@@ -212,37 +219,47 @@ def classify(cache, out="g7_units.json"):
                 if sl: trial=sl; row["linked_by"]="signature"
             arm=nct_arms.get(key or "")  # CT.gov 逐成分臂資料
             if arm and not trial: trial=arm.get("acronym") or key
-            row["trial"]=trial or (key or "(未辨識)"); row["nct"]=key
+            # ★ 不留『(未辨識)』：未連到試驗名者一律以 NCT 或 PMID 當穩定識別（每筆自成一 Study）。
+            row["trial"]=trial or key or ("研究-PMID" + str(v.get("pmid") or "?")); row["nct"]=key
             row["comparator_LABA_LAMA"]=dual
             doi_l=str(v.get("doi") or "").lower()
             is_conf = bool(R_CONF_DOI.search(doi_l)) or bool(R_CONF_TITLE.search(title))
-            # 決策優先序：樞紐權威表 → CT.gov 逐成分臂 → 會議摘要 → 標題/摘要 regex
+            # 決策優先序（★ 定版：每筆 RCT 一律給出確定核心/背景，不留『待確認』灰色地帶）：
+            #   樞紐權威表 → ICS 退階設計 → CT.gov 雙支擴對照臂(has_dual_ll，可靠) → CT.gov 無三合一臂 →
+            #   會議摘要 → 其餘三合一 RCT 一律背景(具體理由：對照非雙支擴/未經權威確認)。
+            #   核心『只』由 樞紐表／ICS退階／CT.gov has_dual_ll 三條正向確認來源背書；
+            #   CT.gov has_triple=True 不採（跨臂/安慰劑描述污染假陽，如 ILLUMINATE/POWER）。
             if trial in PIVOTAL_LABALAMA_ARM:
                 row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
                 row["core_basis"]="pivotal_trial_design"
+            elif trip and ICS_WD_STRICT.search(dtext):
+                # ICS 退階/移除設計（三合一→雙支擴，如 WISDOM/SUNSET）＝核心子型；下游 meta 不與起始混算。
+                # ★ 須『撤除/退階』與『ICS/吸入糖皮質素』鄰近共現才算（避免泛『step-down 管理策略』如
+                #   symptom-based step-up/step-down 試驗被誤判為 ICS 退階核心）。
+                row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["core_basis"]="ICS_withdrawal"
+                row["design_subtype"]="ICS-withdrawal"
             elif arm and not arm.get("has_triple"):
-                # CT.gov 臂『可靠確認無三合一臂』（absence 判定不受跨臂/安慰劑描述污染影響）→ 背景對照側。
                 design="背景:對照側RCT(無三合一臂)"; row["design"]=design; row["unit"]=""
                 row["core_basis"]="ctgov_arms(no_triple)"; row["nct"]=key
                 buckets[design]+=1; rows.append(row); continue
             elif is_conf:
                 row["unit"]="待評估:會議摘要(未完整發表)"; row["design"]="背景:會議摘要(待評估)"
                 row["core_basis"]="conference_abstract_awaiting"
-            else:
-                # 核心必須由『樞紐權威表』背書。CT.gov has_triple=True 不可靠（安慰劑/比較組描述列他臂藥→
-                # 跨臂污染假陽，如 ILLUMINATE/POWER），故不得僅憑 arm.has_triple 或 regex 逕判核心。
-                # 含三合一概念但非樞紐 → 背景待 Phase 0 覆核；其餘照 trip 分流。皆不入核心、亦不留『未辨識』。
-                if trip:
-                    design="背景:三合一RCT(非樞紐,待Phase0覆核對照臂)"
-                else:
-                    design="背景:對照側RCT(無三合一臂)"
-                row["design"]=design; row["unit"]=""
+            elif trip:
+                # 三合一 RCT 但對照臂未經 樞紐表/ICS退階/CT.gov has_dual_ll 任一正向確認為雙支擴
+                # → 確定歸背景(本題非核心)，具體理由標明；不留『待覆核』灰色桶。
+                design="背景:三合一RCT(對照非雙支擴或未確認,本題非核心)"; row["design"]=design; row["unit"]=""
+                row["core_basis"]="not_confirmed_dual_comparator"
                 buckets[design]+=1; rows.append(row); continue
-            # ★ ICS 退階/移除設計標記：凡判為核心(含樞紐)且命中 ICS-withdrawal 訊號者，改記為獨立子型，
-            #   下游 meta 不得與『起始三合一 vs 雙支擴』混算（回答的是『能否撤 ICS』這個不同臨床問題）。
-            if str(row.get("unit","")).startswith("核心") and R_ICS_WD.search(dtext):
+            else:
+                design="背景:對照側RCT(無三合一臂)"; row["design"]=design; row["unit"]=""
+                buckets[design]+=1; rows.append(row); continue
+            # ★ ICS 退階/移除設計標記：非樞紐核心若命中 ICS-withdrawal 訊號→改記獨立子型（樞紐試驗為起始設計，
+            #   其子報告即使摘要提及 withdrawal 亦不得改判，避免如 IMPACT 死亡率報告被誤標退階）。
+            if (str(row.get("unit","")).startswith("核心") and row.get("core_basis")!="pivotal_trial_design"
+                    and row.get("design_subtype")!="ICS-withdrawal" and R_ICS_WD.search(dtext)):
                 row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["design_subtype"]="ICS-withdrawal"
-            studies[trial or "(未辨識試驗)"].append(row)
+            studies[trial or ("研究-PMID"+str(v.get("pmid") or "?"))].append(row)
             buckets[row["unit"]]+=1
         else:
             buckets[design]+=1

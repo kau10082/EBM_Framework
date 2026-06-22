@@ -55,4 +55,14 @@
    - 「實際納入分析」定版＝168：①4 樞紐 RCT(43 報告，RoB+outcome) ②105 SR/MA/NMA(主要綜合證據，GRADE pooled) ③20 候選三合一 RCT(待 Phase 0 全文確認對照臂)。背景 427 留在 g7_units／報告分流統計供追溯，不交接、不計入「納入分析」。
    - 建議正式審查：可加一條機器 gate『_corpus_seed.json 不得含 verdict=background』＋『included_for_analysis.total == corpus_seed 篇數』把「交接包＝納入分析集、且與 PRISMA 末步一致」釘死（本輪以正確預設＋斷言保證）。
 
+✅ 已修：**⑤b 不得有『候選/待確認』灰色地帶——每筆三合一 RCT 一律確定核心或背景**（使用者本輪糾正；已改 `classify_units.py`）。
+   - 問題：上一版把對照臂未能確認者丟『背景:三合一RCT(非樞紐,待Phase0覆核)』灰色桶＝灰色地帶。使用者定版：不應有此類東西。
+   - 本輪修改 `classify_units.py`（核心判定改為『正向確認制』，無灰色、無未辨識）：
+     * **核心『只』由三條正向來源背書**：①curated `PIVOTAL_LABALAMA_ARM`（IMPACT/ETHOS/KRONOS/TRIBUTE+ETHOS-ext）②ICS 退階設計（嚴格 `ICS_WD_STRICT`：撤除/退階須與 ICS 鄰近共現，修掉泛 step-down 管理策略誤判，如 30147307 退背景；保 WISDOM/SUNSET）。
+     * **移除 `ctgov_dual_arm` 自動判核心**：實測 CT.gov `has_triple`／`trip` 皆有假陽（安慰劑/比較組 description 列他臂藥→跨臂污染：ILLUMINATE、POWER；`has_dual_ll` 又會誤收純雙支擴試驗 27028749 dual-vs-dual）→ 不可靠，不用於『指派』核心；CT.gov 只用於可靠的『負向』方向（`has_triple=False`→背景對照側）＋補 NCT/命名。
+     * **其餘三合一 RCT 一律確定歸背景**：『背景:三合一RCT(對照非雙支擴或未確認,本題非核心)』，不留待覆核。
+     * **消除『(未辨識)』**：核心未連到試驗名者改以 NCT 或 `研究-PMID<pmid>` 穩定識別。
+   - 結果：核心 46（43 樞紐＋3 ICS 退階：WISDOM×2、SUNSET）｜灰色待覆核 0｜未辨識 0；corpus_seed=151（46 核心＋105 SR/MA，全 included/full），background 444 不交接；PRISMA included 151＝corpus_seed 151（斷言通過）；gate_guard 全綠。
+   - 後果說明（安全傾向）：核心改『正向確認制』後，極少數『非樞紐、CT.gov 無法可靠確認對照臂』的真三合一-vs-雙支擴 RCT（如 BGF 影像子研究 34210340）會落背景而非核心；最壞後果＝下游少一兩篇支持性子研究，pivotal 主證據(IMPACT/ETHOS/KRONOS/TRIBUTE)＋105 SR/MA 不受影響。寧可如此，也不要灰色地帶或假陽核心。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
