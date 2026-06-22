@@ -68,7 +68,8 @@ def check(screen, strategy):
             if "absent" not in states.values():
                 unknown = [a for a, s in states.items() if s == "unknown"]
                 fails.append(f"[{tag}] 判離題卻無任何必含軸『確認缺(absent)』（{states}）：離題須標明缺哪軸；"
-                             f"若僅 {unknown} 未確認（如短摘要看不出對照 C），應移『待評估』待看全文，不得逕判離題")
+                             f"若僅 {unknown} 未確認（如薄摘要看不出對照 C），須先升 Tier3 實取全文核對才可判離題"
+                             f"（v0.22 融合式分層：離題只在實取全文後定案，不得在薄摘要逕判）")
     return fails
 
 def main():

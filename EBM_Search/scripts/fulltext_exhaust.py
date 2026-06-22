@@ -13,10 +13,14 @@ fulltext_exhaust.py — ②c 的『完整實抓解析』工具（移到「待評
   (3) PMC fullTextXML（EuropePMC 以 pmid/doi 找 pmcid → 取 XML 去標籤）
   (4) Unpaywall 全部 oa_locations（url_for_pdf / url）**實際下載**：
         PDF → pypdf/fitz 抽文字；HTML → 去標籤取內文
-全部失敗 → 標 awaiting，並寫滿『可稽核的實抓證明』供 awaiting_channels_check 核對：
+全部失敗 → 標 content_status=awaiting，並寫滿『可稽核的實抓證明』供 gate_guard 核對：
   abstract_checked / online_fulltext_checked / unpaywall_checked / oa_fetch_attempted /
   fulltext_parse_attempted=True / oa_urls_tried=[...實際試過的URL] / channels_exhausted=True，
   並標 doc_type（correspondence/editorial＝來源本無摘要；unresolved＝抓取失敗）。
+
+force=True（融合式分層篩選 Tier 3 用）：即使已有 abstract 也不早停，強制實取全文以取得『比摘要更多
+的內容』——因『離題』只能在實取全文後定案；取得更長正文則升級 fulltext_excerpt，否則保留 abstract
+並照樣蓋 fulltext_parse_attempted（證明已試到全文）。
 
 用法（CLI）：
   python fulltext_exhaust.py --in g2c_need_content.json --out g2c_resolved.json [--min-chars 250]
@@ -160,13 +164,15 @@ def _doc_type(rec):
         return "correspondence/editorial(來源本無摘要)"
     return "unresolved"
 
-def resolve_one(rec, min_chars=250, mail=None, sleep=0.0):
-    """原地更新單筆 rec。回傳 True=有可篩內容(have)、False=awaiting。"""
+def resolve_one(rec, min_chars=250, mail=None, sleep=0.0, force=False):
+    """原地更新單筆 rec。回傳 True=有可篩內容(have)、False=awaiting。
+    force=True：即使已有 abstract 也不早停，強制實取全文（Tier 3：離題定案前須試到全文）。"""
     mail = mail or _mail()
-    if rec.get("abstract") and len(rec["abstract"]) >= min_chars:
+    if not force and rec.get("abstract") and len(rec["abstract"]) >= min_chars:
         rec["content_status"] = "have"
         rec.setdefault("content_via", "abstract")
         return True
+    had_abstract = bool(rec.get("abstract") and len(rec["abstract"]) >= min_chars)
     rec["abstract_checked"] = True
     doi = _norm_doi(rec.get("doi"))
     pmid = str(rec.get("pmid")) if rec.get("pmid") else None
@@ -216,9 +222,15 @@ def resolve_one(rec, min_chars=250, mail=None, sleep=0.0):
                 if sleep: time.sleep(sleep)
                 return True
     rec["oa_urls_tried"] = tried
-    # 全部管道失敗 → awaiting（已留可稽核的實抓證明）
-    rec["content_status"] = "awaiting"
     rec["channels_exhausted"] = True
+    if force and had_abstract:
+        # Tier 3 強制實取但取不到更長正文：保留既有 abstract 當可篩內容（已蓋實抓證明旗標）
+        rec["content_status"] = "have"
+        rec.setdefault("content_via", "abstract")
+        if sleep: time.sleep(sleep)
+        return True
+    # 全部管道失敗且無既有摘要 → awaiting（已留可稽核的實抓證明）
+    rec["content_status"] = "awaiting"
     rec["doc_type"] = _doc_type(rec)
     if sleep: time.sleep(sleep)
     return False

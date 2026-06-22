@@ -84,143 +84,99 @@ def _norm_doi(d):
     import re
     d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
 
-def check_unpaywall_coverage(cache):
-    """Gate ②c：每筆『非全文且有 DOI』必須已過 Unpaywall（**只做覆蓋稽核**）。
-    註：是否『其實有 OA 卻誤判取不到』屬全文取得性判定——OA 旗標 ≠ 抓得到（IMPACT/ETHOS 旗標 OA 卻 403）。
-    本關在『內容階段』無從得知實抓結果（fetch_failed/fulltext_verified 是後段 verify_have_fetchable 才寫進
-    seed.json 的欄位、g2c_FINAL_content.json 沒有），故不在此用 OA 旗標反推分類對錯——那是 check_have_verified
-    /verify_have_fetchable 實抓蓋章的職責。②c 只查『Unpaywall 有沒有跑』，避免關責外溢、與 have 守門打架。"""
-    content = _load(cache / "g2c_FINAL_content.json")
-    if content is None:
-        return None  # 此關尚未到
-    up = _load(cache / "g2c_unpaywall.json") or {}
-    fails = []
-    not_checked = []
-    for c in content:
-        cls = c.get("class") or ""
-        if cls.startswith("有全文"):
-            continue
-        if (c.get("abstract") or "").strip():
-            continue  # 有摘要＝已有可篩內容（abstract-first）：②c 不在此抓全文，亦無『宣稱無全文』之虞→不強制 Unpaywall（全文留待 ③ 後納入集 verify_have_fetchable）
-        doi = _norm_doi(c.get("doi"))
-        if not doi:
-            continue  # 無 DOI 無法 Unpaywall（非失敗）
-        if up.get(doi) is None:
-            not_checked.append(doi)
-    if not_checked:
-        fails.append(f"②c 有 {len(not_checked)} 筆『非全文且有 DOI』未過 Unpaywall（漏跑）：{not_checked[:5]}{'…' if len(not_checked)>5 else ''}")
-    return fails
-
-def check_waiting_fulltext(cache):
-    """Gate ③：判『待評估(無內容)』者，必須真的無任何全文路徑可取；
-    若還有 PMCID / Unpaywall PDF / OA 旗標未抓就丟待評估 → FAIL（全文有無以實際抓取為準）。"""
+def check_excl_requires_fulltext(cache):
+    """融合式分層篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
+    Tier 1/2（摘要／CT.gov 登錄／AI 合成）早停。故每筆 verdict=離題 必須帶 tier==3 或
+    fulltext_parse_attempted=true（證明已升級到實取全文才判離題），否則＝在薄摘要/登錄就把
+    『可能切題』者誤殺 → FAIL（高 recall：拼到全文才可判離題；2026-06 使用者定版流程）。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
-        return None  # 尚未到/未產最終 g3
-    fails = []
-    leaked = []
+        return None
+    bad = []
     for r in g3:
-        v = r.get("verdict") or ""
-        if not v.startswith("待評估"):
+        if (r.get("verdict") or "") != "離題":
             continue
-        # 仍有全文路徑卻判待評估＝漏抓
-        if r.get("pmcid") or r.get("inPMC") or r.get("oa_pdf") or r.get("oa_url") or r.get("isOA") == "Y" \
-           or str(r.get("class") or "").startswith("有全文"):
-            # 唯一放行：已『窮盡所有管道』或『待人工補全文』的明確標記；
-            # 單純一次『抓取失敗(404/逾時/403)』不算——有路徑就要重試(EuropePMC→NCBI→Unpaywall→人工)
-            if r.get("channels_exhausted") or ("待人工補全文" in v) or ("已窮盡管道" in v):
-                continue
-            leaked.append((r.get("title") or r.get("pmid") or r.get("doi") or "?")[:50])
-    if leaked:
-        fails.append(f"③ 有 {len(leaked)} 筆有全文路徑(PMC/OA/Unpaywall)卻丟待評估、未窮盡抓取：{leaked[:5]}{'…' if len(leaked)>5 else ''}（單次抓取失敗≠無內容；須重試 EuropePMC→NCBI→Unpaywall→人工，或明標 channels_exhausted/待人工補全文）")
-    return fails
+        if r.get("tier") == 3 or r.get("fulltext_parse_attempted") or r.get("fulltext_checked"):
+            continue
+        # 例外：登錄試驗(CT.gov)／AI 合成腿——其 Condition+InterventionName／合成摘要即『終端結構化內容』，
+        # 無對應全文可再取（結果論文常不存在）；以該內容判離題即定案，不適用 Tier3 全文升級要求。
+        if str(r.get("content_status") or "") in ("registry", "ai_summary") or r.get("nct") \
+           or str(r.get("fulltext_channel") or "") == "registry":
+            continue
+        bad.append((r.get("title") or r.get("uid") or "?")[:50])
+    if bad:
+        return [f"③ 有 {len(bad)} 筆判『離題』但未升級到 Tier3 實取全文(tier==3/fulltext_parse_attempted)："
+                f"離題只能在實取全文後定案，不得在薄摘要早停判離題（登錄/AI 結構化內容例外）：{bad[:5]}"]
+    return []
 
-def check_screen_awaiting_resolved(cache):
-    """Gate ③『待評估須先核對全文、不得只憑摘要』（2026-06 使用者糾正）：
-    進 ③ 的候選都已有內容（摘要，且多數有全文），③ 必須用全文/摘要做出『切題/離題』二元判定；
-    僅當『實際抓過全文仍無法核對』才可掛 ③待評估。故 g2c_awaiting_classification.json 內每筆
-    若有 doi/pmid/oa_url（有全文路徑）卻無 fulltext_checked／oa_fetch_attempted／channels_exhausted 證明
-    → FAIL（代表只憑摘要就punt成待評估，沒去抓全文核對對照 C）。
-    另（2026-06 使用者再糾正，兩段式）：判準＝『**我能否線上閱讀到全文**』（只要沒有防爬蟲，理論上 PMC/EPMC
-    fullTextXML、OA HTML 都讀得到）——
-      (a)『摘要或線上全文任一可讀取 → 必進③』；只有『摘要與線上全文都讀不到』才 awaiting。
-      (b) 故 awaiting 若帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url/is_oa)，
-          必須附『**實際嘗試線上閱讀且失敗**』的證明 `online_read_attempted=true`（防爬蟲/僅PDF無HTML/非OA-PMC
-          citation-only 等真讀不到）——否則＝沒真的去讀就 punt → FAIL。
-          （先前 check 容許 channels_exhausted 一律豁免，正是這個漏洞讓 596 筆有線上全文者被誤丟 awaiting；
-            但反過來『有 OA 旗標就強迫進③』又會把防爬蟲擋住、真讀不到者硬塞進③——故以實際讀取嘗試為準。）"""
-    aw = _load(cache / "g2c_awaiting_classification.json")
-    if aw is None:
+def check_nocontent_bucket(cache):
+    """融合式分層篩選：『全文及摘要皆無』桶必須真的三層皆取不到可判內容——每筆須帶
+    fulltext_parse_attempted=true ∧ channels_exhausted=true，且無 abstract/全文摘錄、非登錄(registry)、
+    非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。取代舊『待評估雙桶』。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
         return None
-    def _yes(v): return str(v if v is not None else "").strip().lower() in ("y", "yes", "true", "1")
+    bad = []
+    for r in g3:
+        if (r.get("verdict") or "") != "全文及摘要皆無":
+            continue
+        has_content = bool((r.get("abstract") or "").strip()) or bool((r.get("fulltext_excerpt") or "").strip()) \
+                      or str(r.get("content_status") or "") in ("registry", "ai_summary") \
+                      or str(r.get("class") or "").startswith(("登錄", "有"))
+        proven = r.get("fulltext_parse_attempted") and r.get("channels_exhausted")
+        if has_content or not proven:
+            bad.append((r.get("title") or r.get("uid") or "?")[:50])
+    if bad:
+        return [f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
+                f"(fulltext_parse_attempted∧channels_exhausted)：有內容者須判切題/離題：{bad[:5]}"]
+    return []
+
+def check_screen_partition(cache):
+    """融合式分層篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：
+    g3 含全部 ②b 倖存者，每筆 verdict ∈ {切題, 離題, 全文及摘要皆無}。以 uid 獨立重算：
+    uid 穩定唯一（防坍縮鍵污染）、verdict 合法、無重複；若有 g2b_screen.json 則與 ②b kept 對帳（恰覆蓋）。
+    來源證明：切題/離題 無 abstract/全文摘錄且非登錄/AI 者，其 uid 須在 g3_fetched_by_uid 帶實抓解析證明。"""
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None
+    from collections import Counter
+    VERD = {"切題", "離題", "全文及摘要皆無"}
     fails = []
-    for a in aw:
-        tag = a.get("paper_id") or a.get("uid") or a.get("title")
-        has_path = a.get("doi") or a.get("pmid") or a.get("oa_url") or a.get("pmcid")  # 全文路徑：ID/OA/PMC（審查 🔴🟡 補強）
-        attempted = a.get("fulltext_checked") or a.get("oa_fetch_attempted") or a.get("channels_exhausted")
-        if has_path and not attempted:
-            fails.append("%s 列 ③待評估但有 doi/pmid/oa_url 卻無全文核對證明(fulltext_checked/oa_fetch_attempted)："
-                         "③候選已有內容，須抓全文核對對照 C 後做出切題/離題，不得只憑摘要 punt 成待評估" % tag)
-        # ★ 線上全文可得者不得列 awaiting，除非『實際嘗試線上閱讀且失敗』(防爬蟲/僅PDF/非OA-PMC)。
-        confirmed_online = (a.get("pmcid") or a.get("oa_url") or _yes(a.get("inEPMC"))
-                            or _yes(a.get("isOpenAccess")) or _yes(a.get("hasPDF")) or a.get("is_oa") is True)
-        read_failed = _yes(a.get("online_read_attempted")) or _yes(a.get("online_fulltext_unreadable")) \
-                      or _yes(a.get("fulltext_read_failed"))
-        if confirmed_online and not read_failed:
-            fails.append("%s 列待評估卻帶『已確認的線上全文/OA 路徑』(pmcid/inEPMC/isOpenAccess/hasPDF/oa_url) 卻無"
-                         "『實際嘗試線上閱讀且失敗』證明(online_read_attempted)：判準是『我能否線上讀到全文』——"
-                         "讀得到就進③，讀不到(防爬蟲/僅PDF/非OA)須真的試過才可列待評估，不得只憑旗標 punt" % tag)
-    return fails
-
-def check_partition_provenance(cache):
-    """Gate ③ 反坍縮：以 uid 獨立重算，抓 key-collision 造成的污染/漏失。
-    (1) 分割閉合：screened ⊎ awaiting 的 uid 必須『無重複、互斥、恰覆蓋』base 全部 uid。
-    (2) 已篩來源證明：每筆 screened 的 base 紀錄必須真的有 abstract 或其 uid 在 fetched 表中
-        ——否則代表是被坍縮鍵污染進來的『無內容卻拿到判定』。"""
-    base = _load(cache / "g2c_FINAL_content.json")
-    scr = _load(cache / "g3_FINAL_screen.json")
-    awa = _load(cache / "g2c_awaiting_classification.json")
-    if base is None or scr is None or awa is None:
-        return None
+    uids = [r.get("uid") for r in g3]
+    if any(u is None for u in uids):
+        return ["g3_FINAL_screen.json 有紀錄缺 uid：無法以唯一鍵防坍縮（請先 uid 化）"]
+    if len(uids) != len(set(uids)):
+        dup = [u for u, n in Counter(uids).items() if n > 1]
+        fails.append(f"g3 uid 不唯一（{len(uids)}→{len(set(uids))}）：坍縮鍵污染 dup={dup[:5]}")
+    badv = [r.get("uid") for r in g3 if (r.get("verdict") or "") not in VERD]
+    if badv:
+        fails.append(f"g3 有 {len(badv)} 筆 verdict 不在 {{切題,離題,全文及摘要皆無}}：{badv[:5]}")
+    g2b = _load(cache / "g2b_screen.json")
+    if isinstance(g2b, dict) and g2b.get("kept") is not None:
+        kept = {r.get("uid") for r in g2b["kept"]}
+        sset = set(uids)
+        miss = kept - sset; extra = sset - kept
+        if miss: fails.append(f"②b kept 有 {len(miss)} 筆未進 ③ 分類（漏失）")
+        if extra: fails.append(f"③ 有 {len(extra)} 個 uid 不在 ②b kept（憑空冒出）")
+    # 來源證明：切題/離題 無 abstract/全文摘錄且非登錄/AI 者，uid 須在 fetched 表帶實抓解析證明
     fetched = _load(cache / "g3_fetched_by_uid.json") or {}
-    fails = []
-    base_by_uid = {b.get("uid"): b for b in base}
-    if any(b.get("uid") is None for b in base):
-        return ["g2c_FINAL_content.json 有紀錄缺 uid：無法以唯一鍵防坍縮（請先 uid 化）"]
-    if len(base_by_uid) != len(base):
-        fails.append(f"base uid 不唯一（{len(base)} 筆但只有 {len(base_by_uid)} 個 uid）：uid 必須穩定唯一")
-    su = [s.get("uid") for s in scr]; au = [a.get("uid") for a in awa]
-    sset, aset = set(su), set(au)
-    if len(su) != len(sset): fails.append(f"screened uid 有重複（{len(su)}→{len(sset)}）")
-    if len(au) != len(aset): fails.append(f"awaiting uid 有重複（{len(au)}→{len(aset)}）")
-    overlap = sset & aset
-    if overlap: fails.append(f"同一 uid 同時在 screened 與 awaiting（{len(overlap)} 筆）：分割不互斥")
-    missing = set(base_by_uid) - sset - aset
-    extra = (sset | aset) - set(base_by_uid)
-    if missing: fails.append(f"有 {len(missing)} 筆 base uid 未被分類（漏失）")
-    if extra: fails.append(f"有 {len(extra)} 個 uid 不在 base（憑空冒出）")
-    # (2) provenance：screened 每筆必須有自己的『實際解析到的內容』（非只 OA 旗標/登錄表的空殼）
-    #     —— 無 abstract 者，其 uid 必須在 fetched 表中且帶『已解析證明』(text_len≥MIN 或 verified 旗標)。
-    #     (2026-06 使用者糾正 Bug：②c 只憑 OA/PMC 旗標標 have、未實抓解析，無內容卻漏進 ③；
-    #      機器看守改為要求 fetched 條目證明真的抓到可解析內容，否則該筆應在 ②c 待評估。)
     MIN_PARSED = 1500
     no_content = []
-    for s in scr:
-        b = base_by_uid.get(s.get("uid"))
-        if b is None: continue
-        has_ab = bool((b.get("abstract") or "").strip())
-        if has_ab: continue
-        f = fetched.get(s.get("uid"))
-        ok = isinstance(f, dict) and (
-            (isinstance(f.get("text_len"), int) and f["text_len"] >= MIN_PARSED)
-            or f.get("verified") or f.get("fulltext_verified")
-            or f.get("channel") == "registry")          # 登錄試驗＝結構化內容、無自由文字摘要
+    for r in g3:
+        if (r.get("verdict") or "") not in ("切題", "離題"):
+            continue
+        if (r.get("abstract") or "").strip() or (r.get("fulltext_excerpt") or "").strip():
+            continue
+        if str(r.get("content_status") or "") in ("registry", "ai_summary") or str(r.get("class") or "").startswith(("登錄", "有")):
+            continue
+        f = fetched.get(r.get("uid"))
+        ok = isinstance(f, dict) and ((isinstance(f.get("text_len"), int) and f["text_len"] >= MIN_PARSED)
+              or f.get("verified") or f.get("fulltext_verified") or f.get("channel") == "registry")
         if not ok:
-            no_content.append((b.get("title") or b.get("uid") or "?")[:45])
+            no_content.append((r.get("title") or r.get("uid") or "?")[:45])
     if no_content:
-        fails.append(f"③ 有 {len(no_content)} 筆 screened 無 abstract 且 fetched 表未證明實抓解析到內容"
-                     f"（text_len≥{MIN_PARSED}/verified）：②c 須實抓+解析全文，無可解析內容者應在 ②c 判待評估、"
-                     f"不得只憑 OA/PMC 旗標標 have 漏進 ③：{no_content[:5]}")
+        fails.append(f"③ 有 {len(no_content)} 筆切題/離題無 abstract 且無實抓解析證明：無內容卻拿到判定，"
+                     f"應判『全文及摘要皆無』或補實抓：{no_content[:5]}")
     return fails
 
 def check_have_verified(cache):
@@ -332,41 +288,6 @@ def check_citation_screen(cache):
     except Exception as e:
         return [f"citation_screen_check 載入失敗：{str(e)[:80]}"]
 
-def check_awaiting_channels(cache):
-    """鐵律：待評估＝摘要／線上全文(PMC/EPMC)／Unpaywall 三管道全失敗才成立（②c）。"""
-    aw = _load(cache / "g2c_awaiting_classification.json")
-    if aw is None:
-        return None
-    try:
-        import awaiting_channels_check
-        return awaiting_channels_check.check(aw)
-    except Exception as e:
-        return [f"awaiting_channels_check 載入失敗：{str(e)[:80]}"]
-
-def check_awaiting_stage(cache):
-    """鐵律：待評估只在 ②c(Stage A)產生；③(g3_FINAL_screen) 必須切題/離題二元，不得誤生待評估。"""
-    g3 = _load(cache / "g3_FINAL_screen.json")
-    if g3 is None:
-        return None
-    try:
-        import awaiting_stage_check
-        return awaiting_stage_check.check(g3)
-    except Exception as e:
-        return [f"awaiting_stage_check 載入失敗：{str(e)[:80]}"]
-
-def check_screen_order(cache):
-    """Bug3：③嚴格篩(g3)不得早於②c全文取得(g2c)與 Stage A 交接(_stage1_corpus)。
-    見 g3_FINAL_screen.json 卻缺前置產物＝順序顛倒。"""
-    g3 = _load(cache / "g3_FINAL_screen.json")
-    if g3 is None:
-        return None
-    fails = []
-    if _load(cache / "g2c_FINAL_content.json") is None:
-        fails.append("③嚴格篩產物存在，但②c全文取得產物 g2c_FINAL_content.json 不存在：③不得早於②c（順序顛倒）")
-    if _load(cache / "_stage1_corpus.json") is None:
-        fails.append("③嚴格篩產物存在，但 Stage A 交接 _stage1_corpus.json 不存在：須先過 Stage A→B 邊界才可③")
-    return fails
-
 def check_verification_coverage(cache):
     """Bug6：⑦交接/報告前，included＋background 每筆都必須過⑥交叉驗證（在 g6_verified.json 有紀錄）。"""
     seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
@@ -408,17 +329,6 @@ def check_pdf_emitted(cache):
     if not p.exists() or p.stat().st_size < 1024:
         return [f"登記的 Phase1 PDF 不存在或過小(<1KB)：{pdf}"]
     return []
-
-def check_stage1(cache):
-    """Stage A→B 邊界守門：對 _stage1_corpus.json 跑 stage1_check（全文狀態resolved/待評估不混入候選/取盡/互斥）。"""
-    data = _load(cache / "_stage1_corpus.json")
-    if data is None:
-        return None
-    try:
-        import stage1_check
-        return stage1_check.check(data)
-    except Exception as e:
-        return [f"stage1_check 載入失敗：{str(e)[:80]}"]
 
 def check_no_retracted(cache):
     """撤稿管控：⑥交叉驗證標 RETRACTED 者，嚴禁出現在 納入/背景/報告表/Zotero payload/交接包。
@@ -503,23 +413,18 @@ def _safe(name, fn, cache):
 def _all_checks(cache):
     return [_safe("Gate⓪ 策略經使用者核准才可檢索(防搶跑)", check_strategy_approved, cache),
             _safe("有全文須實抓驗證", check_have_verified, cache),
-            _safe("Stage A→B 邊界", check_stage1, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
             _safe("Gate① 四軸覆蓋(query 展開)", check_axis_coverage, cache),
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
-            _safe("待評估只在②c(③不得誤生待評估)", check_awaiting_stage, cache),
-            _safe("②c→③ 順序(③不得早於②c)", check_screen_order, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
             _safe("Phase1 PDF 實體產出", check_pdf_emitted, cache),
-            _safe("Gate②c Unpaywall 覆蓋", check_unpaywall_coverage, cache),
-            _safe("待評估三管道全失敗才成立(摘要/線上全文/Unpaywall)", check_awaiting_channels, cache),
-            _safe("Gate③ 待評估未漏抓全文", check_waiting_fulltext, cache),
-            _safe("Gate③ 分割閉合＋已篩來源(反坍縮)", check_partition_provenance, cache),
-            _safe("Gate③ 待評估須先核對全文(不得只憑摘要punt)", check_screen_awaiting_resolved, cache),
+            _safe("③ 融合分層篩 分割閉合＋反坍縮", check_screen_partition, cache),
+            _safe("③ 離題只在實取全文後定案(Tier3)", check_excl_requires_fulltext, cache),
+            _safe("③『全文及摘要皆無』須證明三層實取皆失敗", check_nocontent_bucket, cache),
             _safe("報告版型/內容", check_report, cache),
             _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache)]
 
