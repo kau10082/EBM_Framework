@@ -20,6 +20,17 @@ description: |
 本 skill 是 EBM 評析管線中的「**證據引擎層**」:只負責「找文獻 → 驗證真偽 → 標等級 →
 產出三表」。不負責對 claim 做支持／反對的論證(那是上層評析的事)。
 
+> ## ★★ v0.22 定版（最高權威，凡與下文 Stage A/B、②c 獨立關、待評估雙桶衝突者，一律以本區塊為準）
+> **2026-06 使用者定版：取消 Stage A→B 切分與 `_stage1_corpus` 交接契約；把「全文取得」融入「嚴格篩選」成單一『融合式分層升級嚴格篩選』關（仍稱 ③）。**
+> - **單一篩選產物＝`g3_FINAL_screen.json`**，涵蓋全部 ②b 倖存者；每筆 `verdict ∈ {切題, 離題, 全文及摘要皆無}` ＋ `tier(1/2/3)` ＋ `axis_hits{P,I,C}` ＋ provenance。**不再產 `g2c_FINAL_content.json`／`g2c_awaiting_classification.json`／`_stage1_corpus.json`，不再有「待評估／待人工補全文／兩者皆無」雙桶**（統一為單一桶 **全文及摘要皆無**）。
+> - **分層升級（命中即停，但只有『切題』可早停）：**
+>   1. **Tier 1（摘要）**：以既有摘要嚴格判 P∧I∧C。**切題→定案**；不切題或無法判定→Tier 2。
+>   2. **Tier 2（CT.gov 登錄欄位 Condition+InterventionName／AI 合成摘要 Consensus·OE）**：判。**切題→定案**；仍不切題或仍無法判定→Tier 3。
+>   3. **Tier 3（強制實取全文：`fulltext_exhaust.py --force`，Crossref 摘要欄→PMC fullTextXML→Unpaywall OA 下載解析）**：重判。切題→切題；**判得出且有內容→離題**；三層皆取不到可判內容（無摘要、非登錄/AI、全文實取失敗）→**全文及摘要皆無**。
+> - **鐵律：『離題』只能在 Tier 3（實取全文）後定案**——只有『切題』可在 Tier 1/2 早停；暫判離題或無法判定者一律升到下一層，拼到全文才可判離題（高 recall，避免薄摘要誤殺）。
+> - **守門（gate_guard）對應**：`check_screen_partition`（單一產物三桶分割閉合＋反坍縮＋切題/離題須有內容證明）、`check_excl_requires_fulltext`（離題須 tier==3/fulltext_parse_attempted）、`check_nocontent_bucket`（全文及摘要皆無須 fulltext_parse_attempted∧channels_exhausted∧無內容）。**舊守門 stage1_check／awaiting_channels_check／awaiting_stage_check／build_stage1_corpus 已移除。**
+> - 下文（停頓點 ②c/③、Stage A/B、待評估各 鐵律）為 v0.21 歷史脈絡，**語意已被本區塊取代**；保留供理解演進，但執行以本區塊與守門為準。
+>
 > ## ★ 執行規範(v0.12,務必遵守)
 > **(A) 分階段停頓、逐關確認**:EBM 管線各階段之間**必須停下來報告該階段結果＋等使用者點頭**才續,不可一口氣跑到底。**Phase 1(檢索→篩選→引文追蹤→三表)內部的停頓點(v0.19.9,務必逐一停)**:
 > **① 六腿完整檢索 ＋ 去重完成 → 停**,**逐腿報告**:搜尋結果(命中數)、搜尋策略(實際 query)、搜尋限制(各腿單次上限/未涵蓋/AI 合成腿無法窮盡)、**是否確實翻頁取盡**、跨腿去重後聯集數。**此時尚未做任何主旨篩選。**
@@ -33,7 +44,7 @@ description: |
 > > **★ 登錄試驗用欄位判軸、勿用標題(鐵律,v0.20.1):** ClinicalTrials.gov 等**登錄記錄的標題極短又常被截斷**,用標題關鍵字判軸會**誤殺真試驗**(實測:GSK2793660、HSK31858 兩筆 DPP-1×支擴試驗因標題截斷被誤判離題)。登錄腿**判軸一律讀 `Condition`(疾病軸)＋`InterventionName`(介入軸)兩欄**,不夠時回 CT.gov API v2 `fields=Condition,InterventionName,StudyType,Phase,OverallStatus` 補抓。**廣蒐時就應把這些欄位存進腿記錄**(別只存 title),否則後段判軸失據。**嚴禁在本關做文獻型態分類或決定『納入單位』**(哪些是 RCT／SR-MA／背景、哪些當分析主體 vs 背景)——那是**⑤b 決定納入單位**的事,且須在 ④引文追蹤、⑤a交叉驗證**之後**才做。報告用語一律「切題／離題」,**不要用「納入／背景」**(那兩詞是 ⑤b 的 `verdict:included/background`,在此誤用會把後關工作提前、污染分流)。(本鐵律因實測在第③關擅自做了 RCT/SR-MA/背景型態分類而立。)
 > **④ 確認後才做引文追蹤(C30,可能多輪、逐輪至收斂)**;**待全部收斂後才停**,一次報告各輪(種子/反向·正向筆數/新增)與最終納入。
 > **⑤ 引文追蹤收斂後 → 停（v0.21 定版：本關＝「收斂後處理」整段，含四子步 ⑤a–⑤d，皆在 PDF 之前）**。
-> **★ 管線步驟編號（定版，唯一權威；以下停頓點為準，勿再用別套編號）：① 廣蒐去重 → ② 篩選策略 → ②b 初篩 → ②c 全文取得性 → ③ 嚴格主旨篩選 → ④ 引文追蹤 → ⑤ 收斂後處理〔⑤a 交叉驗證(Crossref/PubMed 存在性＋撤稿剔除)、⑤b 決定納入單位(classify_units：Study 歸併／核心 vs 背景；他藥/非核心歸背景，不剔除)、⑤c Zotero 匯入、⑤d 人工補全文資料夾〕 → ⑥ 三表＋PDF 報告 → ⑦ 交接包 `_corpus_seed`＋問是否續進 EBM 分析。** （`④→⑤→⑥→⑦`，中間無跳號；交叉驗證與決定納入單位＝⑤ 的子步，**不是 ⑥/⑦**——⑥/⑦ 固定為「三表+PDF」「交接包」。先前 spec 散見「⑥交叉驗證／⑦決定納入單位」係舊草編號筆誤，以本定版為準。）
+> **★ 管線步驟編號（v0.22 定版，唯一權威；勿再用別套編號）：① 廣蒐去重 → ② 篩選策略 → ②b 高敏初篩 → ③ 融合式分層升級嚴格篩選〔Tier1 摘要→Tier2 CT.gov 登錄/AI 合成→Tier3 強制實取全文；切題可早停，離題只在 Tier3 後定案；產 `g3_FINAL_screen.json`，桶＝切題/離題/全文及摘要皆無〕 → ④ 引文追蹤 → ⑤ 收斂後處理〔⑤a 交叉驗證(Crossref/PubMed 存在性＋撤稿剔除)、⑤b 決定納入單位(classify_units：Study 歸併／核心 vs 背景；他藥/非核心歸背景，不剔除)、⑤c Zotero 匯入、⑤d 人工補全文資料夾〕 → ⑥ 三表＋PDF 報告 → ⑦ 交接包 `_corpus_seed`＋問是否續進 EBM 分析。** （v0.22：**取消舊 ②c 獨立關與 Stage A→B 切分／`_stage1_corpus` 交接**，全文取得融入 ③ 的 Tier3；交叉驗證與決定納入單位＝⑤ 子步，⑥/⑦ 固定為「三表+PDF」「交接包」。）
 >   **★ ⑤c（Zotero 匯入）／⑤d（人工補全文）權威版移到 EBM_Analysis Phase 0（鐵律,2026-06 使用者糾正）：** 「最終要分析哪幾篇」要到**下游 Phase 0 分流定稿（relevance/role/grade_track、含退階試驗是否只當背景）才確定**——故 **Zotero 匯入與人工補全文的『權威執行』改在 `EBM_Analysis/phases/00_triage.md` 步驟 5（補全文，以 `grade_track∈{full,targeted_harms}` 為準）、步驟 6（Zotero 匯入，鏡像 `_corpus.json` 全集）**。EBM_Search 本關 **⑤c 預設不匯 Zotero**（避免以未定稿名單灌入，且會與 Phase 0 權威匯入重複）；**⑤d 至多做『handoff 前的初步可得性盤點』**（標 `fulltext_status` 供交接包帶下游參考），**不在此建權威補全文資料夾**——真正缺的全文待 Phase 0 依定稿名單補。下文 (a)(b) 保留為「使用者在 EBM_Search 階段明確要求即時匯入/補全文」時的執行細節，**預設略過、改於 Phase 0 執行**。
 >   ⑤a／⑤b 完成（得出表二納入／表三背景）後，若使用者明確要求才在此做 ⑤c／⑤d（否則延到 Phase 0），並等使用者確認:
 >   (a) **問「是否要將最終納入結果匯入 Zotero 資料夾?」**——未得明確同意不得匯入(若同意,先乾跑顯示 payload 再 `--commit`)。**Zotero 清單＝單一真實來源,須與報告表二/表三完全一致(v0.19.15)**:匯入集合必須**恰等於**「表二 納入(後續要分析者)＋表三 背景(當背景者)」,不多不少;並以標籤標明用途讓 Zotero 可直接篩出與報告一致的子集——**納入者標 `verdict:included` ＋ `study:<試驗名>`**(對齊分析單位 Study,MECIR C42;同一試驗多報告共用同一 study 標籤)、**背景者標 `verdict:background`**。如此「後續分析清單(篩 verdict:included→依 study 收斂為 N 個 Study)」與「背景清單(篩 verdict:background)」皆可由 Zotero 重現、不與報告脫節。

@@ -19,6 +19,10 @@ def _assert_fires(name, fails):
     print(("  ✅" if ok else "  ❌") + f" {name}：" + ("會 FAIL（守門有效）" if ok else "未 FAIL（守門失效！）"))
     return ok
 
+def _assert_true(name, cond):
+    print(("  ✅" if cond else "  ❌") + f" {name}：" + ("通過" if cond else "FAIL"))
+    return bool(cond)
+
 def main():
     allok = True
     print("守門自我驗證（餵壞資料，應全部 FAIL）：")
@@ -150,67 +154,53 @@ def main():
     print(("  ✅" if not _om else "  ❌") + " 段4 缺值標『無』+驗證有○ 應通過（防誤報）：" + ("通過" if not _om else str(_om)))
     allok &= (not _om)
 
-    import stage1_check
-    allok &= _assert_fires("Stage A→B 邊界（無內容混入候選）",
-        stage1_check.check({"schema_version":"stage1-1.0","legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
-          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"none","abstract_status":"none"}],"awaiting":[]}))
-    # Bug2：候選宣稱 abstract_status=have 卻無摘要內容 → 須 FAIL（只能憑標題篩）
-    allok &= _assert_fires("Stage A 候選 abstract_status=have 但摘要內容空",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0",
-          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
-          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"ai_summary_only","abstract_status":"have","abstract":""}],"awaiting":[]}) if "abstract" in f])
-    # 防『只憑 OA/PMC 旗標標 have、未實抓解析』（②c 鐵律；2026-06 使用者糾正）：have+無摘要+channel=online+無解析證明 → 須 FAIL
-    allok &= _assert_fires("Stage A 候選 fulltext_status=have 卻無已解析正文（OA-flag-only 假 have）",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0",
-          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
-          "candidates":[{"paper_id":"P1","title":"x","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"online","abstract":""}],"awaiting":[]}) if "實抓" in f])
-    # 正向防誤報：登錄試驗(registry)無自由文字摘要合法；有 fulltext_chars≥1500 證明合法
-    _hok=stage1_check.check({"schema_version":"stage1-1.0",
-          "legs":[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}],
-          "candidates":[{"paper_id":"R1","title":"nct","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"registry","abstract":""},
-                        {"paper_id":"F1","title":"ft","verdict":"candidate","fulltext_status":"have","abstract_status":"none","fulltext_channel":"online","fulltext_chars":7400,"abstract":""}],"awaiting":[]})
-    print(("  ✅" if not _hok else "  ❌") + " Stage A have(registry/實抓解析證明)應通過（防誤報）：" + ("通過" if not _hok else str(_hok)))
-    allok &= (not _hok)
-    # 防『未查全文就丟兩者皆無』：awaiting 標兩者皆無卻有 pmid → 須 FAIL
-    _legs4=[{"leg":"PubMed","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"OpenAlex","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"EuropePMC","hitCount":1,"fetched":1,"exhaustible":True},{"leg":"ClinicalTrials.gov","hitCount":1,"fetched":1,"exhaustible":True}]
-    _ok_cand=[{"paper_id":"C1","title":"t","verdict":"candidate","fulltext_status":"none","abstract_status":"have","abstract":"real abstract"}]
-    allok &= _assert_fires("Stage A 待評估『兩者皆無』卻有 pmid（未查全文）",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
-          "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無","pmid":"12345678"}]}) if "兩者皆無" in f])
-    # 審查 🔴 補強回歸：只有 oa_url（無 doi/pmid）也是全文路徑 → 兩者皆無 須 FAIL
-    allok &= _assert_fires("Stage A 待評估『兩者皆無』只有 oa_url（無ID但有OA路徑）",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
-          "awaiting":[{"paper_id":"A4","title":"oa","reason":"兩者皆無","oa_url":"https://oa.example/y.pdf"}]}) if "oa_url" in f])
-    # 審查 🟡 補強回歸：只有 pmcid（Europe PMC 常見）也是全文路徑 → 兩者皆無 須 FAIL
-    allok &= _assert_fires("Stage A 待評估『兩者皆無』只有 pmcid（無其他ID）",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
-          "awaiting":[{"paper_id":"A5","title":"pmc","reason":"兩者皆無","pmcid":"PMC123456"}]}) if "pmcid" in f])
-    # 防『有 OA 卻不抓就丟待評估』：待人工補全文帶 oa_url 卻未實際抓取 → 須 FAIL
-    allok &= _assert_fires("Stage A 待評估有 oa_url 卻未抓 OA 全文",
-        [f for f in stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
-          "awaiting":[{"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
-                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf"}]}) if "oa_url" in f])
-    # 正向：兩者皆無無 ID 合法；有 ID＋待人工補全文＋channels_exhausted 合法；
-    #       有 oa_url 但已標 oa_fetch_attempted（抓過取不到）合法（防誤報）
-    _wok=stage1_check.check({"schema_version":"stage1-1.0","legs":_legs4,"candidates":_ok_cand,
-          "awaiting":[{"paper_id":"A1","title":"y","reason":"兩者皆無"},
-                      {"paper_id":"A2","title":"z","reason":"待人工補全文","channels_exhausted":True,"doi":"10.1/x"},
-                      {"paper_id":"A3","title":"w","reason":"待人工補全文","channels_exhausted":True,
-                       "doi":"10.1/y","oa_url":"https://oa.example/x.pdf","oa_fetch_attempted":True}]})
-    print(("  ✅" if not _wok else "  ❌") + " Stage A 待評估合法分類應通過（防誤報）：" + ("通過" if not _wok else str(_wok)))
-    allok &= (not _wok)
-
     import gate_guard, tempfile, json, io, shutil
-    # 反坍縮：偽造一筆無內容卻在 screened
+    # ── 融合式分層篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
     tmp = Path(tempfile.mkdtemp())
-    json.dump([{"uid":"u0","abstract":"","title":"no-content"}], io.open(tmp/"g2c_FINAL_content.json","w",encoding="utf-8"))
-    json.dump([{"uid":"u0","verdict":"切題"}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
-    json.dump([], io.open(tmp/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 反坍縮（無內容卻在已篩）", gate_guard.check_partition_provenance(tmp))
-    # Unpaywall 覆蓋：非全文有DOI但沒查
-    json.dump([{"class":"僅摘要","doi":"10.1/x","title":"t"}], io.open(tmp/"g2c_FINAL_content.json","w",encoding="utf-8"))
-    json.dump({}, io.open(tmp/"g2c_unpaywall.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate②c Unpaywall 覆蓋（漏跑）", gate_guard.check_unpaywall_coverage(tmp))
+    # (1) 反坍縮：uid 重複 → FAIL
+    json.dump([{"uid":"u0","verdict":"切題","abstract":"x"},
+               {"uid":"u0","verdict":"離題","abstract":"y","tier":3,"fulltext_parse_attempted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 反坍縮（uid 重複）", gate_guard.check_screen_partition(tmp))
+    # (1b) 切題無內容(無abstract/非登錄AI/無實抓證明) → FAIL
+    json.dump([{"uid":"n1","verdict":"切題","abstract":""}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 切題無內容卻拿到判定",
+        [f for f in gate_guard.check_screen_partition(tmp) if ("無內容" in f or "實抓" in f)])
+    # (1c) 正向：切題有摘要、離題 tier3、皆無證明齊 → 通過（防誤報）
+    json.dump([{"uid":"a","verdict":"切題","abstract":"real abstract content here"},
+               {"uid":"b","verdict":"離題","abstract":"off topic","tier":3,"fulltext_parse_attempted":True},
+               {"uid":"c","verdict":"全文及摘要皆無","fulltext_parse_attempted":True,"channels_exhausted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    _pp=gate_guard.check_screen_partition(tmp)
+    print(("  ✅" if not _pp else "  ❌")+" ③ 分割閉合合法應通過（防誤報）："+("通過" if not _pp else str(_pp)))
+    allok &= (not _pp)
+    # (2) 離題只在 Tier3 定案：離題但未實取全文(無 tier3/fulltext_parse_attempted) → FAIL
+    json.dump([{"uid":"e1","verdict":"離題","abstract":"thin abstract"}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 離題未升級到全文(Tier3)就定案", gate_guard.check_excl_requires_fulltext(tmp))
+    # (2b) 正向：離題且 fulltext_parse_attempted → 通過（防誤報）
+    json.dump([{"uid":"e2","verdict":"離題","abstract":"t","fulltext_parse_attempted":True}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    _ex=gate_guard.check_excl_requires_fulltext(tmp)
+    print(("  ✅" if not _ex else "  ❌")+" ③ 離題已實取全文應通過（防誤報）："+("通過" if not _ex else str(_ex)))
+    allok &= (not _ex)
+    # (2c) 正向：登錄/AI 離題＝終端結構化內容、無對應全文可取 → tier2 即可、免 Tier3（防誤報）
+    json.dump([{"uid":"e3","verdict":"離題","tier":2,"content_status":"registry","nct":"NCT9"},
+               {"uid":"e4","verdict":"離題","tier":2,"content_status":"ai_summary"}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    _exr=gate_guard.check_excl_requires_fulltext(tmp)
+    print(("  ✅" if not _exr else "  ❌")+" ③ 登錄/AI 離題(tier2 終端)應通過（防誤報）："+("通過" if not _exr else str(_exr)))
+    allok &= (not _exr)
+    # (3)『全文及摘要皆無』須證明三層皆失敗：有 abstract 卻丟此桶 → FAIL
+    json.dump([{"uid":"z1","verdict":"全文及摘要皆無","abstract":"actually has content","fulltext_parse_attempted":True,"channels_exhausted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③『全文及摘要皆無』卻其實有內容", gate_guard.check_nocontent_bucket(tmp))
+    # (3b)『全文及摘要皆無』缺實取證明 → FAIL
+    json.dump([{"uid":"z2","verdict":"全文及摘要皆無"}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③『全文及摘要皆無』未證明三層實取皆失敗", gate_guard.check_nocontent_bucket(tmp))
+    # (3c) 正向：無內容且證明齊 → 通過（防誤報）
+    json.dump([{"uid":"z3","verdict":"全文及摘要皆無","fulltext_parse_attempted":True,"channels_exhausted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    _nc=gate_guard.check_nocontent_bucket(tmp)
+    print(("  ✅" if not _nc else "  ❌")+" ③『全文及摘要皆無』證明齊應通過（防誤報）："+("通過" if not _nc else str(_nc)))
+    allok &= (not _nc)
     # 撤稿不得殘留
     json.dump([{"pmid":"999","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
@@ -220,49 +210,6 @@ def main():
     json.dump([{"doi":"10.1/RETRACTED","title":"doi-only","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
     allok &= _assert_fires("撤稿僅有 DOI（無PMID）也須擋下", gate_guard.check_no_retracted(tmp))
     shutil.rmtree(tmp, ignore_errors=True)
-
-    # ③待評估須先核對全文：g2c_awaiting_classification 有 doi/pmid 卻無全文核對證明 → FAIL
-    tmp3 = Path(tempfile.mkdtemp())
-    json.dump([{"paper_id":"W1","title":"x","pmid":"123","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 待評估只憑摘要 punt（未核對全文）", gate_guard.check_screen_awaiting_resolved(tmp3))
-    # 審查 🔴 補強回歸：只有 oa_url（無 doi/pmid）也須核對全文 → FAIL
-    json.dump([{"paper_id":"W4","title":"oa","oa_url":"https://oa.example/z.pdf","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 待評估只有 oa_url（無ID）也須核對全文", gate_guard.check_screen_awaiting_resolved(tmp3))
-    # 正向：抓過全文仍無法核對(oa_fetch_attempted)→合法；無 ID→合法（防誤報）
-    json.dump([{"paper_id":"W2","title":"y","pmid":"123","reason":"待全文","oa_fetch_attempted":True},
-               {"paper_id":"W3","title":"z","reason":"待全文"}], io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    _aw=gate_guard.check_screen_awaiting_resolved(tmp3)
-    print(("  ✅" if not _aw else "  ❌") + " Gate③ 待評估已核對全文應通過（防誤報）：" + ("通過" if not _aw else str(_aw)))
-    allok &= (not _aw)
-    # 2026-06 使用者再糾正（兩段式）：判準＝『我能否線上讀到全文』。
-    # (a) 線上全文可得(pmcid/inEPMC)卻列待評估、又無『實際嘗試線上閱讀失敗』證明→FAIL（光標 channels_exhausted 不夠）
-    json.dump([{"paper_id":"W5","title":"pmc","pmid":"9","pmcid":"PMC123","reason":"待人工補全文","channels_exhausted":True}],
-              io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 線上全文可得(pmcid)列待評估但未實際嘗試線上閱讀",
-        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上" in f])
-    json.dump([{"paper_id":"W6","title":"epmc","reason":"待人工補全文","channels_exhausted":True,"inEPMC":"Y"}],
-              io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ 線上全文可得(inEPMC=Y)列待評估但未實際嘗試線上閱讀",
-        [f for f in gate_guard.check_screen_awaiting_resolved(tmp3) if "線上" in f])
-    # (b) 正向：線上全文路徑存在但『實際嘗試線上閱讀失敗』(防爬蟲/僅PDF/非OA-PMC)→合法 awaiting（防誤報）
-    json.dump([{"paper_id":"W5b","title":"pmc-blocked","pmid":"9","pmcid":"PMC123","reason":"待人工補全文",
-                "channels_exhausted":True,"online_read_attempted":True}],
-              io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    _aw3=gate_guard.check_screen_awaiting_resolved(tmp3)
-    print(("  ✅" if not _aw3 else "  ❌") + " Gate③ 線上全文真讀不到(已嘗試)應通過（防誤報）：" + ("通過" if not _aw3 else str(_aw3)))
-    allok &= (not _aw3)
-    # 正向防誤報：待人工補全文只有 ID（doi/pmid）但無任何 OA/線上全文路徑→合法 awaiting
-    json.dump([{"paper_id":"W7","title":"paywalled","pmid":"7","doi":"10.1/x","reason":"待人工補全文",
-                "abstract_checked":True,"online_fulltext_checked":True,"unpaywall_checked":True,
-                "oa_fetch_attempted":True,"channels_exhausted":True}],
-              io.open(tmp3/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    _aw2=gate_guard.check_screen_awaiting_resolved(tmp3)
-    print(("  ✅" if not _aw2 else "  ❌") + " Gate③ 待人工補全文(僅ID無OA路徑)應通過（防誤報）：" + ("通過" if not _aw2 else str(_aw2)))
-    allok &= (not _aw2)
-    # 審查 🔴 補強回歸：check_waiting_fulltext 的全文路徑須含 oa_url
-    json.dump([{"verdict":"待評估","title":"oa","oa_url":"https://oa.example/w.pdf"}], io.open(tmp3/"g3_FINAL_screen.json","w",encoding="utf-8"))
-    allok &= _assert_fires("Gate③ check_waiting_fulltext：有 oa_url 卻丟待評估", gate_guard.check_waiting_fulltext(tmp3))
-    shutil.rmtree(tmp3, ignore_errors=True)
 
     # ④ 引文追蹤篩選方式：只憑標題丟棄 → FAIL；批次抓摘要+標題摘要篩 → 通過
     import citation_screen_check
@@ -274,32 +221,21 @@ def main():
     print(("  ✅" if not _cs else "  ❌") + " ④ 批次抓摘要+標題摘要篩應通過（防誤報）：" + ("通過" if not _cs else str(_cs)))
     allok &= (not _cs)
 
-    # 待評估三管道：有 ID 卻沒把線上全文查盡就 punt → FAIL；三管道全查盡 → 通過
-    import awaiting_channels_check
-    allok &= _assert_fires("待評估三管道（有ID但缺 online_fulltext_checked）",
-        awaiting_channels_check.check([{"paper_id":"A1","pmid":"123","reason":"待人工補全文",
-                                        "abstract_checked":True,"oa_fetch_attempted":True,"channels_exhausted":True}]))
-    allok &= _assert_fires("待評估『兩者皆無』卻帶 ID",
-        awaiting_channels_check.check([{"paper_id":"A2","doi":"10.1/x","reason":"兩者皆無","abstract_checked":True}]))
-    _acok = awaiting_channels_check.check([
-        {"paper_id":"A3","pmid":"9","reason":"待人工補全文","abstract_checked":True,
-         "online_fulltext_checked":True,"unpaywall_checked":True,"channels_exhausted":True},
-        {"paper_id":"A4","reason":"兩者皆無","abstract_checked":True}])
-    print(("  ✅" if not _acok else "  ❌") + " 待評估三管道：三管道全查盡應通過（防誤報）：" + ("通過" if not _acok else str(_acok)))
-    allok &= (not _acok)
+    # fulltext_exhaust 防呆（🔴 審查）：OA 下載的 cookie/paywall 純文字(無科學特徵)不算真內容；真內容應通過
+    import fulltext_exhaust as _fx
+    _wall = ("We use cookies to improve your experience. By continuing you agree to our privacy "
+             "policy and terms of service. Please sign in or subscribe to access this article. "
+             "Copyright 2024 the publisher. All rights reserved. ") * 3
+    allok &= _assert_true("fulltext_exhaust 防呆：cookie/paywall 牆頁不算真內容",
+        not _fx._looks_like_content(_wall, 250))
+    _real = ("Background: patients with COPD. Methods: randomized double-blind trial of triple therapy "
+             "versus LABA/LAMA dual bronchodilator. Results: exacerbation rate ratio 0.75 (95% CI "
+             "0.70-0.81), p<0.001. Conclusions: efficacy demonstrated with higher pneumonia risk.")
+    allok &= _assert_true("fulltext_exhaust 防呆：真內容(含方法學特徵)應通過",
+        _fx._looks_like_content(_real, 120))
 
-    # 待評估關責：③(g3) 出現待評估 → FAIL（待評估只能在 ②c 產生）
-    import awaiting_stage_check
-    allok &= _assert_fires("③ 誤生待評估（待評估只能在②c）",
-        awaiting_stage_check.check([{"uid":"u1","verdict":"待評估","title":"x"}]))
-    _asok = awaiting_stage_check.check([{"uid":"u1","verdict":"切題"},{"uid":"u2","verdict":"離題"}])
-    print(("  ✅" if not _asok else "  ❌") + " 待評估關責：③ 全為切題/離題應通過（防誤報）：" + ("通過" if not _asok else str(_asok)))
-    allok &= (not _asok)
-
-    # Bug3 順序：g3 存在但缺 g2c/_stage1_corpus → ③ 早於 ②c
+    # ⑥驗證覆蓋／Phase1 PDF 實體（沿用）
     tmp2 = Path(tempfile.mkdtemp())
-    json.dump([{"uid":"u1","verdict":"切題"}], io.open(tmp2/"g3_FINAL_screen.json","w",encoding="utf-8"))
-    allok &= _assert_fires("②c→③ 順序（③早於②c）", gate_guard.check_screen_order(tmp2))
     # Bug6 驗證覆蓋：交接包有 included 但無 g6_verified
     json.dump({"papers":[{"paper_id":"P1","verdict":"included","pmid":"123"}]}, io.open(tmp2/"_corpus_seed.json","w",encoding="utf-8"))
     allok &= _assert_fires("⑥驗證覆蓋（included 未驗證）", gate_guard.check_verification_coverage(tmp2))
@@ -328,26 +264,6 @@ def main():
     print(("  ✅" if _none is None else "  ❌") + " 無旗標→回 None（hook 休眠、全域零打擾）：" + ("通過" if _none is None else str(_none)))
     allok &= (_none is None)
     shutil.rmtree(tmpd, ignore_errors=True)
-
-    # build_stage1_corpus 忠實分流回歸：登錄試驗(無摘要)→candidate/have；兩者皆無(帶channels_exhausted)→reason 不被竄改
-    import build_stage1_corpus as B1
-    tmpb = Path(tempfile.mkdtemp())
-    json.dump([{"uid":"uCT","class":"登錄試驗（結構化內容）","title":"NCT trial","abstract":"","pmid":"","doi":""},
-               {"uid":"uA","class":"有摘要","title":"abs paper","abstract":"x"*50,"pmid":"1","doi":""}],
-              io.open(tmpb/"g2c_FINAL_content.json","w",encoding="utf-8"))
-    json.dump([{"uid":"uN","paper_id":"uN","title":"no-id","reason":"兩者皆無","channels_exhausted":True},
-               {"uid":"uM","paper_id":"uM","title":"manual","pmid":"9","reason":"待人工補全文","channels_exhausted":True}],
-              io.open(tmpb/"g2c_awaiting_classification.json","w",encoding="utf-8"))
-    _d = B1.build(str(tmpb))
-    _ct = [c for c in _d["candidates"] if c.get("title")=="NCT trial"]
-    _ok1 = bool(_ct) and _ct[0]["fulltext_status"]=="have"
-    print(("  ✅" if _ok1 else "  ❌")+" build_stage1：登錄試驗(無摘要)歸 candidate/have："+("通過" if _ok1 else "FAIL"))
-    allok &= _ok1
-    _none = [a for a in _d["awaiting"] if a.get("title")=="no-id"]
-    _ok2 = bool(_none) and _none[0]["reason"]=="兩者皆無"
-    print(("  ✅" if _ok2 else "  ❌")+" build_stage1：兩者皆無 reason 不被 channels_exhausted 竄改："+("通過" if _ok2 else "FAIL"))
-    allok &= _ok2
-    shutil.rmtree(tmpb, ignore_errors=True)
 
     print(("\n✅ 全部守門有效。" if allok else "\n❌ 有守門失效，請修復！"))
     sys.exit(0 if allok else 1)
