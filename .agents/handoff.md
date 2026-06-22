@@ -84,4 +84,9 @@
    - 已以 PyMuPDF 渲染頁面實檢：納入分析 52（基底 SR/MA 6＋佐證 RCT 46）明細換行正常、與『最終納入證據清單』表清楚分隔，無重疊。report_check／gate_guard 全綠。
    - **已持久化（committed）**：修在 `EBM_Search/scripts/build_search_pdf.py`（funnel 表 `fr` 以 `cell()` 包每格換行）＋ `SEARCH_SPEC.md` ⑥ 新增『★ PDF 表格長字串必換行』鐵律。
 
+✅ 已修：**PRISMA『納入分析』明細：標籤不夾方法學附註、研究改用『作者+年份』非 PMID**（使用者本輪糾正）。
+   - 問題：included_for_analysis 標籤夾『(grade=full；Phase 0 以 AMSTAR2/CCA 定非重疊基底)』方法學括註、SR/MA 明細用 PMID 清單。使用者要：附註拿掉、SR/MA 改作者+年份。
+   - 本輪修改：_search_report.json included_for_analysis 標籤改乾淨類別名（Overview 基底 SR/MA／佐證原始 RCT）、SR/MA detail 改『第一作者 年份』（Hu 2026；Calderón-Montero 2025…，efetch 取）；移除 mode/note 等不顯示欄。
+   - **已持久化（committed）**：`SEARCH_SPEC.md` ⑥ 新增『★ PRISMA 納入分析明細列法』鐵律（標籤不夾方法學附註；研究以作者+年份非 PMID）。已渲染頁面實檢、report_check／gate_guard 全綠。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
