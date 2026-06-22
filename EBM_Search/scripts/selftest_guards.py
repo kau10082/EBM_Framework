@@ -173,7 +173,7 @@ def main():
     allok &= (not _om)
 
     import gate_guard, tempfile, json, io, shutil
-    # ── 融合式分層篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
+    # ── 全文/摘要搜尋及嚴格離題篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
     tmp = Path(tempfile.mkdtemp())
     # (1) 反坍縮：uid 重複 → FAIL
     json.dump([{"uid":"u0","verdict":"切題","abstract":"x"},

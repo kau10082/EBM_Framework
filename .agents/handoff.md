@@ -4,9 +4,13 @@
 
 **本輪審查範圍：僅以下檔案**
 - `EBM_Search/scripts/sr_division_check.py`（新增：SR 分工硬 gate）
-- `EBM_Search/scripts/gate_guard.py`（接線：新增 `check_sr_division`＋列入 `_all_checks`）
-- `EBM_Search/scripts/selftest_guards.py`（新增 3 條 SR 分工回歸 fixture）
-- `EBM_Search/SEARCH_SPEC.md`（第 93 行 SR 過濾器段：由「additive 聯集進池」改為「DB 腿只以 -SR 結果進語料庫」定版）
+- `EBM_Search/scripts/gate_guard.py`（接線：新增 `check_sr_division`＋列入 `_all_checks`；另：③ 關名重命名）
+- `EBM_Search/scripts/selftest_guards.py`（新增 3 條 SR 分工回歸 fixture；另：③ 關名重命名）
+- `EBM_Search/SEARCH_SPEC.md`（第 93 行 SR 過濾器段：由「additive 聯集進池」改為「DB 腿只以 -SR 結果進語料庫」定版；另：③ 關名重命名）
+- `EBM_Search/scripts/fulltext_exhaust.py`（③ 關名重命名）
+- `EBM_Search/scripts/strict_screen_check.py`（③ 關名重命名）
+
+**附帶變更（第③關重命名，使用者指示）**：把第③關名稱「融合式分層升級嚴格篩」統一改為「**全文/摘要搜尋及嚴格離題篩選**」（語意/流程不變，純命名）。涵蓋 SEARCH_SPEC.md（管線步驟編號＋v0.22 定版段，line 24 保留「舊名」對照供追溯）、gate_guard.py／selftest_guards.py／fulltext_exhaust.py／strict_screen_check.py 各 docstring/註解。selftest 重跑「✅ 全部守門有效」。
 
 **背景（bug 怎麼來的）**：triple vs dual COPD 案，使用者選擇套用 SR filter。原本把 EuropePMC『無過濾主檢』（EuropePMC REST 預設全文檢索）的 3816 筆全文泛提及噪音直接 dedup 進 `g1_union`（語料庫），使用者糾正：「當我決定用 SR filter 時，DB 腿應只給我 SR 搜尋結果」。
 

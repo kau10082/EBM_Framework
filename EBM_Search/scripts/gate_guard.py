@@ -85,7 +85,7 @@ def _norm_doi(d):
     d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
 
 def check_excl_requires_fulltext(cache):
-    """融合式分層篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
+    """全文/摘要搜尋及嚴格離題篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
     Tier 1/2（摘要／CT.gov 登錄／AI 合成）早停。故每筆 verdict=離題 必須帶 tier==3 或
     fulltext_parse_attempted=true（證明已升級到實取全文才判離題），否則＝在薄摘要/登錄就把
     『可能切題』者誤殺 → FAIL（高 recall：拼到全文才可判離題；2026-06 使用者定版流程）。"""
@@ -110,7 +110,7 @@ def check_excl_requires_fulltext(cache):
     return []
 
 def check_nocontent_bucket(cache):
-    """融合式分層篩選：『全文及摘要皆無』桶必須真的三層皆取不到可判內容——每筆須帶
+    """全文/摘要搜尋及嚴格離題篩選：『全文及摘要皆無』桶必須真的三層皆取不到可判內容——每筆須帶
     fulltext_parse_attempted=true ∧ channels_exhausted=true，且無 abstract/全文摘錄、非登錄(registry)、
     非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。取代舊『待評估雙桶』。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
@@ -132,7 +132,7 @@ def check_nocontent_bucket(cache):
     return []
 
 def check_screen_partition(cache):
-    """融合式分層篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：
+    """全文/摘要搜尋及嚴格離題篩選 反坍縮＋分割閉合（單一產物 g3_FINAL_screen.json）：
     g3 含全部 ②b 倖存者，每筆 verdict ∈ {切題, 離題, 全文及摘要皆無}。以 uid 獨立重算：
     uid 穩定唯一（防坍縮鍵污染）、verdict 合法、無重複；若有 g2b_screen.json 則與 ②b kept 對帳（恰覆蓋）。
     來源證明：切題/離題 無 abstract/全文摘錄且非登錄/AI 者，其 uid 須在 g3_fetched_by_uid 帶實抓解析證明。"""
