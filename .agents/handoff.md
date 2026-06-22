@@ -32,6 +32,8 @@
 
 **附帶變更4（把 Unpaywall 拆成獨立 Tier 4，使用者定版）**：使用者要求把「Tier 3 後仍『摘要及全文皆無』者」明確升級到**獨立 Tier 4＝用 Unpaywall 查 OA 全文並判離題**，避免 Unpaywall 被埋在 Tier 3 內部而被略過（正是附帶變更3 的 bug 成因）。修正：(1) SEARCH_SPEC.md v0.22 分層升級段由 3 層改 4 層——Tier 3＝Crossref 摘要＋PMC fullTextXML；**Tier 4＝Unpaywall 全部 oa_locations 探查**；『全文及摘要皆無』只能在 Tier 4 也失敗後定案（標 unpaywall_checked=true、tier=4）；『離題』可在 Tier 3／Tier 4 定案。(2) `check_nocontent_bucket` docstring/訊息改述為「Tier 4 未跑＝FAIL」（機器訊號仍是 DOI 者須 unpaywall_checked=true，與附帶變更3 同一檢查，語意對齊 Tier 4）。(3) run-local tier3.py 對走過 Unpaywall 的記錄標 tier=4。selftest 仍「✅ 全部守門有效」。涉及檔：`SEARCH_SPEC.md`、`gate_guard.py`（皆已在本輪範圍內）。
 
+**附帶變更5（report_check 進行中試驗欄數對齊 spec，repo bug）**：`report_check.py` 段5 原強制「進行中試驗 2 欄(登錄號,標題)」，但 SEARCH_SPEC §4 與 `build_report_data.py` 產出皆為 **3 欄(登錄號,標題,狀態)** → 報告永遠卡關。修正 report_check 改驗 3 欄（並補驗標題非空），selftest 正向 fixture 同步改 3 欄。selftest「✅ 全部守門有效」、本案報告 report_check ✅、gate_guard 全 Phase1 關卡通過、PDF 產出（CJK 字型，70KB）。涉及檔：`report_check.py`、`selftest_guards.py`。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）

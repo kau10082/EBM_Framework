@@ -143,7 +143,7 @@ def main():
              "search_strategy":[{"leg":"PubMed","query":"(COPD[tiab] OR emphysema[tiab]) AND (\"triple therapy\"[tiab] OR Trelegy[tiab])"}],
              "funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
              "included_studies":[{"study":"IMPACT","type":"RCT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","PubMed○/Crossref○"]]}],
-             "ongoing_trials":[["NCT00000000","A triple therapy trial"]],
+             "ongoing_trials":[["NCT00000000","A triple therapy trial","RECRUITING"]],
              "funnel_closure":"切題 5 + 離題 3 = 8",
              "prisma_flow":{"identification":100,"screening":80,"included":5}}
     no_prisma = dict(valid); no_prisma.pop("prisma_flow")
