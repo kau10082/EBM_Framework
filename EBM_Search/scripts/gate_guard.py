@@ -227,6 +227,27 @@ def check_strategy_approved(cache):
                 "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
     return []
 
+def check_2b_stop(cache):
+    """②b→③ 停頓點（防 ③ 搶跑）：②b 高敏初篩完成（g2b_survivors.json 產出）後，
+    必須停下報告 ②b 結果、等使用者點頭，才可進 ③。
+    落地：使用者確認後在 g2b_checkpoint.json 設 approved_by_user=true。
+    g3_FINAL_screen.json 已產出但 ②b 未經使用者確認＝③ 搶跑 → FAIL。
+    （2026-06 使用者糾正：②b 完成後未停下報告即逕跑 ③；此 gate 即為此而立，
+      與 check_strategy_approved「⓪→① 防搶跑」對稱。）"""
+    g2b = _load(cache / "g2b_survivors.json")
+    if g2b is None:
+        return None  # 尚未到 ②b：此關不適用
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None  # 尚未進 ③（正常停在 ②b）：此關不適用
+    ckpt = _load(cache / "g2b_checkpoint.json")
+    if not ckpt or not ckpt.get("approved_by_user"):
+        return ["g3_FINAL_screen.json 已產出，但 g2b_checkpoint.json 未標 approved_by_user=true："
+                "②b 高敏初篩完成後必須先停下報告、經使用者點頭才可進 ③（防 ③ 搶跑；"
+                "使用者確認 ②b 結果後才在 g2b_checkpoint.json 設 approved_by_user=true）"]
+    return []
+
+
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
     man = _load(cache / "g1_legs_manifest.json")
@@ -440,6 +461,7 @@ def _all_checks(cache):
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
+            _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),

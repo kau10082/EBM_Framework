@@ -12,6 +12,8 @@
 
 **附帶變更（第③關重命名，使用者指示）**：把第③關名稱「融合式分層升級嚴格篩」統一改為「**全文/摘要搜尋及嚴格離題篩選**」（語意/流程不變，純命名）。涵蓋 SEARCH_SPEC.md（管線步驟編號＋v0.22 定版段，line 24 保留「舊名」對照供追溯）、gate_guard.py／selftest_guards.py／fulltext_exhaust.py／strict_screen_check.py 各 docstring/註解。selftest 重跑「✅ 全部守門有效」。
 
+**附帶變更2（②b→③ 停頓點機器化，使用者指示）**：使用者糾正「②b 高敏初篩完成後應先停下報告、點頭後才進 ③」（spec line 40 早有此停頓點，但本輪 agent 把 ②b→fetch→③ 一口氣跑完）。新增機器 gate `check_2b_stop`（併入 `gate_guard`，與 `check_strategy_approved`「⓪→① 防搶跑」對稱）：②b 產物 `g2b_survivors.json` 完成後，須於 `g2b_checkpoint.json` 設 `approved_by_user:true` 才可進 ③；`g3_FINAL_screen.json` 已產出但 ②b 未核准＝FAIL。SEARCH_SPEC.md line 40 加註此 gate。selftest 加 3 條回歸（搶跑會 FAIL、停在 ②b 不誤擋、②b 核准後通過）。本次 run 已據此把過早產出的 ③ 產物改名為 `g3_FINAL_screen.premature.json` 暫存、cache 回到 ②b 停頓點（gate_guard 全過）。涉及檔：`gate_guard.py`、`selftest_guards.py`、`SEARCH_SPEC.md`（皆已在本輪範圍內）。
+
 **背景（bug 怎麼來的）**：triple vs dual COPD 案，使用者選擇套用 SR filter。原本把 EuropePMC『無過濾主檢』（EuropePMC REST 預設全文檢索）的 3816 筆全文泛提及噪音直接 dedup 進 `g1_union`（語料庫），使用者糾正：「當我決定用 SR filter 時，DB 腿應只給我 SR 搜尋結果」。
 
 **修法**：

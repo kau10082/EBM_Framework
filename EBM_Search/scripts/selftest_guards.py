@@ -173,6 +173,25 @@ def main():
     allok &= (not _om)
 
     import gate_guard, tempfile, json, io, shutil
+    # ── ②b→③ 停頓點守門回歸（②b 完成後須經使用者確認才可進 ③，防搶跑）──
+    _t2b = Path(tempfile.mkdtemp())
+    json.dump([{"uid":"s1"}], io.open(_t2b/"g2b_survivors.json","w",encoding="utf-8"))
+    json.dump([{"uid":"s1","verdict":"切題","abstract":"x"}], io.open(_t2b/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    # g3 已產出但無 g2b_checkpoint 核准 → FAIL
+    allok &= _assert_fires("②b→③ 停頓點（③未經②b確認就搶跑）", gate_guard.check_2b_stop(_t2b))
+    # 正向1：②b 完成、尚未進 ③（無 g3）→ 不適用(None)、不誤擋
+    (_t2b/"g3_FINAL_screen.json").unlink()
+    _s2 = gate_guard.check_2b_stop(_t2b)
+    print(("  ✅" if _s2 is None else "  ❌")+" ②b→③：停在②b（無g3）不誤擋（防誤報）："+("通過" if _s2 is None else str(_s2)))
+    allok &= (_s2 is None)
+    # 正向2：g2b_checkpoint 已核准 + g3 → 通過
+    json.dump([{"uid":"s1","verdict":"切題","abstract":"x"}], io.open(_t2b/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    json.dump({"approved_by_user":True}, io.open(_t2b/"g2b_checkpoint.json","w",encoding="utf-8"))
+    _s3 = gate_guard.check_2b_stop(_t2b)
+    print(("  ✅" if not _s3 else "  ❌")+" ②b→③：②b已核准後進③應通過（防誤報）："+("通過" if not _s3 else str(_s3)))
+    allok &= (not _s3)
+    shutil.rmtree(_t2b, ignore_errors=True)
+
     # ── 全文/摘要搜尋及嚴格離題篩選 守門回歸（取代 Stage A/B 切分＋待評估雙桶；單一產物 g3_FINAL_screen.json）──
     tmp = Path(tempfile.mkdtemp())
     # (1) 反坍縮：uid 重複 → FAIL
