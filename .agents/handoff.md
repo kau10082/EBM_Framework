@@ -32,4 +32,10 @@
    - 本輪處置：停用該 run 的 `nct_triple.json`（改名 .enrich_disabled），改靠 curated `PIVOTAL_LABALAMA_ARM` ＋ trip∧dual regex 判核心。重跑後核心 IMPACT 23／KRONOS 9／ETHOS 9(+ext1)／TRIBUTE 1＋BGF 藥名報告皆正確歸核心；對帳 57+105+415+18=595 平。
    - 建議下次正式審查時修 `classify_units.enrich`：I 軸比對 CT.gov 介入時應**逐成分**判（ICS∧LABA∧LAMA 三類各命中即三合一），而非要求單一字串含完整三合一名；或把 nontriple override 移到 PIVOTAL 表之後。
 
+✅ 已修（深修）：**⑤b 不應出現『試驗未辨識／待人工確認介入』——應妥善用 CT.gov 解析**（使用者本輪糾正；已改 `classify_units.py`）。
+   - 改了什麼：(1) 新增 `resolve_arms()`（取代舊 enrich）：摘要無 NCT 的 RCT **以標題搜 CT.gov 補回 NCT**（`uid_resolved.json`）；對每個 NCT 抓臂/介入**逐成分**判 `has_triple`／`has_dual_ll`（`nct_arms.json`）。(2) classify 取消舊 `nontriple` override 與 `RCT(待人工確認介入)` 桶；(3) 設計分類器收緊：群體藥動(population PK)、基因/生物標記關聯、composite-tool 方法學、real-life 即使帶 RCT pubtype 也歸背景，不進 RCT 路徑（修掉把 PK/基因/他病/裝置研究誤升核心）。
+   - **關鍵發現＋安全裁決**：CT.gov 逐成分 `has_triple=True` **不可靠**——安慰劑/比較組 intervention 的 description 常列「他臂藥」造成跨臂污染假陽（實測 ILLUMINATE＝QVA149 vs ICS/LABA 無三合一臂，卻 has_triple=True；POWER 亦假陽）。**故核心一律只由 curated `PIVOTAL_LABALAMA_ARM` 背書**；CT.gov 臂只用於『可靠方向』＝`has_triple=False` 確認背景對照側、補 NCT/試驗名。已加 ETHOS-ext/FULFIL-ext 進樞紐表。
+   - 結果：核心未辨識 0、待人工 0；核心 43 報告全 pivotal 背書（IMPACT22/ETHOS9/KRONOS9/ETHOS-ext2/TRIBUTE1），CT.gov 確認 41 筆「對照側RCT(無三合一臂)」歸背景；對帳 595 平。
+   - 建議正式審查：若要讓 CT.gov 也能正向判核心，`_ct_arms` 需 (a) 逐 armGroup 對應其 interventionNames、(b) 排除 placebo/比較組描述、(c) 只認 intervention 自身名稱+自述成分，避免跨臂污染。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
