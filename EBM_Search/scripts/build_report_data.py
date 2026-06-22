@@ -139,12 +139,20 @@ def build(cache):
     background = []
     prim = {str(p) for g in studies for p in [r[1] for r in g["reports"]]}
     for v in ver:
-        pm = str(v.get("pmid"))
-        if pm in retr or pm in prim: continue
+        pm = str(v.get("pmid") or "")
+        if pm and (pm in retr or pm in prim): continue
         dt = _doctype(v)   # 程式化回推（不單靠手填 doctype）
         if dt in ("Meta-Analysis", "Systematic Review", "Guideline"):
-            row = fill_row5(pm)  # [title,pmid,doi,ft,xref]
-            background.append([row[0][:78], row[1], row[2], dt, row[3], row[4]])
+            if pm:
+                row = fill_row5(pm)  # [title,pmid,doi,ft,xref]
+                background.append([row[0][:78], row[1], row[2], dt, row[3], row[4]])
+            else:
+                # 無 PMID（preprint/DOI-only）：依 spec『不留空，以登錄號/DOI＋理由』→ 以 DOI 當識別、標 preprint。
+                doi = (v.get("doi") or "缺")
+                ident = ("DOI:" + doi) if doi != "缺" else "—(preprint,無PMID)"
+                title = ((v.get("title") or "").strip()[:78]) or "(無標題)"
+                xr = v.get("verdict") if v.get("verdict") in XREF_ENUM else "UNVERIFIED"
+                background.append([title, ident, doi, dt, "需補", xr])
     # 背景空表但仍有非主研究的 verified 記錄 → 警告（surface doctype 缺失致漏件，不靜默）
     if not background and any(str(v.get("pmid")) not in retr and str(v.get("pmid")) not in prim for v in ver if v.get("pmid")):
         sys.stderr.write("⚠️ 背景表空，但尚有非主研究的 verified 記錄——確認 g6_verified 是否含可辨識型態（SR/MA/指引可能漏件）\n")

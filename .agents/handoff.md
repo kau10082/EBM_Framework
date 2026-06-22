@@ -38,4 +38,9 @@
    - 結果：核心未辨識 0、待人工 0；核心 43 報告全 pivotal 背書（IMPACT22/ETHOS9/KRONOS9/ETHOS-ext2/TRIBUTE1），CT.gov 確認 41 筆「對照側RCT(無三合一臂)」歸背景；對帳 595 平。
    - 建議正式審查：若要讓 CT.gov 也能正向判核心，`_ct_arms` 需 (a) 逐 armGroup 對應其 interventionNames、(b) 排除 placebo/比較組描述、(c) 只認 intervention 自身名稱+自述成分，避免跨臂污染。
 
+✅ 已修：**⑥ build_report_data 背景表對『無 PMID 的 SR/MA preprint』留空→validate FAIL**（本輪發現並修）。
+   - 問題：兩篇 SR/MA preprint（Preprints.org 10.20944、Research Square 10.21203，標題含 "Systematic Review and Meta-analysis"）無 PMID（不在 PubMed），背景列 PMID 欄留空→`validate` 缺格 FAIL。違反 spec『PMID 無→不留空，以登錄號/DOI＋理由』。
+   - 本輪修改 `build_report_data.py`：背景迴圈對無 PMID 者改以 `DOI:<doi>` 當識別欄（標 preprint）、全文狀態記『需補』、檢核沿用 verdict，不再留空。
+   - 結果：三表產出（核心 43／背景 SR-MA+指引 118／進行中 5），report_check 5 段全過、Phase1 PDF 產出且登記 pdf_path、gate_guard 全綠。
+
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
