@@ -414,6 +414,18 @@ def check_strict_screen(cache):
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
 
+def check_2b_abstract_screen(cache):
+    """鐵律：②b 高敏初篩須以『標題＋摘要』篩，嚴禁只憑標題（Cochrane/MECIR 紅線；與 ④ citation_screen 對稱）。
+    g2b_screen.json 須結構化宣告 screening_method=title+abstract、批次抓摘要、無 title-only 剔除。"""
+    g2b = _load(cache / "g2b_screen.json")
+    if g2b is None:
+        return None
+    try:
+        import screen_2b_abstract_check
+        return screen_2b_abstract_check.check(g2b)
+    except Exception as e:
+        return [f"screen_2b_abstract_check 載入失敗：{str(e)[:80]}"]
+
 def check_citation_screen(cache):
     """鐵律：④ 引文追蹤新候選須批次抓摘要、以『標題＋摘要』高敏初篩，嚴禁只憑標題丟（Cochrane 紅線）。"""
     g4 = _load(cache / "g4_citation_tracking.json")
@@ -559,6 +571,7 @@ def _all_checks(cache):
             _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
             _safe("Gate① SR filter 複合語法(PubType/MeSH＋Title/Abstract,MECIR C33)", check_sr_filter_composite, cache),
             _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
+            _safe("②b 須以標題＋摘要高敏初篩(禁只憑標題)", check_2b_abstract_screen, cache),
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),

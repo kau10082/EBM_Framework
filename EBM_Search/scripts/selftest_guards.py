@@ -79,6 +79,23 @@ def main():
     print(("  ✅" if not _srcai else "  ❌") + " AI 合成 SR 腿豁免複合語法應通過（防誤報）：" + ("通過" if not _srcai else str(_srcai)))
     allok &= (not _srcai)
 
+    # ②b 須以『標題＋摘要』初篩（Cochrane 紅線）
+    import screen_2b_abstract_check as _s2b
+    # 舊版純 list（title-only）→ 必須 FAIL
+    allok &= _assert_fires("②b 只憑標題（g2b_screen 為純 list、無摘要狀態）",
+        _s2b.check([{"uid":"u1","verdict":"removed","pmid":"123","title":"x"}]))
+    # 有 ID 記錄被剔除但無摘要證據 → 必須 FAIL
+    allok &= _assert_fires("②b 有 ID 卻無摘要證據就剔除（title-only drop）",
+        _s2b.check({"screening_method":"title+abstract","abstracts_fetched":5,"title_only_dropped":0,
+                    "records":[{"uid":"u1","verdict":"removed","pmid":"123","has_abstract":False,"abstract_status":""}]}))
+    # 正向：宣告 title+abstract、剔除者有摘要 / 無摘要已標狀態 → 應通過（防誤報）
+    _s2bok = _s2b.check({"screening_method":"title+abstract","abstracts_fetched":10,"title_only_dropped":0,
+                         "records":[{"uid":"u1","verdict":"removed","pmid":"123","has_abstract":True,"abstract_status":"have"},
+                                    {"uid":"u2","verdict":"removed","doi":"10.x/y","has_abstract":False,"abstract_status":"none_after_fetch"},
+                                    {"uid":"u3","verdict":"kept","pmid":"9","has_abstract":True,"abstract_status":"have"}]})
+    print(("  ✅" if not _s2bok else "  ❌") + " ②b 標題＋摘要初篩(剔除者有摘要證據)應通過（防誤報）：" + ("通過" if not _s2bok else str(_s2bok)))
+    allok &= (not _s2bok)
+
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
         leg_exhaust_check.check([{"leg":"PubMed","hitCount":218,"fetched":218,"exhaustible":True},
