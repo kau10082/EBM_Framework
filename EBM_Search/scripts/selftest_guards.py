@@ -96,6 +96,24 @@ def main():
     print(("  ✅" if not _s2bok else "  ❌") + " ②b 標題＋摘要初篩(剔除者有摘要證據)應通過（防誤報）：" + ("通過" if not _s2bok else str(_s2bok)))
     allok &= (not _s2bok)
 
+    # ③ 逐 Tier 停頓：Tier 2 產物存在但 Tier 1 未核准 → 必須 FAIL
+    import gate_guard as _ggt, tempfile as _tft, json as _jst, io as _iot, shutil as _sht
+    _t3=Path(_tft.mkdtemp())
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier1.json","w",encoding="utf-8"))
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier2.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 跨Tier搶跑（Tier2 已產出但 Tier1 未核准）", _ggt.check_screen_tier_stops(_t3))
+    # 一口氣到 g3_FINAL 但中間層未核准 → 必須 FAIL
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 跨Tier搶跑（g3_FINAL 已產出但上層未核准）", _ggt.check_screen_tier_stops(_t3))
+    # 正向：逐層核准後到 FINAL → 應通過（防誤報）
+    for ck in ("g3_tier1_checkpoint.json","g3_tier2_checkpoint.json","g3_tier3_checkpoint.json"):
+        _jst.dump({"approved_by_user":True}, _iot.open(_t3/ck,"w",encoding="utf-8"))
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier3.json","w",encoding="utf-8"))
+    _t3ok=_ggt.check_screen_tier_stops(_t3)
+    print(("  ✅" if not _t3ok else "  ❌") + " ③ 逐層核准後到 FINAL 應通過（防誤報）：" + ("通過" if not _t3ok else str(_t3ok)))
+    allok &= (not _t3ok)
+    _sht.rmtree(_t3, ignore_errors=True)
+
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
         leg_exhaust_check.check([{"leg":"PubMed","hitCount":218,"fetched":218,"exhaustible":True},

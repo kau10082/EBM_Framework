@@ -402,6 +402,31 @@ def check_comparator_purity(cache):
     except Exception as e:
         return [f"comparator_purity_check 載入失敗：{str(e)[:80]}"]
 
+def check_screen_tier_stops(cache):
+    """③ 內部分層『逐 Tier 停頓報告』（鐵律，2026-06 使用者定版）：③ 嚴格篩的 Tier 1（摘要）→
+    Tier 2（登錄/AI 合成）→ Tier 3（實取全文）→ Tier 4（Unpaywall→g3_FINAL）每一層之間都必須
+    停下報告該層結果、經使用者核准後才可跑下一層；不可一口氣把 T2→T3→T4 連跑。
+    落地：每層完成寫 g3_tierN.json，使用者核准後在 g3_tierN_checkpoint.json 設 approved_by_user=true；
+    下一層產物存在但本層 checkpoint 未核准＝跨層搶跑 → FAIL（與 check_2b_stop 等停頓 gate 同構）。"""
+    stages = [
+        ("g3_tier1.json", "g3_tier1_checkpoint.json"),
+        ("g3_tier2.json", "g3_tier2_checkpoint.json"),
+        ("g3_tier3.json", "g3_tier3_checkpoint.json"),
+        ("g3_FINAL_screen.json", None),  # Tier 4 收斂＝最終篩選產物
+    ]
+    fails = []
+    for i in range(len(stages) - 1):
+        up_prod, up_ckpt = stages[i]
+        down_prod, _ = stages[i + 1]
+        if _load(cache / down_prod) is None:
+            continue  # 下一層尚未產出：此轉換不適用
+        ck = _load(cache / up_ckpt) if up_ckpt else None
+        if not ck or not ck.get("approved_by_user"):
+            fails.append(f"{down_prod} 已產出，但上一層 {up_ckpt} 未標 approved_by_user=true："
+                         f"③ 每個 Tier 之間必須停下報告、經使用者核准才可進下一層（防跨 Tier 搶跑；"
+                         f"使用者核准 {up_prod} 結果後才在 {up_ckpt} 設 approved_by_user=true）")
+    return fails
+
 def check_strict_screen(cache):
     """Gate ③：嚴格篩逐軸核對——切題須全必含軸命中、離題須標明缺軸（反放水）。"""
     scr = _load(cache / "g3_FINAL_screen.json")
@@ -575,6 +600,7 @@ def _all_checks(cache):
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
+            _safe("③ 逐 Tier 停頓報告(T1→T2→T3→T4 不得跨層搶跑)", check_screen_tier_stops, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),
