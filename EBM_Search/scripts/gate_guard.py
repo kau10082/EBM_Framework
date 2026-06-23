@@ -4,6 +4,8 @@ gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 S
 ================================================================================
 依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
   • g1_legs_manifest.json + g0_strategy.json → check_strategy_approved（Gate ⓪ 策略須先經使用者核准才可檢索，防搶跑）
+  • g1_legs_manifest.json + g0_strategy.json → check_sr_filter_decided（Gate ⓪ SR filter 須問過並決定，防忘了問）
+  • g1_legs_manifest.json + g0_strategy.json → check_sr_filter_composite（Gate ① SR filter 須複合語法 PubType/MeSH＋Title/Abstract，MECIR C33）
   • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
   • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
   • _search_report.json             → funnel_check（流程數字閉合）
@@ -241,6 +243,30 @@ def check_strategy_approved(cache):
                 "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
     return []
 
+# SR filter 決策合法 token：須為「已套用 / 不套用」其一，不得停在未決（pending/空）。
+SR_DECISION_DECIDED = {"applied", "declined", "not_applied", "none"}
+
+def check_sr_filter_decided(cache):
+    """防『忘了問 SR filter』（Gate ⓪→①，與 check_strategy_approved 對稱）：
+    報告檢索策略時必須主動詢問『是否套用 Systematic Review Filter』（SEARCH_SPEC §★鐵律），
+    此為使用者決策、不可預設替他決定。本守門把『有沒有問過並得到決定』從靠記性變機器看守——
+    Stage A 廣蒐（g1_legs_manifest.json）產出時，g0_strategy.json 的 sr_filter_decision
+    必須是已決定值（applied／declined／not_applied／none），不得缺漏或停在 pending → 否則 FAIL。
+    （2026-06 使用者糾正：報告策略時漏問 SR filter；此 gate 即為此而立。）"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None  # 尚未廣蒐：此關不適用
+    strat = _load(cache / "g0_strategy.json")
+    if not strat:
+        return ["g1_legs_manifest.json 已產出但無 g0_strategy.json：無法確認是否問過 SR filter"]
+    dec = (strat.get("sr_filter_decision") or "").strip().lower()
+    if dec not in SR_DECISION_DECIDED:
+        return ["Stage A 廣蒐（g1_legs_manifest.json 已產出）但 g0_strategy.json 的 sr_filter_decision "
+                f"未決（現值＝{strat.get('sr_filter_decision')!r}）：報告檢索策略時必須主動詢問使用者"
+                "『是否套用 Systematic Review Filter』，得到決定後才設 sr_filter_decision＝"
+                "applied／declined（不套用），不得停在 pending 就開始檢索（防『忘了問 SR filter』）"]
+    return []
+
 def check_2b_stop(cache):
     """②b→③ 停頓點（防 ③ 搶跑）：②b 高敏初篩完成（g2b_survivors.json 產出）後，
     必須停下報告 ②b 結果、等使用者點頭，才可進 ③。
@@ -348,6 +374,20 @@ def check_sr_division(cache):
         return [f"sr_division_check 載入/執行失敗：{e}"]
 
 
+def check_sr_filter_composite(cache):
+    """Gate ①：SR filter 須為複合語法——每條 SR 子腿（`<leg>-SR`／role=SR_MA_NMA）的 Boolean query
+    須同時含『控制詞彙(PubType/MeSH)＋自由文字(Title/Abstract)』（MECIR C33；只靠 PubType 會因索引時間差漏最新 SR）。
+    AI 合成腿（Consensus/OE）以 study_types 等結構化參數限定 → 豁免。manifest 未產出 → 不適用。"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None
+    strat = _load(cache / "g0_strategy.json")
+    try:
+        import sr_filter_composite_check
+        return sr_filter_composite_check.check(man, strat)
+    except Exception as e:
+        return [f"sr_filter_composite_check 載入失敗：{str(e)[:80]}"]
+
 def check_comparator_purity(cache):
     """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
     manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
@@ -362,6 +402,31 @@ def check_comparator_purity(cache):
     except Exception as e:
         return [f"comparator_purity_check 載入失敗：{str(e)[:80]}"]
 
+def check_screen_tier_stops(cache):
+    """③ 內部分層『逐 Tier 停頓報告』（鐵律，2026-06 使用者定版）：③ 嚴格篩的 Tier 1（摘要）→
+    Tier 2（登錄/AI 合成）→ Tier 3（實取全文）→ Tier 4（Unpaywall→g3_FINAL）每一層之間都必須
+    停下報告該層結果、經使用者核准後才可跑下一層；不可一口氣把 T2→T3→T4 連跑。
+    落地：每層完成寫 g3_tierN.json，使用者核准後在 g3_tierN_checkpoint.json 設 approved_by_user=true；
+    下一層產物存在但本層 checkpoint 未核准＝跨層搶跑 → FAIL（與 check_2b_stop 等停頓 gate 同構）。"""
+    stages = [
+        ("g3_tier1.json", "g3_tier1_checkpoint.json"),
+        ("g3_tier2.json", "g3_tier2_checkpoint.json"),
+        ("g3_tier3.json", "g3_tier3_checkpoint.json"),
+        ("g3_FINAL_screen.json", None),  # Tier 4 收斂＝最終篩選產物
+    ]
+    fails = []
+    for i in range(len(stages) - 1):
+        up_prod, up_ckpt = stages[i]
+        down_prod, _ = stages[i + 1]
+        if _load(cache / down_prod) is None:
+            continue  # 下一層尚未產出：此轉換不適用
+        ck = _load(cache / up_ckpt) if up_ckpt else None
+        if not ck or not ck.get("approved_by_user"):
+            fails.append(f"{down_prod} 已產出，但上一層 {up_ckpt} 未標 approved_by_user=true："
+                         f"③ 每個 Tier 之間必須停下報告、經使用者核准才可進下一層（防跨 Tier 搶跑；"
+                         f"使用者核准 {up_prod} 結果後才在 {up_ckpt} 設 approved_by_user=true）")
+    return fails
+
 def check_strict_screen(cache):
     """Gate ③：嚴格篩逐軸核對——切題須全必含軸命中、離題須標明缺軸（反放水）。"""
     scr = _load(cache / "g3_FINAL_screen.json")
@@ -373,6 +438,18 @@ def check_strict_screen(cache):
         return strict_screen_check.check(scr, strat)
     except Exception as e:
         return [f"strict_screen_check 載入失敗：{str(e)[:80]}"]
+
+def check_2b_abstract_screen(cache):
+    """鐵律：②b 高敏初篩須以『標題＋摘要』篩，嚴禁只憑標題（Cochrane/MECIR 紅線；與 ④ citation_screen 對稱）。
+    g2b_screen.json 須結構化宣告 screening_method=title+abstract、批次抓摘要、無 title-only 剔除。"""
+    g2b = _load(cache / "g2b_screen.json")
+    if g2b is None:
+        return None
+    try:
+        import screen_2b_abstract_check
+        return screen_2b_abstract_check.check(g2b)
+    except Exception as e:
+        return [f"screen_2b_abstract_check 載入失敗：{str(e)[:80]}"]
 
 def check_citation_screen(cache):
     """鐵律：④ 引文追蹤新候選須批次抓摘要、以『標題＋摘要』高敏初篩，嚴禁只憑標題丟（Cochrane 紅線）。"""
@@ -509,6 +586,7 @@ def _safe(name, fn, cache):
 
 def _all_checks(cache):
     return [_safe("Gate⓪ 策略經使用者核准才可檢索(防搶跑)", check_strategy_approved, cache),
+            _safe("Gate⓪ SR filter 須問過並決定(防忘了問)", check_sr_filter_decided, cache),
             _safe("有全文須實抓驗證", check_have_verified, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
@@ -516,10 +594,13 @@ def _all_checks(cache):
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
+            _safe("Gate① SR filter 複合語法(PubType/MeSH＋Title/Abstract,MECIR C33)", check_sr_filter_composite, cache),
             _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
+            _safe("②b 須以標題＋摘要高敏初篩(禁只憑標題)", check_2b_abstract_screen, cache),
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
+            _safe("③ 逐 Tier 停頓報告(T1→T2→T3→T4 不得跨層搶跑)", check_screen_tier_stops, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
             _safe("⑥驗證覆蓋(included/background 全驗)", check_verification_coverage, cache),

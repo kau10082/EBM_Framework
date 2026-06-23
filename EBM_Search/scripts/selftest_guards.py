@@ -40,7 +40,79 @@ def main():
     _sok = _gg_strat.check_strategy_approved(_tmps)
     print(("  ✅" if not _sok else "  ❌") + " 策略已核准應通過（防誤報）：" + ("通過" if not _sok else str(_sok)))
     allok &= (not _sok)
+
+    # Gate ⓪ SR filter 須問過：g1 已產出但 g0 的 sr_filter_decision 未決（pending）→ 必須 FAIL
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True,"sr_filter_decision":"pending"},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ SR filter 漏問（g1 已產出但 sr_filter_decision 停在 pending）",
+        _gg_strat.check_sr_filter_decided(_tmps))
+    # 缺 sr_filter_decision 欄位（根本沒記）→ 也必須 FAIL
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ SR filter 漏問（g0 根本沒記 sr_filter_decision）",
+        _gg_strat.check_sr_filter_decided(_tmps))
+    # 正向：已決定（declined＝不套用）→ 應通過（防誤報）
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True,"sr_filter_decision":"declined"},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    _srok = _gg_strat.check_sr_filter_decided(_tmps)
+    print(("  ✅" if not _srok else "  ❌") + " SR filter 已決定(declined)應通過（防誤報）：" + ("通過" if not _srok else str(_srok)))
+    allok &= (not _srok)
     _sh_s.rmtree(_tmps, ignore_errors=True)
+
+    # SR filter 複合語法（MECIR C33）：SR 子腿只用出版類型 → 缺自由文字 → 必須 FAIL
+    import sr_filter_composite_check as _src
+    _strat_sr = {"sr_filter_decision":"applied",
+                 "legs":[{"leg":"Europe PMC-SR","design_filter_allowed":True,"role":"SR_MA_NMA"},
+                         {"leg":"Consensus-SR","role":"ai_synthesis","exhaustible":False}]}
+    allok &= _assert_fires("Gate① SR filter 只用出版類型(缺自由文字 Title/Abstract)",
+        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[pt] OR meta-analysis[pt])"}], _strat_sr))
+    # 只用自由文字、缺控制詞彙 → 也應 FAIL
+    allok &= _assert_fires("Gate① SR filter 只用自由文字(缺控制詞彙 PubType/MeSH)",
+        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr))
+    # 正向：複合語法（PubType ＋ tiab）→ 應通過（防誤報）
+    _srcok = _src.check([{"leg":"Europe PMC-SR",
+                          "query":"(copd) AND (systematic review[pt] OR meta-analysis[pt] OR systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr)
+    print(("  ✅" if not _srcok else "  ❌") + " SR filter 複合語法(PubType＋tiab)應通過（防誤報）：" + ("通過" if not _srcok else str(_srcok)))
+    allok &= (not _srcok)
+    # 正向：AI 合成腿(Consensus-SR, study_types 參數)豁免複合語法 → 不誤擋（防誤報）
+    _srcai = _src.check([{"leg":"Consensus-SR","query":"copd triple therapy"}], _strat_sr)
+    print(("  ✅" if not _srcai else "  ❌") + " AI 合成 SR 腿豁免複合語法應通過（防誤報）：" + ("通過" if not _srcai else str(_srcai)))
+    allok &= (not _srcai)
+
+    # ②b 須以『標題＋摘要』初篩（Cochrane 紅線）
+    import screen_2b_abstract_check as _s2b
+    # 舊版純 list（title-only）→ 必須 FAIL
+    allok &= _assert_fires("②b 只憑標題（g2b_screen 為純 list、無摘要狀態）",
+        _s2b.check([{"uid":"u1","verdict":"removed","pmid":"123","title":"x"}]))
+    # 有 ID 記錄被剔除但無摘要證據 → 必須 FAIL
+    allok &= _assert_fires("②b 有 ID 卻無摘要證據就剔除（title-only drop）",
+        _s2b.check({"screening_method":"title+abstract","abstracts_fetched":5,"title_only_dropped":0,
+                    "records":[{"uid":"u1","verdict":"removed","pmid":"123","has_abstract":False,"abstract_status":""}]}))
+    # 正向：宣告 title+abstract、剔除者有摘要 / 無摘要已標狀態 → 應通過（防誤報）
+    _s2bok = _s2b.check({"screening_method":"title+abstract","abstracts_fetched":10,"title_only_dropped":0,
+                         "records":[{"uid":"u1","verdict":"removed","pmid":"123","has_abstract":True,"abstract_status":"have"},
+                                    {"uid":"u2","verdict":"removed","doi":"10.x/y","has_abstract":False,"abstract_status":"none_after_fetch"},
+                                    {"uid":"u3","verdict":"kept","pmid":"9","has_abstract":True,"abstract_status":"have"}]})
+    print(("  ✅" if not _s2bok else "  ❌") + " ②b 標題＋摘要初篩(剔除者有摘要證據)應通過（防誤報）：" + ("通過" if not _s2bok else str(_s2bok)))
+    allok &= (not _s2bok)
+
+    # ③ 逐 Tier 停頓：Tier 2 產物存在但 Tier 1 未核准 → 必須 FAIL
+    import gate_guard as _ggt, tempfile as _tft, json as _jst, io as _iot, shutil as _sht
+    _t3=Path(_tft.mkdtemp())
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier1.json","w",encoding="utf-8"))
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier2.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 跨Tier搶跑（Tier2 已產出但 Tier1 未核准）", _ggt.check_screen_tier_stops(_t3))
+    # 一口氣到 g3_FINAL 但中間層未核准 → 必須 FAIL
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③ 跨Tier搶跑（g3_FINAL 已產出但上層未核准）", _ggt.check_screen_tier_stops(_t3))
+    # 正向：逐層核准後到 FINAL → 應通過（防誤報）
+    for ck in ("g3_tier1_checkpoint.json","g3_tier2_checkpoint.json","g3_tier3_checkpoint.json"):
+        _jst.dump({"approved_by_user":True}, _iot.open(_t3/ck,"w",encoding="utf-8"))
+    _jst.dump([{"uid":"u1"}], _iot.open(_t3/"g3_tier3.json","w",encoding="utf-8"))
+    _t3ok=_ggt.check_screen_tier_stops(_t3)
+    print(("  ✅" if not _t3ok else "  ❌") + " ③ 逐層核准後到 FINAL 應通過（防誤報）：" + ("通過" if not _t3ok else str(_t3ok)))
+    allok &= (not _t3ok)
+    _sht.rmtree(_t3, ignore_errors=True)
 
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
