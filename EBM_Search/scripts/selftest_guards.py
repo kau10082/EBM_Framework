@@ -78,6 +78,13 @@ def main():
     _srcai = _src.check([{"leg":"Consensus-SR","query":"copd triple therapy"}], _strat_sr)
     print(("  ✅" if not _srcai else "  ❌") + " AI 合成 SR 腿豁免複合語法應通過（防誤報）：" + ("通過" if not _srcai else str(_srcai)))
     allok &= (not _srcai)
+    # 依 DB 收嚴（審查 item 1）：PubMed 方括號方言下，自由文字只給『裸詞』(=all-fields 非 tiab) → 仍視為缺自由文字 → FAIL
+    allok &= _assert_fires("Gate① SR filter(PubMed 方言)自由文字只給裸詞(non-tiab)＝缺自由文字",
+        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[pt] OR meta-analysis[pt] OR systematic review OR meta-analysis)"}], _strat_sr))
+    # 正向：非方括號方言(EuropePMC/OpenAlex 預設搜 title/abstract)裸詞自由文字 ＋ doctype 控制 → 應通過（防誤報）
+    _srcbare = _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (doctype:review OR meta-analysis)"}], _strat_sr)
+    print(("  ✅" if not _srcbare else "  ❌") + " 非方括號方言裸詞自由文字應通過（防誤報）：" + ("通過" if not _srcbare else str(_srcbare)))
+    allok &= (not _srcbare)
 
     # ②b 須以『標題＋摘要』初篩（Cochrane 紅線）
     import screen_2b_abstract_check as _s2b
@@ -95,6 +102,17 @@ def main():
                                     {"uid":"u3","verdict":"kept","pmid":"9","has_abstract":True,"abstract_status":"have"}]})
     print(("  ✅" if not _s2bok else "  ❌") + " ②b 標題＋摘要初篩(剔除者有摘要證據)應通過（防誤報）：" + ("通過" if not _s2bok else str(_s2bok)))
     allok &= (not _s2bok)
+    # 比例守門（審查 item 3）：剔除且有 ID 者幾乎全靠 registry/conference 免抓摘要豁免 → 疑似規避抓摘要 → FAIL
+    allok &= _assert_fires("②b 剔除幾乎全靠 registry 免抓摘要豁免(疑似規避抓摘要)",
+        _s2b.check({"screening_method":"title+abstract","abstracts_fetched":1,"title_only_dropped":0,
+                    "records":[{"uid":f"r{i}","verdict":"removed","pmid":str(1000+i),
+                                "has_abstract":False,"abstract_status":"registry"} for i in range(10)]}))
+    # 正向：registry 與真摘要混合、占比未達閾值 → 不誤殺（防誤報）
+    _s2bmix = _s2b.check({"screening_method":"title+abstract","abstracts_fetched":20,"title_only_dropped":0,
+                          "records":[{"uid":f"a{i}","verdict":"removed","pmid":str(2000+i),"has_abstract":True,"abstract_status":"have"} for i in range(8)]
+                                   + [{"uid":f"b{i}","verdict":"removed","pmid":str(3000+i),"has_abstract":False,"abstract_status":"registry"} for i in range(2)]})
+    print(("  ✅" if not _s2bmix else "  ❌") + " ②b registry 占比未達閾值(混真摘要)應通過（防誤報）：" + ("通過" if not _s2bmix else str(_s2bmix)))
+    allok &= (not _s2bmix)
 
     # ③ 逐 Tier 停頓：Tier 2 產物存在但 Tier 1 未核准 → 必須 FAIL
     import gate_guard as _ggt, tempfile as _tft, json as _jst, io as _iot, shutil as _sht

@@ -17,7 +17,9 @@ sr_filter_composite_check.py — Gate ①『SR filter 須為複合語法（PubTy
 斷言其實際 query **同時含**：
   (1) 控制詞彙成分：SR 詞綁定 [pt]/[ptyp]/[mesh]/[mh]/[sb] 或 `pub_type:`；以及
   (2) 自由文字成分：SR 詞綁定 [tiab]/[ti]/[tw]/[ab]/[title]，或 title/abstract 欄位語法，
-      或『裸詞』（無欄位標籤＝在多數 DB 預設搜 title/abstract）。
+      或『裸詞』。**依 DB 方言收嚴**：PubMed/Embase 方括號方言（query 內含 [pt]/[tiab]/[mesh]…）下
+      裸詞＝all-fields（非 title/abstract），不予採計，須顯式綁 [tiab] 類欄位（標準 PubMed SR 過濾器即如此）；
+      EuropePMC/OpenAlex 等預設即搜 title/abstract，裸詞才視為自由文字（寬鬆 fallback）。
 缺任一成分 → FAIL（只靠 PubType＝會漏未索引最新 SR；只靠自由文字＝召回雜訊、非標準過濾）。
 
 AI 合成腿（Consensus/OpenEvidence，role=ai_synthesis 或 exhaustible=false）以結構化參數
@@ -73,14 +75,26 @@ def _has_controlled(q):
         return True
     return False
 
+# PubMed/Embase 風格的『方括號欄位標籤』方言（任一 [pt]/[tiab]/[mesh]/[sb]…）：
+# 該方言內，『裸詞』其實是 all-fields（非 title/abstract），不算合格自由文字成分——
+# 必須顯式綁 [tiab]/[ti]/[tw]/[ab]（標準 PubMed SR 過濾器即如此）。
+# 反之 EuropePMC/OpenAlex 等預設即搜 title/abstract，裸詞才視為自由文字（寬鬆 fallback）。
+_BRACKET_TAG = r"\[\s*(?:" + CONTROLLED_TAGS + r"|" + FREETEXT_TAGS + r")\s*\]"
+
+def _is_bracket_dialect(q):
+    return bool(re.search(_BRACKET_TAG, q, re.I))
+
 def _has_freetext(q):
-    """SR 詞綁定自由文字欄位 / title:abstract: 語法 / 裸詞（無欄位標籤＝預設搜文字）。"""
+    """SR 詞綁定自由文字欄位 / title:abstract: 語法 / 裸詞（僅非方括號方言視裸詞為自由文字）。"""
     if re.search(SR_TERM + r"\s*\[\s*" + FREETEXT_TAGS + r"\s*\]", q, re.I):
         return True
     # 欄位前綴語法（OpenAlex/EuropePMC）：title:"systematic review" / abstract.search:meta-analysis / ti:(...)
     if re.search(r"(?:title|abstract|ti|ab|tiab)[\w.\s]*:\s*[\"(]?\s*" + SR_TERM, q, re.I):
         return True
-    # 裸詞（SR 詞之後沒有任何 [欄位] 標籤）＝多數 DB 預設搜 title/abstract（含 EuropePMC 預設）
+    # 裸詞（SR 詞之後沒有任何 [欄位] 標籤）＝多數 DB 預設搜 title/abstract（含 EuropePMC 預設）。
+    # 但 PubMed 方括號方言下裸詞＝all-fields，非 tiab，不予採計（依 DB 收嚴，回應 MECIR C33 精準度）。
+    if _is_bracket_dialect(q):
+        return False
     for m in re.finditer(SR_TERM, q, re.I):
         tail = q[m.end(): m.end() + 12]
         if not re.match(r"\s*\[", tail):

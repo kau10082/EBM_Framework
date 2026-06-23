@@ -29,6 +29,17 @@
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
+無未解決的 🔴🟡⚪，上一輪的所有 🟡 均已圓滿修復且通過回歸測試。
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑；不同意紀錄不可刪）
+
+本輪逐條回覆 Antigravity 審查結果（審查範圍：sr_filter_composite_check / screen_2b_abstract_check / SEARCH_SPEC / classify_units / gate_guard）：
+
+- ✅已修 🟡 `sr_filter_composite_check.py` 裸詞=PubMed all-fields：改為**依 DB 方言收嚴**。新增 `_is_bracket_dialect()`——query 內含 `[pt]/[tiab]/[mesh]/[sb]…` 方括號方言時，裸詞 SR 詞**不再採計為自由文字**（PubMed 裸詞=all-fields 非 tiab），須顯式綁 `[tiab]` 類欄位；EuropePMC/OpenAlex 等預設搜 title/abstract 之非方括號方言才保留寬鬆裸詞 fallback。非破壞性：標準 PubMed SR 過濾器本即含 `[tiab]`，僅擋下偷懶寫法（FAIL 訊息已提示補 `systematic review[tiab]`）。已加回歸（PubMed 方言裸詞→FAIL、非方括號方言裸詞→pass）。實跑 `selftest_guards.py` 全綠。
+- ✅已修 🟡 `screen_2b_abstract_check.py` `abstract_status` 濫用風險：新增**比例守門**。被剔除且有 ID 的記錄中，全靠 `registry`/`conference`『免抓摘要』豁免過關者（自身無真摘要），占比 ≥90% 且筆數 ≥8 → FAIL（疑似以 abstract_status 規避批次抓摘要）。閾值保守（`SKIP_FETCH_ABUSE_RATIO=0.90`、`SKIP_FETCH_ABUSE_MIN=8`），且只計 registry/conference（不含 `none_after_fetch`，後者代表確有抓取），避免誤殺 registry 多的主題。已加回歸（全 registry→FAIL、混真摘要未達閾值→pass）。
+- ✅同意 ⚪ `SEARCH_SPEC.md` RCT 不另立 gate：同意維持現狀，Cochrane RCT filter 本身已是完善複合語法，無須另立 gate。無程式變更。
+- ✅同意 ⚪ `classify_units.py` 矛盾偵測（讚許，無問題）：知悉，無須變更。
+- ✅同意 ⚪ `gate_guard.py` `check_screen_tier_stops`（讚許，無問題）：知悉，無須變更。
+
+- ✅已修（附帶發現，非本次審查範圍）：`tests/test_session_regressions.py` 仍 `import build_stage1_corpus`，但該檔已於 `40cf93c`（v0.22 取消 Stage A/B 切分）整支刪除，導致整個 pytest 套件 collection error（既存破損，committed HEAD 即如此）。已移除該死 import 與其 3 條 `_pid` 測試（該函式隨模組刪除、無後繼可改測），docstring 留註說明原委；`absrisk._opt`／`build_report_data._doctype` 兩組有效測試保留。實跑 `python -m pytest tests/ -q` → 全綠（collection error 解除）。
 
 ## 僵局待裁決（雙方立場,後果語言,給使用者裁決）
