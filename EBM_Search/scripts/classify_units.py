@@ -229,13 +229,22 @@ def classify(cache, out="g7_units.json"):
             #   會議摘要 → 其餘三合一 RCT 一律背景(具體理由：對照非雙支擴/未經權威確認)。
             #   核心『只』由 樞紐表／ICS退階／CT.gov has_dual_ll 三條正向確認來源背書；
             #   CT.gov has_triple=True 不採（跨臂/安慰劑描述污染假陽，如 ILLUMINATE/POWER）。
+            # ★ 對照臂判定優先序（2026-06 使用者定版）：**人工核對的樞紐權威表為主**（known trials 最準），
+            #   CT.gov 登錄各臂作『交叉核對 tripwire』——不一致時**記 table_discrepancy 攤出待人工核對、不靜默覆蓋**。
+            #   （理由：CT.gov 逐臂 regex 兩種噪音都會發生——假陽：arm 描述跨臂提及三類藥→has_triple 誤 True(如 ILLUMINATE)；
+            #    假陰：三合一以品牌/開發代號命名未被成分庫命中→has_triple 誤 False(如 TRIBUTE 的 extrafine BDP/FF/G)。
+            #    故 CT.gov 不可凌駕表、只能當不一致告警；表 curation 錯(如前案 TRIVERSYTI)由此 tripwire＋摘要矛盾偵測雙重surface。）
+            def _ctgov_crosscheck(in_table_value):
+                # 在表內試驗：表值(是否核心) vs CT.gov has_dual_ll 不一致 → 記 discrepancy（不覆蓋）
+                if arm and (arm.get("has_dual_ll") is not None) and (bool(in_table_value) != bool(arm.get("has_dual_ll"))):
+                    row["table_discrepancy"]=(f"PIVOTAL表={in_table_value} 但 CT.gov 各臂 has_dual_ll={arm.get('has_dual_ll')}"
+                        f"（has_triple={arm.get('has_triple')}；二者不一致→請人工核對對照臂事實，注意 CT.gov 逐臂 regex 也可能假陽/假陰）")
             if trial in PIVOTAL_LABALAMA_ARM:
                 row["unit"]="核心:三合一 vs LABA/LAMA" if PIVOTAL_LABALAMA_ARM[trial] else "三合一 vs ICS/LABA或安慰劑(非LABA/LAMA對照)"
                 row["core_basis"]="pivotal_trial_design"
+                _ctgov_crosscheck(PIVOTAL_LABALAMA_ARM[trial])
             elif trip and ICS_WD_STRICT.search(dtext):
                 # ICS 退階/移除設計（三合一→雙支擴，如 WISDOM/SUNSET）＝核心子型；下游 meta 不與起始混算。
-                # ★ 須『撤除/退階』與『ICS/吸入糖皮質素』鄰近共現才算（避免泛『step-down 管理策略』如
-                #   symptom-based step-up/step-down 試驗被誤判為 ICS 退階核心）。
                 row["unit"]="核心:ICS 退階試驗(三合一→LABA/LAMA)"; row["core_basis"]="ICS_withdrawal"
                 row["design_subtype"]="ICS-withdrawal"
             elif arm and not arm.get("has_triple"):
@@ -290,6 +299,8 @@ def classify(cache, out="g7_units.json"):
             has_dual=bool(r.get("comparator_LABA_LAMA")) or bool(R_DUAL.search(R_TRIP.sub(" ", ab)))
             if ics_laba_comp and not has_dual:
                 reasons.append("樞紐表標核心但摘要對照疑為ICS/LABA非雙支擴(須核對PIVOTAL_LABALAMA_ARM權威表)")
+        if r.get("table_discrepancy"):
+            reasons.append("CT.gov交叉核對不一致："+r["table_discrepancy"])
         if reasons:
             review_flags.append({"uid":r.get("uid"),"pmid":r.get("pmid"),"title":(r.get("title") or "")[:90],
                                  "trial":r.get("trial"),"unit":r.get("unit"),"flags":reasons})
