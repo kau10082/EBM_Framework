@@ -5,6 +5,7 @@ gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 S
 依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
   • g1_legs_manifest.json + g0_strategy.json → check_strategy_approved（Gate ⓪ 策略須先經使用者核准才可檢索，防搶跑）
   • g1_legs_manifest.json + g0_strategy.json → check_sr_filter_decided（Gate ⓪ SR filter 須問過並決定，防忘了問）
+  • g1_legs_manifest.json + g0_strategy.json → check_sr_filter_composite（Gate ① SR filter 須複合語法 PubType/MeSH＋Title/Abstract，MECIR C33）
   • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
   • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
   • _search_report.json             → funnel_check（流程數字閉合）
@@ -373,6 +374,20 @@ def check_sr_division(cache):
         return [f"sr_division_check 載入/執行失敗：{e}"]
 
 
+def check_sr_filter_composite(cache):
+    """Gate ①：SR filter 須為複合語法——每條 SR 子腿（`<leg>-SR`／role=SR_MA_NMA）的 Boolean query
+    須同時含『控制詞彙(PubType/MeSH)＋自由文字(Title/Abstract)』（MECIR C33；只靠 PubType 會因索引時間差漏最新 SR）。
+    AI 合成腿（Consensus/OE）以 study_types 等結構化參數限定 → 豁免。manifest 未產出 → 不適用。"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None
+    strat = _load(cache / "g0_strategy.json")
+    try:
+        import sr_filter_composite_check
+        return sr_filter_composite_check.check(man, strat)
+    except Exception as e:
+        return [f"sr_filter_composite_check 載入失敗：{str(e)[:80]}"]
+
 def check_comparator_purity(cache):
     """Gate ⓪／①：檢索 query 只含 in_query 軸，不得摻入對照/排除軸（in_query=false）——反『C 軸進 query 砍 recall』。
     manifest 優先；無 manifest 時退回 g0.legs，讓 ⓪ 策略階段就能被稽核。"""
@@ -542,6 +557,7 @@ def _all_checks(cache):
             _safe("Gate⓪ 四軸展開(同義詞庫真的展開)", check_axis_expansion, cache),
             _safe("Gate⓪／① 對照軸純度(query 只含 P＋I，C 不進 query)", check_comparator_purity, cache),
             _safe("Gate① SR分工(DB腿主檢噪音不得進語料庫)", check_sr_division, cache),
+            _safe("Gate① SR filter 複合語法(PubType/MeSH＋Title/Abstract,MECIR C33)", check_sr_filter_composite, cache),
             _safe("②b→③ 停頓點(②b須經使用者確認才可進③，防搶跑)", check_2b_stop, cache),
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),

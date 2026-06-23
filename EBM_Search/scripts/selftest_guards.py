@@ -59,6 +59,26 @@ def main():
     allok &= (not _srok)
     _sh_s.rmtree(_tmps, ignore_errors=True)
 
+    # SR filter 複合語法（MECIR C33）：SR 子腿只用出版類型 → 缺自由文字 → 必須 FAIL
+    import sr_filter_composite_check as _src
+    _strat_sr = {"sr_filter_decision":"applied",
+                 "legs":[{"leg":"Europe PMC-SR","design_filter_allowed":True,"role":"SR_MA_NMA"},
+                         {"leg":"Consensus-SR","role":"ai_synthesis","exhaustible":False}]}
+    allok &= _assert_fires("Gate① SR filter 只用出版類型(缺自由文字 Title/Abstract)",
+        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[pt] OR meta-analysis[pt])"}], _strat_sr))
+    # 只用自由文字、缺控制詞彙 → 也應 FAIL
+    allok &= _assert_fires("Gate① SR filter 只用自由文字(缺控制詞彙 PubType/MeSH)",
+        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr))
+    # 正向：複合語法（PubType ＋ tiab）→ 應通過（防誤報）
+    _srcok = _src.check([{"leg":"Europe PMC-SR",
+                          "query":"(copd) AND (systematic review[pt] OR meta-analysis[pt] OR systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr)
+    print(("  ✅" if not _srcok else "  ❌") + " SR filter 複合語法(PubType＋tiab)應通過（防誤報）：" + ("通過" if not _srcok else str(_srcok)))
+    allok &= (not _srcok)
+    # 正向：AI 合成腿(Consensus-SR, study_types 參數)豁免複合語法 → 不誤擋（防誤報）
+    _srcai = _src.check([{"leg":"Consensus-SR","query":"copd triple therapy"}], _strat_sr)
+    print(("  ✅" if not _srcai else "  ❌") + " AI 合成 SR 腿豁免複合語法應通過（防誤報）：" + ("通過" if not _srcai else str(_srcai)))
+    allok &= (not _srcai)
+
     import leg_exhaust_check
     allok &= _assert_fires("Gate① 取盡（OpenAlex 600/1216）",
         leg_exhaust_check.check([{"leg":"PubMed","hitCount":218,"fetched":218,"exhaustible":True},
