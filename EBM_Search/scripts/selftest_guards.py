@@ -40,6 +40,23 @@ def main():
     _sok = _gg_strat.check_strategy_approved(_tmps)
     print(("  ✅" if not _sok else "  ❌") + " 策略已核准應通過（防誤報）：" + ("通過" if not _sok else str(_sok)))
     allok &= (not _sok)
+
+    # Gate ⓪ SR filter 須問過：g1 已產出但 g0 的 sr_filter_decision 未決（pending）→ 必須 FAIL
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True,"sr_filter_decision":"pending"},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ SR filter 漏問（g1 已產出但 sr_filter_decision 停在 pending）",
+        _gg_strat.check_sr_filter_decided(_tmps))
+    # 缺 sr_filter_decision 欄位（根本沒記）→ 也必須 FAIL
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    allok &= _assert_fires("Gate⓪ SR filter 漏問（g0 根本沒記 sr_filter_decision）",
+        _gg_strat.check_sr_filter_decided(_tmps))
+    # 正向：已決定（declined＝不套用）→ 應通過（防誤報）
+    _js_s.dump({"topic":"x","axes":{},"approved_by_user":True,"sr_filter_decision":"declined"},
+               _io_s.open(_tmps/"g0_strategy.json","w",encoding="utf-8"))
+    _srok = _gg_strat.check_sr_filter_decided(_tmps)
+    print(("  ✅" if not _srok else "  ❌") + " SR filter 已決定(declined)應通過（防誤報）：" + ("通過" if not _srok else str(_srok)))
+    allok &= (not _srok)
     _sh_s.rmtree(_tmps, ignore_errors=True)
 
     import leg_exhaust_check

@@ -4,6 +4,7 @@ gate_guard.py — 檢索端『關卡守門』總 orchestrator（harness 可掛 S
 ================================================================================
 依 cache 內已存在的產物，自動判斷目前在哪些關、逐關跑對應硬 gate：
   • g1_legs_manifest.json + g0_strategy.json → check_strategy_approved（Gate ⓪ 策略須先經使用者核准才可檢索，防搶跑）
+  • g1_legs_manifest.json + g0_strategy.json → check_sr_filter_decided（Gate ⓪ SR filter 須問過並決定，防忘了問）
   • g1_legs_manifest.json           → leg_exhaust_check（Gate ① 每腿取盡）
   • g2c_FINAL_content.json (+unpaywall)→ Unpaywall 覆蓋稽核（Gate ②c 必跑 Unpaywall）
   • _search_report.json             → funnel_check（流程數字閉合）
@@ -239,6 +240,30 @@ def check_strategy_approved(cache):
         return ["Stage A 廣蒐（g1_legs_manifest.json 已產出）但 g0_strategy.json 未標記 approved_by_user=true："
                 "檢索策略必須先報告並經使用者確認後才可執行檢索（防『搶跑』、防擅自縮放範圍；"
                 "使用者確認策略後才在 g0_strategy.json 設 approved_by_user=true）"]
+    return []
+
+# SR filter 決策合法 token：須為「已套用 / 不套用」其一，不得停在未決（pending/空）。
+SR_DECISION_DECIDED = {"applied", "declined", "not_applied", "none"}
+
+def check_sr_filter_decided(cache):
+    """防『忘了問 SR filter』（Gate ⓪→①，與 check_strategy_approved 對稱）：
+    報告檢索策略時必須主動詢問『是否套用 Systematic Review Filter』（SEARCH_SPEC §★鐵律），
+    此為使用者決策、不可預設替他決定。本守門把『有沒有問過並得到決定』從靠記性變機器看守——
+    Stage A 廣蒐（g1_legs_manifest.json）產出時，g0_strategy.json 的 sr_filter_decision
+    必須是已決定值（applied／declined／not_applied／none），不得缺漏或停在 pending → 否則 FAIL。
+    （2026-06 使用者糾正：報告策略時漏問 SR filter；此 gate 即為此而立。）"""
+    man = _load(cache / "g1_legs_manifest.json")
+    if man is None:
+        return None  # 尚未廣蒐：此關不適用
+    strat = _load(cache / "g0_strategy.json")
+    if not strat:
+        return ["g1_legs_manifest.json 已產出但無 g0_strategy.json：無法確認是否問過 SR filter"]
+    dec = (strat.get("sr_filter_decision") or "").strip().lower()
+    if dec not in SR_DECISION_DECIDED:
+        return ["Stage A 廣蒐（g1_legs_manifest.json 已產出）但 g0_strategy.json 的 sr_filter_decision "
+                f"未決（現值＝{strat.get('sr_filter_decision')!r}）：報告檢索策略時必須主動詢問使用者"
+                "『是否套用 Systematic Review Filter』，得到決定後才設 sr_filter_decision＝"
+                "applied／declined（不套用），不得停在 pending 就開始檢索（防『忘了問 SR filter』）"]
     return []
 
 def check_2b_stop(cache):
@@ -509,6 +534,7 @@ def _safe(name, fn, cache):
 
 def _all_checks(cache):
     return [_safe("Gate⓪ 策略經使用者核准才可檢索(防搶跑)", check_strategy_approved, cache),
+            _safe("Gate⓪ SR filter 須問過並決定(防忘了問)", check_sr_filter_decided, cache),
             _safe("有全文須實抓驗證", check_have_verified, cache),
             _safe("Gate① 取盡", check_exhaust, cache),
             _safe("Gate① 策略遵從(實際query vs 核准)", check_strategy_adherence, cache),
