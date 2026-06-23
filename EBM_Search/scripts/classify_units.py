@@ -34,7 +34,7 @@ PIVOTAL_LABALAMA_ARM = {        # 三合一 vs LABA/LAMA：確有雙支擴對照
     "ETHOS":  True,   # BGF vs GFF(glycopyrrolate/formoterol＝LAMA/LABA) ＋ BFF(ICS/LABA)
     "KRONOS": True,   # BGF vs GFF(LAMA/LABA) ＋ BFF ＋ BUD/FORM(ICS/LABA)
     "TRIBUTE":True,   # BDP/FF/G vs IND/GLY(LABA/LAMA)
-    "TRIVERSYTI":True,
+    "TRIVERSYTI":False,  # ★修正(2026-06 使用者抓出)：BDP/FF/G vs BDP/FF(=ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)，與 FULFIL/TRILOGY 同類。先前誤標 True 把它混進核心。
     "FULFIL": False,  # vs BUD/FORM(ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)
     "TRILOGY":False,  # vs BDP/FF(ICS/LABA) 唯一對照 → 非核心
     "TRINITY":False,  # vs tiotropium(LAMA 單方) ＋ open-triple → 非核心(對照非 LABA/LAMA 雙支擴)
@@ -282,6 +282,14 @@ def classify(cache, out="g7_units.json"):
         if R_CONF_DOI.search(str(r.get("doi") or "").lower()): reasons.append("DOI疑會議摘要")
         if r.get("design_subtype")=="ICS-withdrawal": reasons.append("ICS退階設計(勿與起始混算)")
         if R_PROTO_STRONG.search((r.get("title") or "")): reasons.append("標題含protocol訊號(疑無結果)")
+        # ★ 矛盾偵測(2026-06 使用者抓出 TRIVERSYTI 誤標核心)：樞紐表標核心，但摘要對照疑為 ICS/LABA(非雙支擴)
+        #   → 表項可能curation錯誤(如 TRIVERSYTI＝BDP/FF/G vs BDP/FF＝ICS/LABA)。攤出逼人工核對權威表。
+        if r.get("core_basis")=="pivotal_trial_design":
+            ab=(content.get(r.get("uid"),{}).get("abstract") or "").lower().replace("–","-").replace("—","-")
+            ics_laba_comp=bool(re.search(r"versus inhaled corticosteroid|vs\.? inhaled corticosteroid|inhaled corticosteroid (plus|and|/) long-acting (beta|b2)|versus ics[ /\-]laba|\bics[ /\-]laba\b", ab))
+            has_dual=bool(r.get("comparator_LABA_LAMA")) or bool(R_DUAL.search(R_TRIP.sub(" ", ab)))
+            if ics_laba_comp and not has_dual:
+                reasons.append("樞紐表標核心但摘要對照疑為ICS/LABA非雙支擴(須核對PIVOTAL_LABALAMA_ARM權威表)")
         if reasons:
             review_flags.append({"uid":r.get("uid"),"pmid":r.get("pmid"),"title":(r.get("title") or "")[:90],
                                  "trial":r.get("trial"),"unit":r.get("unit"),"flags":reasons})
