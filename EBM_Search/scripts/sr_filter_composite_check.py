@@ -65,6 +65,9 @@ def _has_controlled(q):
         return True
     if re.search(r"pub_?type\s*:\s*\"?\s*(?:review|systematic|meta)", q, re.I):
         return True
+    # 文獻/著作型態控制欄位（OpenAlex `type:review`、EuropePMC/Embase doctype 等＝控制詞彙的一種）
+    if re.search(r"(?:doctype|document[_\-]?type|publication[_\-]?types?|\btype)\s*[:=]\s*\"?\s*(?:review|systematic|meta)", q, re.I):
+        return True
     # MeSH 引號式：\"meta-analysis as topic\"[mesh]
     if re.search(r"\"\s*" + SR_TERM + r"(?:\s+as\s+topic)?\s*\"\s*\[\s*" + CONTROLLED_TAGS + r"\s*\]", q, re.I):
         return True
