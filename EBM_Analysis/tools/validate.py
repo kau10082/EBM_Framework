@@ -67,6 +67,37 @@ def check_p3_certainty(data):
     return errs
 
 
+def check_p2_rob_routing(data):
+    """Phase 2 偏誤風險『工具↔設計』路由（三路徑：A→AMSTAR2、B→RoB2、C(NRSI)→ROBINS-I）。
+    把使用者鐵律『回顧性/非隨機研究須用 ROBINS-I、不可用 RoB2；NRSI 判低偏誤極罕見須附理由』
+    從靠記性變機器看守（Cochrane Handbook Ch.25）。schema 已強制 rob_tool 與 track 相符＋track C 須帶
+    robins_i 七領域；本語意檢查再補『ROBINS-I overall=low 必附 low_justification、七領域不得留 no_information 充數』。"""
+    errs = []
+    track = data.get("track")
+    tool = data.get("rob_tool")
+    expect = {"A": "amstar2", "B": "rob2", "C": "robins_i", "low": "none"}.get(track)
+    if track in ("A", "B", "C") and tool != expect:
+        errs.append(f"track={track} 須用 rob_tool={expect}（實得 {tool!r}）："
+                    f"偏誤工具不可拿錯——RCT→RoB2、NRSI(回顧性/世代/case-control/真實世界)→ROBINS-I、SR/MA→AMSTAR2")
+    if track == "C":
+        ri = data.get("robins_i") or {}
+        doms = (ri.get("domains") or {})
+        if not doms:
+            errs.append("track=C(NRSI) 缺 robins_i.domains 七領域評估（ROBINS-I）")
+        else:
+            need = ["confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported"]
+            miss = [d for d in need if d not in doms]
+            if miss:
+                errs.append(f"ROBINS-I 缺領域 {miss}（七領域須逐一判）")
+            ni = [d for d in need if (doms.get(d) or {}).get("judgement") == "no_information"]
+            if len(ni) >= 4:
+                errs.append(f"ROBINS-I 有 {len(ni)} 個領域填 no_information（{ni}）：疑以『無資訊』充數規避判定，請據實評或標 serious/critical")
+        if ri.get("overall") == "low" and not str(ri.get("low_justification") or "").strip():
+            errs.append("ROBINS-I overall=low 但無 low_justification：NRSI 判低偏誤極罕見（殘餘干擾無法消除），"
+                        "須明述為何殘餘干擾可忽略（Cochrane Ch.25 警語）")
+    return errs
+
+
 def check_p0_completeness(data):
     """Phase 0 納入完整性（防樞紐試驗主報告被靜默漏掉）。
     以 overlap_with 連通分量分群（同一 Study 的主報告＋子報告）；
@@ -134,6 +165,16 @@ def main(argv):
                 print(f"  - {e}")
             return 1
         print(f"✅ {jf} 符合 {phase} schema ＋ 納入完整性（每 Study 群有 full 主報告）")
+        return 0
+    # p2：額外做『偏誤工具↔設計』路由檢查（A→AMSTAR2 / B→RoB2 / C(NRSI)→ROBINS-I）
+    if phase == "p2":
+        rob_errs = check_p2_rob_routing(data)
+        if rob_errs:
+            print(f"❌ {jf} 結構合格、但偏誤風險工具路由有疑（{len(rob_errs)} 處）：")
+            for e in rob_errs:
+                print(f"  - {e}")
+            return 1
+        print(f"✅ {jf} 符合 {phase} schema ＋ 偏誤工具↔設計路由（NRSI 用 ROBINS-I）")
         return 0
     # p3：額外做 GRADE 確定性算術檢查
     if phase == "p3":

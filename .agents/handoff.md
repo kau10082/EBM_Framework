@@ -15,6 +15,26 @@
 - 另把 `check_no_retracted` 的 verdict 判定改相容 `verify` 鍵（⑤a 寫 verdict、報告器寫 verify，避免鍵名不一致讓撤稿/無法驗證漏網）。
 - 已註冊進 `_all_checks`，`selftest_guards` 加一負向（UNVERIFIED 當背景留存→FAIL）＋一正向（全 VERIFIED→通過）。
 
+---
+
+【初審・第二塊（EBM_Analysis 端）】偏誤風險『工具↔設計』三路徑路由（轉成機器 gate）。
+
+**本塊審查範圍：僅以下檔案**
+5. `EBM_Analysis/schema/phase2_triage.json`（新增 `rob_tool` enum、`robins_i` 七領域物件、`definitions.robins_domain`、track→tool 的 allOf 條件）
+6. `EBM_Analysis/tools/validate.py`（新增 `check_p2_rob_routing` ＋ 在 p2 路徑接上）
+7. `EBM_Analysis/tools/selftest_analysis_guards.py`（新檔；9 條雙向斷言）
+8. `EBM_Analysis/guardrails/robins_i.md`（新檔；ROBINS-I 七領域＋目標試驗＋本題干擾因子＋Low 警語＋GRADE 映射）
+9. `EBM_Analysis/phases/02_triage.md`（guardrails 增列 rob2/robins_i/amstar2；步驟 4 加 rob_tool 路由）
+
+**缺失④（使用者定版）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
+- 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低；
+  ROBINS-I overall=low 極罕見（殘餘干擾），須附理由。三路徑於 Phase 3/4 整合（各 outcome GRADE 領域1 讀對應工具）。
+- 修法：phase2 schema 強制 `rob_tool` 與 `track` 相符＋track C 須帶 `robins_i` 七領域；`validate.py check_p2_rob_routing`
+  再補語意檢查（拿錯工具 FAIL、缺七領域 FAIL、overall=low 無理由 FAIL、過半 no_information 充數 FAIL）。
+- 自測：`selftest_analysis_guards.py` 9 條全綠（5 負向＋4 正向防誤報）。
+- 想被重點看：(a) schema allOf 的 if/then 是否正確（track C 必帶 robins_i）；(b) `no_information ≥4` 充數門檻是否合理；
+  (c) 三路徑「整合到最後結果」目前以 phase2 路由＋robins_i.md 映射＋02_triage 步驟4 文件落地，Phase3/4 的 SoF 分路徑呈現尚屬規格層（未加機器 gate），是否需再補一道整合 gate。
+
 **缺失②（本輪新增 gate）：⑤b 誤把『離題』當『背景』灌進分析**
 - 使用者定版：**『離題』(③ 清單三排除) 與『全文及摘要皆無/待評估』都等同丟棄、不入後續分析（corpus_seed）**；
   背景＝『切題中非核心』者，**不是離題**。先前實跑誤把 ③ 的 274 筆離題當背景餵進 ⑤b，使語料由 561 切題膨脹成 835。

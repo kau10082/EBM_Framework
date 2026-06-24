@@ -56,12 +56,61 @@
           "note": { "type": "string" }
         }
       }
+    },
+    "rob_tool": {
+      "enum": ["rob2", "robins_i", "amstar2", "none"],
+      "description": "偏誤風險工具，須與 track 相符（機器看守 check_p2_rob_routing）：A→amstar2、B→rob2、C(NRSI)→robins_i、low→none。嚴禁拿 RoB2 套 NRSI。"
+    },
+    "robins_i": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track C（NRSI／回顧性世代/case-control/真實世界/非隨機換藥）專用 ROBINS-I 七領域（領域層級偏誤；映射 GRADE 領域1）。Cochrane Handbook Ch.25。",
+      "required": ["domains", "overall"],
+      "properties": {
+        "target_trial": { "type": ["string", "null"], "description": "模擬目標試驗：理想 RCT 應長怎樣（供比對偏離）" },
+        "confounders_considered": { "type": "array", "items": { "type": "string" }, "description": "已辨識並查核的干擾因子（本題如：基線血嗜酸球、先前生物製劑/換藥原因、OCS 依賴、發作史、共病 CRSwNP、依從性…）" },
+        "domains": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported"],
+          "properties": {
+            "confounding": { "$ref": "#/definitions/robins_domain" },
+            "selection": { "$ref": "#/definitions/robins_domain" },
+            "classification": { "$ref": "#/definitions/robins_domain" },
+            "deviations": { "$ref": "#/definitions/robins_domain" },
+            "missing_data": { "$ref": "#/definitions/robins_domain" },
+            "measurement": { "$ref": "#/definitions/robins_domain" },
+            "selection_reported": { "$ref": "#/definitions/robins_domain" }
+          }
+        },
+        "overall": { "enum": ["low", "moderate", "serious", "critical", "no_information"], "description": "整體＝最不利領域；NRSI 判 low 極罕見（殘餘干擾）" },
+        "low_justification": { "type": ["string", "null"], "description": "若 overall=low 必附理由（NRSI 低偏誤極罕見，須說明殘餘干擾為何可忽略；機器看守強制）" }
+      }
+    }
+  },
+  "definitions": {
+    "robins_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["judgement"],
+      "properties": {
+        "judgement": { "enum": ["low", "moderate", "serious", "critical", "no_information"] },
+        "note": { "type": ["string", "null"] }
+      }
     }
   },
   "allOf": [
     {
       "if": { "properties": { "track": { "const": "A" } } },
-      "then": { "required": ["protocol_completeness"] }
+      "then": { "required": ["protocol_completeness", "rob_tool"], "properties": { "rob_tool": { "const": "amstar2" } } }
+    },
+    {
+      "if": { "properties": { "track": { "const": "B" } } },
+      "then": { "required": ["rob_tool"], "properties": { "rob_tool": { "const": "rob2" } } }
+    },
+    {
+      "if": { "properties": { "track": { "const": "C" } } },
+      "then": { "required": ["rob_tool", "robins_i"], "properties": { "rob_tool": { "const": "robins_i" } } }
     }
   ]
 }
