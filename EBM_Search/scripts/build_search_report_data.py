@@ -172,7 +172,7 @@ def build_data(cache, mailto):
     strings = [{"leg": l.get("leg"), "query": l.get("query", "")} for l in legs if not l.get("skipped")]
 
     # ---- flow numbers ----
-    nU = union.get("count", "")
+    nU = (union.get("count", "") if isinstance(union, dict) else len(union))
     surv = g2b.get("survivors", ""); drop = g2b.get("dropped", "")
     from collections import Counter
     vc = Counter(r.get("verdict") for r in g3)
