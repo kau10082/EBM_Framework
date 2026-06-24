@@ -74,8 +74,33 @@ def main():
     allok &= _passes("Phase2 NRSI 正確用 ROBINS-I(serious) 應通過", V.check_p2_rob_routing(c(_ri())))
     allok &= _passes("Phase2 RCT 用 RoB2 應通過",
                      V.check_p2_rob_routing({**base, "track": "B", "grade_start": "high", "rob_tool": "rob2"}))
-    allok &= _passes("Phase2 SR/MA 用 AMSTAR2 應通過",
-                     V.check_p2_rob_routing({**base, "track": "A", "grade_start": "high", "rob_tool": "amstar2"}))
+    def a(amstar2, gs="high"):
+        return {**base, "track": "A", "grade_start": gs, "rob_tool": "amstar2",
+                "protocol_completeness": [], "amstar2": amstar2}
+
+    # AMSTAR 2 缺評估（track A）→ FAIL
+    allok &= _fires("Phase2 track A 缺 amstar2 評估",
+                    V.check_p2_rob_routing({**base, "track": "A", "grade_start": "high", "rob_tool": "amstar2"}))
+    # 算法不一致：2 關鍵瑕疵卻填 low（應 critically_low）→ FAIL
+    allok &= _fires("Phase2 AMSTAR2 算法不一致(2關鍵→應 critically_low 卻填 low)",
+                    V.check_p2_rob_routing(a({"critical_flaws": 2, "noncritical_weaknesses": 0, "overall_confidence": "low", "basis": "x"})))
+    # 算法不一致：1 關鍵卻填 high（應 low）→ FAIL
+    allok &= _fires("Phase2 AMSTAR2 算法不一致(1關鍵→應 low 卻填 high)",
+                    V.check_p2_rob_routing(a({"critical_flaws": 1, "noncritical_weaknesses": 0, "overall_confidence": "high", "basis": "x"})))
+    # 缺 basis → FAIL
+    allok &= _fires("Phase2 AMSTAR2 缺 basis（透明性）",
+                    V.check_p2_rob_routing(a({"critical_flaws": 0, "noncritical_weaknesses": 0, "overall_confidence": "high", "basis": ""})))
+    # items 與計數不符：critical_flaws=1 但兩個關鍵題答 no → FAIL
+    allok &= _fires("Phase2 AMSTAR2 逐題與關鍵瑕疵計數不符",
+                    V.check_p2_rob_routing(a({"critical_flaws": 1, "noncritical_weaknesses": 0, "overall_confidence": "low", "basis": "x",
+                                              "items": [{"item": 2, "answer": "no"}, {"item": 9, "answer": "no"}]})))
+    # 正向：0 關鍵、1 非關鍵 → high 通過
+    allok &= _passes("Phase2 AMSTAR2 (0關鍵,1非關鍵→high) 應通過",
+                     V.check_p2_rob_routing(a({"critical_flaws": 0, "noncritical_weaknesses": 1, "overall_confidence": "high", "basis": "良好；item4 部分"})))
+    # 正向：2 關鍵 → critically_low，items 一致 通過
+    allok &= _passes("Phase2 AMSTAR2 (2關鍵→critically_low, items 一致) 應通過",
+                     V.check_p2_rob_routing(a({"critical_flaws": 2, "noncritical_weaknesses": 0, "overall_confidence": "critically_low", "basis": "缺 protocol＋未評偏誤",
+                                               "items": [{"item": 2, "answer": "no"}, {"item": 9, "answer": "no"}]}, gs="high")))
     allok &= _passes("Phase2 ROBINS-I low 附理由 應通過",
                      V.check_p2_rob_routing(c(_ri(overall="low", domains=_doms("low"),
                                                   low_justification="完整調整所有已知干擾＋E-value 敏感度分析"))))

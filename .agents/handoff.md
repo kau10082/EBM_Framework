@@ -25,6 +25,12 @@
 7. `EBM_Analysis/tools/selftest_analysis_guards.py`（新檔；9 條雙向斷言）
 8. `EBM_Analysis/guardrails/robins_i.md`（新檔；ROBINS-I 七領域＋目標試驗＋本題干擾因子＋Low 警語＋GRADE 映射）
 9. `EBM_Analysis/phases/02_triage.md`（guardrails 增列 rob2/robins_i/amstar2；步驟 4 加 rob_tool 路由）
+10. `EBM_Analysis/guardrails/amstar2.md`（補 16 題/透明表格/RCT+NRSI 混合/演算法機器看守）
+
+**缺失⑤（使用者定版）：SR/MA 品質 AMSTAR 2 算法做成機器 gate**
+- 規則：16 題、7 題關鍵(2,4,7,9,11,13,15)；整體信心＝`>1關鍵→critically_low｜1關鍵→low｜0關鍵且>1非關鍵→moderate｜0關鍵且≤1非關鍵→high`；Cochrane 要求透明表格（每題評分＋理由＋整體評等）。
+- 修法：schema `amstar2` 物件（items[16]/critical_flaws/noncritical_weaknesses/overall_confidence/basis/search_recency/robis_concern），track A allOf 必帶 `amstar2`＋`protocol_completeness`＋`rob_tool=amstar2`；`validate.py check_p2_rob_routing` track A 分支驗：整體信心↔瑕疵數演算一致、items 關鍵題 no 數＝critical_flaws、basis 非空。
+- 自測：`selftest_analysis_guards.py` 擴為 **20 條**（含 AMSTAR2 算法不一致/逐題不符/缺 basis 等負向＋正向防誤報）。
 
 **缺失④（使用者定版，已強化）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
 - 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低。

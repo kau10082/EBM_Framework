@@ -89,6 +89,35 @@
         "low_justification": { "type": ["string", "null"], "description": "若 overall=low 必附理由（NRSI 低偏誤極罕見，須說明殘餘干擾為何可忽略；機器看守強制）" },
         "meta_analysis_action": { "enum": ["include", "exclude", "sensitivity_only"], "description": "對統合分析的處置；Cochrane Ch.25：overall=critical 之結果應直接 exclude（不提供有用效果證據）" }
       }
+    },
+    "amstar2": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track A（SR/MA/NMA）專用 AMSTAR 2 方法學品質。16 題、其中 7 題為關鍵領域(2,4,7,9,11,13,15)；整體信心依關鍵瑕疵/非關鍵弱點數演算。機器看守 check_p2_rob_routing 驗算法一致。",
+      "required": ["critical_flaws", "noncritical_weaknesses", "overall_confidence", "basis"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "16 題逐題作答（透明表格之資料；Cochrane 建議報告須呈現每題評分＋理由＋整體評等）",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["item", "answer"],
+            "properties": {
+              "item": { "type": "integer", "minimum": 1, "maximum": 16 },
+              "answer": { "enum": ["yes", "partial_yes", "no", "no_meta_analysis"] },
+              "critical": { "type": "boolean", "description": "該題是否為關鍵領域（2,4,7,9,11,13,15）" },
+              "note": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "critical_flaws": { "type": "integer", "minimum": 0, "description": "關鍵領域瑕疵數（關鍵題答 no）" },
+        "noncritical_weaknesses": { "type": "integer", "minimum": 0, "description": "非關鍵弱點數" },
+        "overall_confidence": { "enum": ["high", "moderate", "low", "critically_low"], "description": "整體信心；須與瑕疵數演算一致（機器看守）" },
+        "basis": { "type": "string", "description": "評等理由（滿足/未滿足之關鍵領域）；Cochrane 要求透明呈現" },
+        "robis_concern": { "enum": ["low", "high", "unclear", null], "description": "ROBIS 輔助（選填）：整體偏誤關注" },
+        "search_recency": { "type": ["string", "null"], "description": "最近檢索截止日 YYYY-MM（時效性；過久列降級候選）" }
+      }
     }
   },
   "definitions": {
@@ -118,7 +147,7 @@
   "allOf": [
     {
       "if": { "properties": { "track": { "const": "A" } } },
-      "then": { "required": ["protocol_completeness", "rob_tool"], "properties": { "rob_tool": { "const": "amstar2" } } }
+      "then": { "required": ["protocol_completeness", "rob_tool", "amstar2"], "properties": { "rob_tool": { "const": "amstar2" } } }
     },
     {
       "if": { "properties": { "track": { "const": "B" } } },

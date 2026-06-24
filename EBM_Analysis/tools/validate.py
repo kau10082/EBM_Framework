@@ -79,6 +79,33 @@ def check_p2_rob_routing(data):
     if track in ("A", "B", "C") and tool != expect:
         errs.append(f"track={track} 須用 rob_tool={expect}（實得 {tool!r}）："
                     f"偏誤工具不可拿錯——RCT→RoB2、NRSI(回顧性/世代/case-control/真實世界)→ROBINS-I、SR/MA→AMSTAR2")
+    if track == "A":
+        am = data.get("amstar2") or {}
+        if not am:
+            errs.append("track=A(SR/MA) 缺 amstar2 方法學品質評估（AMSTAR 2）")
+        else:
+            cf = am.get("critical_flaws")
+            ncw = am.get("noncritical_weaknesses")
+            rating = am.get("overall_confidence")
+            if not str(am.get("basis") or "").strip():
+                errs.append("AMSTAR 2 缺 basis（Cochrane 要求透明呈現每題評分＋理由＋整體評等）")
+            if isinstance(cf, int) and isinstance(ncw, int) and rating:
+                # 整體信心演算法（依關鍵瑕疵數→四級）：>1 關鍵=critically_low；1 關鍵=low；
+                # 0 關鍵且 >1 非關鍵弱點=moderate；0 關鍵且 ≤1 非關鍵弱點=high
+                expect_rating = ("critically_low" if cf > 1 else "low" if cf == 1
+                                 else "moderate" if ncw > 1 else "high")
+                if rating != expect_rating:
+                    errs.append(f"AMSTAR 2 整體信心算法不一致：關鍵瑕疵={cf}、非關鍵弱點={ncw} 應為 "
+                                f"'{expect_rating}'，實填 '{rating}'（>1關鍵→critically_low／1關鍵→low／"
+                                f"0關鍵且>1非關鍵→moderate／0關鍵且≤1非關鍵→high）")
+            # 若提供逐題 items，交叉核對關鍵瑕疵計數（關鍵領域＝2,4,7,9,11,13,15 答 no）
+            items = am.get("items")
+            if isinstance(items, list) and items and isinstance(cf, int):
+                CRITICAL_ITEMS = {2, 4, 7, 9, 11, 13, 15}
+                crit_no = sum(1 for it in items if it.get("item") in CRITICAL_ITEMS and it.get("answer") == "no")
+                if crit_no != cf:
+                    errs.append(f"AMSTAR 2 關鍵瑕疵計數與逐題不符：items 中關鍵題(2,4,7,9,11,13,15)答 no 有 {crit_no} 個，"
+                                f"但 critical_flaws={cf}（透明表格須與計數一致）")
     if track == "C":
         ri = data.get("robins_i") or {}
         doms = (ri.get("domains") or {})
