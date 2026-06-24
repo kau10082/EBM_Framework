@@ -217,52 +217,43 @@ def main():
     allok &= _assert_fires("Gate③ 切題填自由文字(未提及對照)不得當命中",
         strict_screen_check.check([{"uid":"u4","verdict":"切題","axis_hits":{"P":"yes","I":"yes","C":"未提及對照組"}}], _ax_strat))
 
-    import report_check
-    # 5 段制（v0.22）：缺日期到日/缺真實字串/佔位名/空標題/缺進行中表 → 須 FAIL
-    bad = {"search_date":"2026","pico":{},"databases":[],"limits":"",
-           "search_strategy":[{"leg":"PubMed","query":"copd triple therapy"}],
-           "funnel":[{"step":"③ 嚴格篩","remain":"切題 5"}],
-           "included_studies":[{"study":"待確認對照臂","reports":[["", "", "10.x","○"]]}],
-           "ongoing_trials":[], "funnel_closure":""}
-    allok &= _assert_fires("報告版型/內容（日期非到日/無真實字串/佔位名/空標題/無進行中表）",
-        report_check.check(bad))
-    # 合規 5 段 fixture：須通過（防誤報）
-    valid = {"search_date":"2026-06-20","pico":{"P":"COPD","I":"triple","C":"LABA/LAMA"},
-             "databases":["PubMed","Europe PMC","ClinicalTrials.gov"],
-             "limits":"未加 RCT filter；無語言/年份限制",
-             "search_strategy":[{"leg":"PubMed","query":"(COPD[tiab] OR emphysema[tiab]) AND (\"triple therapy\"[tiab] OR Trelegy[tiab])"}],
-             "funnel":[{"step":"③ 嚴格篩","remain":"切題 5/離題 3"}],
-             "included_studies":[{"study":"IMPACT","type":"RCT","reports":[["Once-daily single-inhaler triple","29992737","10.1056/NEJMoa1713901","PubMed○/Crossref○"]]}],
-             "ongoing_trials":[["NCT00000000","A triple therapy trial","RECRUITING"]],
-             "funnel_closure":"切題 5 + 離題 3 = 8",
-             "prisma_flow":{"identification":100,"screening":80,"included":5}}
-    no_prisma = dict(valid); no_prisma.pop("prisma_flow")
-    allok &= _assert_fires("報告缺 PRISMA 流程數據（prisma_flow）",
-        [f for f in report_check.check(no_prisma) if "prisma_flow" in f])
-    _vp = report_check.check(valid)
-    print(("  ✅" if not _vp else "  ❌") + " 報告合規 fixture 應通過（防誤報）：" + ("通過" if not _vp else str(_vp)))
-    allok &= (not _vp)
-    # 修正回歸：included:0（零納入報告）為合法，prisma 檢查不得誤擋
-    zero_inc = dict(valid); zero_inc["prisma_flow"] = {"identification":50,"screening":40,"included":0}
-    _z = [f for f in report_check.check(zero_inc) if "prisma_flow" in f]
-    print(("  ✅" if not _z else "  ❌") + " PRISMA included:0 應合法（防誤擋）：" + ("通過" if not _z else str(_z)))
-    allok &= (not _z)
-    # (M2) 欄位檢核機制：曖昧『缺』/空欄 → FAIL
-    amb = dict(valid); amb["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","缺","缺","PubMed○/Crossref未索引"]]}]
-    allok &= _assert_fires("段4 欄位曖昧『缺』空欄", [f for f in report_check.check(amb) if "每格須填滿" in f])
-    # (M2) 驗證欄無 ○（無任何索引確認存在性）→ FAIL
-    nover = dict(valid); nover["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","無","無","PubMed未索引／Crossref未索引"]]}]
-    allok &= _assert_fires("段4 無索引驗證存在性(無○)", [f for f in report_check.check(nover) if "未經任何索引驗證" in f])
-    # (M2) fetch_failed 殘留 → FAIL
-    ff = dict(valid); ff["id_backfill"]={"fetch_failed":3}
-    allok &= _assert_fires("段4 識別碼 fetch_failed 殘留", [f for f in report_check.check(ff) if "fetch_failed" in f])
-    # (M2) 正向：缺值用明確『無』+ 驗證欄有 ○ → 通過（防誤報）
-    okmark = dict(valid); okmark["included_studies"]=[{"study":"IMPACT","type":"RCT","reports":[["A triple trial","無","10.1/x","PubMed未索引／Crossref○"]]}]; okmark["id_backfill"]={"fetch_failed":0}
-    _om = report_check.check(okmark)
-    print(("  ✅" if not _om else "  ❌") + " 段4 缺值標『無』+驗證有○ 應通過（防誤報）：" + ("通過" if not _om else str(_om)))
-    allok &= (not _om)
-
     import gate_guard, tempfile, json, io, shutil
+    
+    # ⑤b 不得有『待評估,無內容』 (check_units_no_nocontent)
+    _t5b = Path(tempfile.mkdtemp())
+    json.dump([{"uid":"u1", "verdict":"全文及摘要皆無"}], io.open(_t5b/"g7_units.json","w",encoding="utf-8"))
+    allok &= _assert_fires("⑤b 不得有『待評估,無內容』(有違規桶)", gate_guard.check_units_no_nocontent(_t5b))
+    json.dump([{"uid":"u1", "verdict":"待評估:會議摘要"}], io.open(_t5b/"g7_units.json","w",encoding="utf-8"))
+    _5bok = gate_guard.check_units_no_nocontent(_t5b)
+    print(("  ✅" if not _5bok else "  ❌") + " ⑤b 僅『待評估:會議摘要』應通過（防誤報）：" + ("通過" if not _5bok else str(_5bok)))
+    allok &= (not _5bok)
+    shutil.rmtree(_t5b, ignore_errors=True)
+
+    # ⑥ 報告格式『強制執行』 (check_search_report_format)
+    _t6 = Path(tempfile.mkdtemp())
+    bad = {"search_date":"2026","params":{},"search_strings":[{"leg":"PubMed","query":""}],"flow":[{"stage":"③ 嚴格篩"}],"included":[{"title":"..."}]}
+    json.dump(bad, io.open(_t6/"_search_report.json","w",encoding="utf-8"))
+    allok &= _assert_fires("報告版型/內容（日期非到日/缺真實字串/缺limits等）", gate_guard.check_search_report_format(_t6))
+    
+    valid = {"title": "報告", "search_date":"2026-06-20",
+             "params":{"pico":"PICO","databases":["PubMed"],"limits":"未加 RCT filter"},
+             "search_strings":[{"leg":"PubMed","query":"(COPD)"}],
+             "flow":[{"stage":"1","start":"1","excluded":"0","remain":"1"},
+                     {"stage":"2","start":"1","excluded":"0","remain":"1"},
+                     {"stage":"3","start":"1","excluded":"0","remain":"1"}],
+             "included":[{"byline":"Author 2026 / RCT", "title":"Title", "pmid":"123"}]}
+    json.dump(valid, io.open(_t6/"_search_report.json","w",encoding="utf-8"))
+    _vp = gate_guard.check_search_report_format(_t6)
+    print(("  ✅" if not _vp else "  ❌") + " 報告合規 5 段 fixture 應通過（防誤報）：" + ("通過" if not _vp else str(_vp)))
+    allok &= (not _vp)
+    
+    # 測試截斷標題/缺年份 byline -> FAIL
+    invalid_byline = dict(valid)
+    invalid_byline["included"] = [{"byline":"A triple trial / RCT", "title":"Title", "pmid":"123"}]
+    json.dump(invalid_byline, io.open(_t6/"_search_report.json","w",encoding="utf-8"))
+    allok &= _assert_fires("報告 included byline 缺年份/疑退回截斷標題", gate_guard.check_search_report_format(_t6))
+    shutil.rmtree(_t6, ignore_errors=True)
+
     # ── ②b→③ 停頓點守門回歸（②b 完成後須經使用者確認才可進 ③，防搶跑）──
     _t2b = Path(tempfile.mkdtemp())
     json.dump([{"uid":"s1"}], io.open(_t2b/"g2b_survivors.json","w",encoding="utf-8"))
@@ -409,6 +400,17 @@ def main():
     print(("  ✅" if not _nv else "  ❌") + " 無 ID(NCT) 文獻不被驗證覆蓋誤判（防誤報）：" + ("通過" if not _nv else str(_nv)))
     allok &= (not _nv)
     shutil.rmtree(tmp2, ignore_errors=True)
+
+    # 掃描腳本防止 PMC 手刻 efetch db=pmc / fullTextXML 漂移
+    scripts_dir = Path(__file__).resolve().parent
+    bad_scripts = []
+    for p in scripts_dir.glob("*.py"):
+        if p.name in ("pmc_fulltext.py", "selftest_guards.py"): continue
+        txt = p.read_text(encoding="utf-8")
+        if "efetch.fcgi?db=pmc" in txt or "/fullTextXML" in txt:
+            bad_scripts.append(p.name)
+    print(("  ✅" if not bad_scripts else "  ❌") + " PMC route 漂移防禦（不應有腳本手刻 efetch）：" + ("通過" if not bad_scripts else str(bad_scripts)))
+    allok &= (not bad_scripts)
 
     # Stop hook 可攜發現：掃哨兵旗標找『進行中』cache（修復前 _find_cache(None) 在非 Windows／無 run_state
     # 會回 None → hook 靜默 exit 0 → 守門等同失效；本測證明改用旗標掃描後找得到，且無旗標時休眠）

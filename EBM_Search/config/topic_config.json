@@ -1,0 +1,26 @@
+{
+  "NCT_TRIAL": {
+    "NCT02164513": "IMPACT",
+    "NCT02465567": "ETHOS",
+    "NCT02497001": "KRONOS",
+    "NCT02345161": "FULFIL",
+    "NCT01917331": "TRILOGY",
+    "NCT02579850": "TRIBUTE",
+    "NCT01911364": "TRINITY",
+    "NCT03478683": "ETHOS-ext",
+    "NCT03142362": "FULFIL-ext",
+    "NCT04636437": "TRIVERSYTI"
+  },
+  "PIVOTAL_LABALAMA_ARM": {
+    "IMPACT": true,
+    "ETHOS": true,
+    "KRONOS": true,
+    "TRIBUTE": true,
+    "TRIVERSYTI": false,
+    "FULFIL": false,
+    "TRILOGY": false,
+    "TRINITY": false,
+    "ETHOS-ext": true,
+    "FULFIL-ext": false
+  }
+}

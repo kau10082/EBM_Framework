@@ -19,29 +19,34 @@ from pathlib import Path
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
-# 已知樞紐三合一試驗 NCT → 試驗名（abstract 常附 NCT，最可靠的歸併鍵）
-NCT_TRIAL = {
-    "NCT02164513":"IMPACT","NCT02465567":"ETHOS","NCT02497001":"KRONOS","NCT02345161":"FULFIL",
-    "NCT01917331":"TRILOGY","NCT02579850":"TRIBUTE","NCT01911364":"TRINITY","NCT03478683":"ETHOS-ext",
-    "NCT03142362":"FULFIL-ext","NCT04636437":"TRIVERSYTI",
-}
-# 樞紐試驗『是否含 LABA/LAMA 雙支擴對照臂』＝核心/非核心的權威 trial-level 事實（curated，與 NCT_TRIAL 同性質）。
-# 核心/非核心是『試驗設計』屬性、非『單篇報告摘要』屬性——逐報告以 regex 判 dual 會因子報告未重述對照臂而飄移
-# （2026-06 使用者糾正：ETHOS 假陰、FULFIL/TRILOGY/TRINITY 假陽）。故對已知樞紐試驗以此權威表定案，
-# 非樞紐試驗才回退 regex(已含分隔符正規化＋遮蔽三合一藥名跨度)。
-PIVOTAL_LABALAMA_ARM = {        # 三合一 vs LABA/LAMA：確有雙支擴對照臂 → 核心
-    "IMPACT": True,   # FF/UMEC/VI vs UMEC/VI(LABA/LAMA) ＋ FF/VI(ICS/LABA)
-    "ETHOS":  True,   # BGF vs GFF(glycopyrrolate/formoterol＝LAMA/LABA) ＋ BFF(ICS/LABA)
-    "KRONOS": True,   # BGF vs GFF(LAMA/LABA) ＋ BFF ＋ BUD/FORM(ICS/LABA)
-    "TRIBUTE":True,   # BDP/FF/G vs IND/GLY(LABA/LAMA)
-    "TRIVERSYTI":False,  # ★修正(2026-06 使用者抓出)：BDP/FF/G vs BDP/FF(=ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)，與 FULFIL/TRILOGY 同類。先前誤標 True 把它混進核心。
-    "FULFIL": False,  # vs BUD/FORM(ICS/LABA) 唯一對照 → 非核心(三合一 vs ICS/LABA)
-    "TRILOGY":False,  # vs BDP/FF(ICS/LABA) 唯一對照 → 非核心
-    "TRINITY":False,  # vs tiotropium(LAMA 單方) ＋ open-triple → 非核心(對照非 LABA/LAMA 雙支擴)
-    "ETHOS-ext":True, # ETHOS 延伸（BGF vs GFF）→ 核心
-    "FULFIL-ext":False,
-}
-ACR = re.compile(r"\b(IMPACT|ETHOS|KRONOS|FULFIL|TRILOGY|TRIBUTE|TRINITY|TRIVERSYTI|TRISTAR)\b(?!\s+(?:of|on|study population)\b)")
+import os
+
+NCT_TRIAL = {}
+PIVOTAL_LABALAMA_ARM = {}
+
+ACR = re.compile(r"(?!x)x")  # Fallback empty matcher
+
+def load_topic_config(path=None):
+    global NCT_TRIAL, PIVOTAL_LABALAMA_ARM, ACR
+    NCT_TRIAL = {}
+    PIVOTAL_LABALAMA_ARM = {}
+    ACR = re.compile(r"(?!x)x")  # Fallback empty matcher
+    if not path:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "topic_config.json")
+    if os.path.exists(path):
+        try:
+            cfg = json.loads(Path(path).read_text(encoding="utf-8"))
+            NCT_TRIAL = cfg.get("NCT_TRIAL", {})
+            PIVOTAL_LABALAMA_ARM = cfg.get("PIVOTAL_LABALAMA_ARM", {})
+            if PIVOTAL_LABALAMA_ARM:
+                names = [re.escape(k) for k in PIVOTAL_LABALAMA_ARM.keys()]
+                ACR = re.compile(rf"\b({'|'.join(names)})\b(?!\s+(?:of|on|study population)\b)", re.I)
+        except Exception as e:
+            sys.stderr.write(f"Failed to load topic config from {path}: {e}\n")
+    else:
+        sys.stderr.write(f"WARNING: Topic config file not found at {path}. PIVOTAL_LABALAMA_ARM will be empty and pivotal trial matching will fail.\n")
+
+load_topic_config()
 TRIALCTX = re.compile(r"\b(trial|study|randomi[sz]ed|cohort|programme|program)\b", re.I)
 NCTRE = re.compile(r"NCT0?\d{6,8}", re.I)
 
@@ -474,11 +479,16 @@ def resolve_arms(cache, mailto="test@example.com"):
           f"標題補回 NCT {len(uid_resolved)}")
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--cache",required=True); ap.add_argument("--out",default="g7_units.json")
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--cache", dest="cache_dir", required=True)
+    ap.add_argument("--out", dest="outfile", default="g7_units.json")
+    ap.add_argument("--topic-config", help="Path to topic_config.json")
     ap.add_argument("--enrich",action="store_true",help="先線上 CT.gov 逐成分臂解析(寫 nct_arms/uid_resolved/nct_names)")
-    a=ap.parse_args()
-    if a.enrich: resolve_arms(a.cache)
-    o=classify(a.cache,a.out)
+    a = ap.parse_args()
+    if a.topic_config:
+        load_topic_config(a.topic_config)
+    if a.enrich: resolve_arms(a.cache_dir)
+    o=classify(a.cache_dir, a.outfile)
     print(f"⑦ 精確分類（n={o['n']}，其中無摘要僅標題 {o['title_only_no_abstract']}）：")
     for k,v in sorted(o["buckets"].items(),key=lambda x:-x[1]): print(f"  {v:>5}  {k}")
     print("\nRCT 依 NCT/試驗名歸併為 Study：")

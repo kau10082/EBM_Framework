@@ -53,24 +53,32 @@ def _is_real_fulltext(t):
 
 def _fetch_text(pmid, doi, timeout=45):
     """回 (chars, channel)；只在『真全文』時回非零（PDF/PMC/HTML 皆可，靠 _is_real_fulltext 把關）。"""
-    # 1) PMC fullTextXML（EuropePMC，以 pmid 找 pmcid）
+    # 1) PMC fullTextXML -> NCBI efetch(db=pmc) via pmc_fulltext.NcbiClient
     if pmid:
         try:
-            u = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:%s%%20AND%%20SRC:MED"
-                 "&format=json&resultType=core&pageSize=1" % pmid)
-            r = (json.loads(_get(u, 25).decode("utf-8", "replace"))["resultList"]["result"] or [{}])[0]
-            pmcid = r.get("pmcid")
+            import pmc_fulltext
+            mailto, api_key = pmc_fulltext.resolve_credentials()
+            cli = pmc_fulltext.NcbiClient(mailto=mailto or "ebm_bot@example.com", api_key=api_key)
+            pmcids = cli.idconv_pmcids([pmid])
+            pmcid = pmcids.get(str(pmid))
+            if not pmcid:
+                u = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:%s%%20AND%%20SRC:MED"
+                     "&format=json&resultType=core&pageSize=1" % pmid)
+                r = (json.loads(_get(u, 25).decode("utf-8", "replace"))["resultList"]["result"] or [{}])[0]
+                pmcid = r.get("pmcid")
             if pmcid:
-                xml = _get("https://www.ebi.ac.uk/europepmc/webservices/rest/%s/fullTextXML" % pmcid, timeout).decode("utf-8", "replace")
-                t = re.sub(r"<[^>]+>", " ", xml)
-                if _is_real_fulltext(t): return len(t), "pmc"
+                t = cli.fetch_pmc_body(pmcid)
+                if t and _is_real_fulltext(t): return len(t), "pmc"
         except Exception:
             pass
     # 2) Unpaywall best + 所有 oa_locations（PDF 抽文字 / HTML 取內文，皆過 _is_real_fulltext）
     doi = _norm_doi(doi)
     if doi:
         try:
-            d = json.loads(_get("https://api.unpaywall.org/v2/" + urllib.parse.quote(doi) + "?email=kau10082@gmail.com", 25).decode("utf-8", "replace"))
+            import pmc_fulltext
+            mailto, _ = pmc_fulltext.resolve_credentials()
+            email_param = urllib.parse.quote(mailto or "ebm_bot@example.com")
+            d = json.loads(_get("https://api.unpaywall.org/v2/" + urllib.parse.quote(doi) + "?email=" + email_param, 25).decode("utf-8", "replace"))
             locs = ([d.get("best_oa_location")] if d.get("best_oa_location") else []) + (d.get("oa_locations") or [])
             for loc in locs:
                 for url in [(loc or {}).get("url_for_pdf"), (loc or {}).get("url")]:

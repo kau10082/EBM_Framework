@@ -328,6 +328,74 @@ def check_units_stop(cache):
                 "⑤b 決定納入單位完成後須先停下報告、經使用者核准才可進 ⑥ 三表/報告（防搶跑）"]
     return []
 
+def check_units_no_nocontent(cache):
+    """⑤b 決定納入單位：輸入全是『切題（已具內容）』候選（③ 三桶中的『切題』），故 g7_units.json
+    **不得出現『全文及摘要皆無／無內容／兩者皆無』類**——那是第③關 Tier 4 的終端桶，已在 ③ 定案、
+    不在 ⑤b 重新產生。允許『待評估:會議摘要』（會議摘要有摘要內容、屬 MECIR studies awaiting
+    classification，非『無內容』）。（2026-06 使用者糾正：『⑤b 不應再有「待評估,無內容」』。）"""
+    units = _load(cache / "g7_units.json")
+    if units is None:
+        return None
+    recs = units.get("records") if isinstance(units, dict) else units
+    if not isinstance(recs, list):
+        return None
+    BAD = ("全文及摘要皆無", "無內容", "兩者皆無")
+    bad = []
+    for r in recs:
+        if not isinstance(r, dict):
+            continue
+        blob = " ".join(str(r.get(k) or "") for k in ("unit", "design", "verdict", "core_basis", "class", "relevance"))
+        if any(b in blob for b in BAD):
+            bad.append((r.get("title") or r.get("uid") or "?")[:50])
+    if bad:
+        return [f"⑤b g7_units.json 有 {len(bad)} 筆標『全文及摘要皆無/無內容/兩者皆無』："
+                f"⑤b 只消費『切題(已具內容)』候選，無內容桶＝③ Tier4 終端、不得在 ⑤b 重生"
+                f"（會議摘要請標『待評估:會議摘要』＝有摘要內容）：{bad[:5]}"]
+    return []
+
+def check_search_report_format(cache):
+    """⑥ 報告格式『強制執行』：_search_report.json 必須符合使用者 2026-06-24 定版『5 段核心』格式——
+    1 檢索基本參數(params: pico/databases/limits)、2 完整檢索字串(search_strings 逐字)、3 PRISMA 流程(flow)、
+    4 納入清單(included；只核心，欄位＝作者/年份/文獻類型｜標題｜DOI｜PMID｜驗證；byline 須『作者 年份／文獻類型』、
+    不得退回截斷標題、文獻類型不得空)、5 進行中試驗(ongoing)。無 _search_report.json → N/A(尚未產⑥)。
+    把『必須照使用者格式』從靠記憶/文件變**機器強制**；schema＝references/search_report_schema.json。"""
+    import re as _re
+    data = _load(cache / "_search_report.json")
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        return ["_search_report.json 非物件：無法驗 5 段格式"]
+    f = []
+    for k in ("title", "search_date", "params", "search_strings", "flow", "included"):
+        if k not in data: f.append(f"缺必備鍵 `{k}`")
+    if not _re.match(r"^\d{4}-\d{2}-\d{2}$", str(data.get("search_date", ""))):
+        f.append("search_date 非 YYYY-MM-DD（第1段 檢索日期須精確到日）")
+    pm = data.get("params") or {}
+    if not pm.get("pico"): f.append("params.pico 缺（第1段 PICO 簡述）")
+    if not (isinstance(pm.get("databases"), list) and pm.get("databases")): f.append("params.databases 缺/空（第1段 資料庫清單）")
+    if not pm.get("limits"): f.append("params.limits 缺（第1段 限制條件須誠實交代）")
+    ss = data.get("search_strings") or []
+    if not ss: f.append("search_strings 空（第2段 須各腿逐字布林字串）")
+    elif not any((s.get("query") or "").strip() for s in ss): f.append("search_strings 無任何非空 query（MECIR 可重製）")
+    if len(data.get("flow") or []) < 3: f.append("flow < 3 階（第3段 PRISMA 流程須逐階段數字）")
+    inc = data.get("included") or []
+    if not inc:
+        f.append("included 空（第4段 至少列核心）")
+    bad_bl, bad_ty = [], []
+    for it in inc:
+        bl = it.get("byline", "") or ""
+        head, sep, typ = bl.partition(" / ")
+        head = head.replace("〔base〕", "").strip(); typ = typ.strip()
+        if not sep or not _re.search(r"\b(19|20)\d\d\b", head):   # 須『作者 年份』、防退回截斷標題
+            bad_bl.append(bl[:34])
+        if not typ:
+            bad_ty.append(bl[:34])
+    if bad_bl: f.append(f"included 有 {len(bad_bl)} 筆 byline 非『作者 年份／文獻類型』(疑退回截斷標題/缺年份)：{bad_bl[:4]}")
+    if bad_ty: f.append(f"included 有 {len(bad_ty)} 筆缺『文獻類型』：{bad_ty[:4]}")
+    if inc and not all(("title" in it and ("pmid" in it or "doi" in it)) for it in inc):
+        f.append("included 某筆缺 title/pmid/doi 欄")
+    return f
+
 
 def check_axis_coverage(cache):
     """Gate ①：每腿 query 對每條 in_query 必含軸 ≥1 同義詞命中（反四軸沒展開/過度簡化）。"""
@@ -541,16 +609,7 @@ def check_no_retracted(cache):
                 fails.append(f"撤稿 {p.get('pmid') or p.get('doi')} 在交接包 papers：禁進 GRADE 證據體")
     return fails
 
-def check_report(cache):
-    """報告版型/內容硬 gate：對 _search_report.json 跑 report_check（③二分/PMID欄/無佔位/背景檢核/進行中表）。"""
-    data = _load(cache / "_search_report.json")
-    if data is None:
-        return None
-    try:
-        import report_check
-        return report_check.check(data)
-    except Exception as e:
-        return [f"report_check 載入失敗：{str(e)[:80]}"]
+
 
 def check_exhaust(cache):
     man = _load(cache / "g1_legs_manifest.json")
@@ -600,6 +659,8 @@ def _all_checks(cache):
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
+            _safe("⑤b 不得有『待評估,無內容』(③Tier4終端桶不在⑤b重生)", check_units_no_nocontent, cache),
+            _safe("⑥ 報告須照使用者 5 段格式(作者/年份/文獻類型 byline 等)", check_search_report_format, cache),
             _safe("③ 逐 Tier 停頓報告(T1→T2→T3→T4 不得跨層搶跑)", check_screen_tier_stops, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
@@ -608,7 +669,6 @@ def _all_checks(cache):
             _safe("③ 融合分層篩 分割閉合＋反坍縮", check_screen_partition, cache),
             _safe("③ 離題只在實取全文後定案(Tier3)", check_excl_requires_fulltext, cache),
             _safe("③『全文及摘要皆無』須證明三層實取皆失敗", check_nocontent_bucket, cache),
-            _safe("報告版型/內容", check_report, cache),
             _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache)]
 
 

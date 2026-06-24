@@ -1,0 +1,54 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "_search_report.json — 檢索報告資料(5 段固定版型)",
+ "description": "build_search_report_data.py 由 cache 確定性組出、build_search_report.py 渲染成 PDF。版型＝使用者 2026-06-24 定版的『5 段核心』：1 檢索基本參數、2 完整檢索字串(逐字)、3 PRISMA 流程數字、4 納入證據清單(只核心)、5 進行中試驗。背景不列表。嚴禁手拼此 JSON 或自創版型。",
+ "type": "object",
+ "required": ["title", "search_date", "params", "search_strings", "flow", "included"],
+ "additionalProperties": true,
+ "properties": {
+  "title": {"type": "string"},
+  "topic": {"type": "string"},
+  "search_date": {"type": "string", "description": "檢索日(YYYY-MM-DD，精確到日，極重要)"},
+  "params": {
+   "type": "object",
+   "description": "第 1 段 檢索基本參數",
+   "required": ["pico", "databases", "limits"],
+   "properties": {
+    "pico": {"type": "string"},
+    "databases": {"type": "array", "items": {"type": "string"}},
+    "limits": {"type": "string", "description": "誠實交代 RCT filter/SR filter/語言/年份限制"}
+   }
+  },
+  "search_strings": {
+   "type": "array",
+   "description": "第 2 段 各腿逐字布林字串(MECIR 可重製)",
+   "items": {"type": "object", "required": ["leg", "query"],
+             "properties": {"leg": {"type": "string"}, "query": {"type": "string"}}}
+  },
+  "flow": {
+   "type": "array",
+   "description": "第 3 段 PRISMA 流程數字：每階段 起始→排除(原因/數)→剩餘",
+   "items": {"type": "object", "required": ["stage", "remain"],
+             "properties": {"stage": {"type": "string"}, "start": {"type": "string"},
+                            "excluded": {"type": "string"}, "remain": {"type": "string"}}}
+  },
+  "flow_reconcile": {"type": "string"},
+  "included": {
+   "type": "array",
+   "description": "第 4 段 最終納入證據清單(只核心 RCT/重要 MA；背景不列表)。固定欄位＝作者/年份/文獻類型｜標題｜DOI｜PMID｜驗證",
+   "items": {"type": "object", "required": ["byline", "title"],
+             "properties": {
+              "byline": {"type": "string", "description": "作者／年份／文獻類型(如 'Akenroye 2022 / NMA')"},
+              "title": {"type": "string"}, "doi": {"type": "string"}, "pmid": {"type": "string"},
+              "verify": {"type": "string", "description": "PubMed/Crossref 驗證狀態"}}}
+  },
+  "included_note": {"type": "string"},
+  "ongoing": {
+   "type": "array",
+   "description": "第 5 段 進行中試驗。固定欄位＝登錄號(nct)｜標題(｜可選 status)",
+   "items": {"type": "object", "required": ["nct", "title"],
+             "properties": {"nct": {"type": "string"}, "title": {"type": "string"}, "status": {"type": "string"}}}
+  },
+  "ongoing_note": {"type": "string"}
+ }
+}

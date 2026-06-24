@@ -40,6 +40,8 @@ except Exception:  # noqa: BLE001
     def load_settings(_p): return {}
     def default_settings_path(): return ""
 
+import pmc_fulltext
+
 DEFAULT_MAIL = "noreply@example.org"
 
 def _mail():
@@ -141,49 +143,36 @@ def _crossref_abstract(doi, mail):
 
 def _pmc_fulltext(pmid, doi, mail):
     """EuropePMC core 找 pmcid → NCBI efetch(db=pmc) 取 OA 全文 XML 去標籤。
-    2026-06 修正（PMC bug）：EuropePMC 的 `/<pmcid>/fullTextXML` REST 端點現回 404/503
-    （連官方文件範例 PMC3257301 亦 404；無 source 前綴版回 503），整條 Tier-3 PMC 全文管道實取不到內容；
-    且舊碼 `except Exception: pass` 靜默吞例外 → 失敗『0 命中』無聲、誤判全文不可得（本輪 0/324 即此故）。
-    改以 **NCBI E-utilities efetch db=pmc** 為主管道（實測 200、OA 全文 XML 可得），EuropePMC 端點留為 fallback；
-    任一管道失敗一律寫 stderr，不再靜默。"""
-    q = None
-    if pmid: q = "EXT_ID:%s AND SRC:MED" % pmid
-    elif doi: q = 'DOI:"%s"' % doi
-    if not q: return ""
-    ab = None; pmcid = None
-    try:
-        u = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?"
-             + urllib.parse.urlencode({"query": q, "format": "json",
-                                       "resultType": "core", "pageSize": 1}))
-        raw, _ = _get(u, 30)
-        res = (json.loads(raw.decode("utf-8", "replace")).get("resultList", {}).get("result") or [{}])[0]
-        ab = res.get("abstractText"); pmcid = res.get("pmcid")
-    except Exception as e:
-        sys.stderr.write("[_pmc_fulltext] EuropePMC core lookup failed (pmid=%s doi=%s): %r\n" % (pmid, doi, e))
+    2026-06 修正：委派給正規 pmc_fulltext.NcbiClient 處理 route 與速率限制。"""
+    _, api_key = pmc_fulltext.resolve_credentials()
+    cli = pmc_fulltext.NcbiClient(mailto=mail, api_key=api_key)
+    pmcid = None
+    if pmid:
+        res = cli.idconv_pmcids([pmid])
+        pmcid = res.get(str(pmid))
+        
+    if not pmcid:
+        q = None
+        if pmid: q = "EXT_ID:%s AND SRC:MED" % pmid
+        elif doi: q = 'DOI:"%s"' % doi
+        if not q: return ""
+        try:
+            u = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?"
+                 + urllib.parse.urlencode({"query": q, "format": "json",
+                                           "resultType": "core", "pageSize": 1}))
+            raw, _ = _get(u, 30)
+            res = (json.loads(raw.decode("utf-8", "replace")).get("resultList", {}).get("result") or [{}])[0]
+            pmcid = res.get("pmcid")
+        except Exception as e:
+            sys.stderr.write("[_pmc_fulltext] EuropePMC core lookup failed (pmid=%s doi=%s): %r\n" % (pmid, doi, e))
+            
     if pmcid:
-        pid = str(pmcid).replace("PMC", "")
-        # 主管道：NCBI efetch db=pmc（OA subset 全文 XML）。帶 tool+email（NCBI 規範），
-        # 並對 429/503 指數退避重試（無 API key 限 3 req/s，batch 量大易 429；舊碼只寫 stderr→大批靜默落 awaiting）。
         try:
-            u2 = ("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
-                  "db=pmc&id=%s&rettype=xml&retmode=xml&tool=EBM_Search&email=%s"
-                  % (pid, urllib.parse.quote(mail or "")))
-            _ncbi_throttle()
-            xml, _ = _get_retry(u2, 60)
-            t = _strip_tags(xml.decode("utf-8", "replace"))
-            # 非 OA PMCID 可能回版權 stub／僅摘要：用 _looks_like_content 驗證真內文（≥2 科學特徵），不只看長度
-            if _looks_like_content(t, 500): return t
+            t = cli.fetch_pmc_body(pmcid)
+            if t and _looks_like_content(t, 500): return t
         except Exception as e:
-            sys.stderr.write("[_pmc_fulltext] NCBI efetch db=pmc %s failed: %r\n" % (pid, e))
-        # fallback：EuropePMC fullTextXML（現多 404/503，幾乎全壞）——留作韌性備援但 timeout 砍到 8s，
-        # 免主管道正常失敗時每筆又對壞端點空等（原 60s）。
-        try:
-            xml, _ = _get("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC%s/fullTextXML" % pid, 8)
-            t = _strip_tags(xml.decode("utf-8", "replace"))
-            if _looks_like_content(t, 500): return t
-        except Exception as e:
-            sys.stderr.write("[_pmc_fulltext] EuropePMC fullTextXML PMC%s failed: %r\n" % (pid, e))
-    if ab: return _strip_tags(ab)
+            sys.stderr.write("[_pmc_fulltext] NCBI efetch db=pmc %s failed: %r\n" % (pmcid, e))
+            
     return ""
 
 def _unpaywall_locations(doi, mail):
