@@ -209,6 +209,45 @@ def check_p0_completeness(data):
     return fails
 
 
+def check_synthesis_tracks(data):
+    """多軌並行整合『防混池/防遺失/防飄移』（Phase 4 synthesis）。
+    使用者鐵則（Cochrane）：RCT(RoB2)／NRSI(ROBINS-I)／SR/MA(AMSTAR2) 三軌絕不混進同一統計模型或同一 GRADE；
+    NRSI=critical 必排除於合成；既有 SR/MA 非 Overview 時不得作數據源池化（防 double-counting）。
+    本檢查作用於 synthesis.tracks（存在才查；自洽層級，跨階段 track 歸屬另由 selfcheck 補）。"""
+    errs = []
+    tr = (data or {}).get("tracks")
+    if not isinstance(tr, dict):
+        return errs  # 未用多軌容器：不適用（單軌報告）
+    rct = tr.get("rct") or {}
+    nrsi = tr.get("nrsi") or {}
+    srma = tr.get("srma_context") or {}
+    rct_inc = set(rct.get("included_paper_ids") or [])
+    nrsi_inc = set(nrsi.get("included_paper_ids") or [])
+    nrsi_crit = set(nrsi.get("excluded_critical_ids") or [])
+    # 1) 跨軌混池：同一 paper 不得同時在 RCT 與 NRSI 池
+    both = rct_inc & nrsi_inc
+    if both:
+        errs.append(f"跨軌混池：paper {sorted(both)[:5]} 同時在 RCT 與 NRSI 池——三軌絕不可合併於同一統計模型/森林圖")
+    # 2) NRSI critical 必排除、且不得同時在 included
+    dup = nrsi_inc & nrsi_crit
+    if dup:
+        errs.append(f"NRSI critical 矛盾：paper {sorted(dup)[:5]} 同時列 included 與 excluded_critical（critical 必剔除於合成，Cochrane Ch.25）")
+    # 3) SR/MA 不得作數據源池化（非 Overview）
+    if srma:
+        if srma.get("used_as_data_source") is True and not srma.get("is_overview"):
+            errs.append("SR/MA 軌 used_as_data_source=true 但非 Overview：既有 SR/MA 不可作數據提取/池化來源（防 double-counting），僅作討論對照")
+        if srma.get("role") not in (None, "discussion_context") and not srma.get("is_overview"):
+            errs.append(f"SR/MA 軌 role={srma.get('role')!r} 非 discussion_context：一般 SR 中既有 SR/MA 僅作討論對照")
+    # 4) 池化了卻無 GRADE 輸出（防遺失）：synthesis_mode=meta_analysis 且 included 非空 → 須有 sof 或 certainty_summary
+    for nm, blk, inc in (("RCT", rct, rct_inc), ("NRSI", nrsi, nrsi_inc)):
+        if blk.get("synthesis_mode") == "meta_analysis":
+            if not inc:
+                errs.append(f"{nm} 軌標 meta_analysis 但 included_paper_ids 空（無池化對象）")
+            elif not (blk.get("sof") or str(blk.get("certainty_summary") or "").strip()):
+                errs.append(f"{nm} 軌已池化(meta_analysis) 但缺 sof／certainty_summary（GRADE 輸出遺失——每軌須獨立 SoF/確定性）")
+    return errs
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -258,6 +297,16 @@ def main(argv):
                 print(f"  - {e}")
             return 1
         print(f"✅ {jf} 符合 {phase} schema ＋ 確定性算術一致")
+        return 0
+    # synthesis：額外做多軌並行『防混池/防遺失/防飄移』檢查
+    if phase == "synthesis":
+        tr_errs = check_synthesis_tracks(data)
+        if tr_errs:
+            print(f"❌ {jf} 結構合格、但多軌整合有疑（{len(tr_errs)} 處）：")
+            for e in tr_errs:
+                print(f"  - {e}")
+            return 1
+        print(f"✅ {jf} 符合 {phase} schema ＋ 多軌並行整合（三軌不混池）")
         return 0
     print(f"✅ {jf} 符合 {phase} schema")
     return 0

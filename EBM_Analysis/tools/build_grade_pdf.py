@@ -143,6 +143,41 @@ def build(infile, out, font=None, layout="cochrane5"):
         t = Table(rows, colWidths=FR(0.11, 0.11, 0.09, 0.16, 0.17, 0.09, 0.07, 0.20)); t.setStyle(tstyle()); S.append(t)
         for fn in (syn.get("sof_footnotes") or []):
             S.append(P("　" + fn, 7.5, col="#555", sp=1))
+
+        # ── 5b 多軌並行 SoF（三軌絕不混池；multitrack_integration 護欄）──
+        tracks = syn.get("tracks") or {}
+        if tracks:
+            S.append(Spacer(1, 2 * mm))
+            S.append(H("5b、多軌並行證據（RCT／NRSI／SR-MA 分軌，絕不混池）"))
+
+            def _track_sof(label, blk, start_txt):
+                if not blk:
+                    return
+                inc = blk.get("included_paper_ids") or []
+                S.append(P(f"<b>{label}</b>（起始確定性：{start_txt}；合成：{blk.get('synthesis_mode','')}；納入 {len(inc)} 篇）", 9.5, sp=2))
+                sof = blk.get("sof") or []
+                if sof:
+                    rows = [["結局", "假設對照風險", "對應介入風險", "絕對效應", "相對效應(95%CI)", "N(研究)", "確定性"]]
+                    for o in sof:
+                        c = o.get("certainty", "")
+                        rows.append([cell(o.get("outcome", ""), 7.5), cell(o.get("assumed_control_risk", ""), 7), cell(o.get("corresponding_risk", ""), 7),
+                                     cell(o.get("absolute_effect", ""), 7), cell(o.get("relative_effect", ""), 7), cell(o.get("n_participants_studies", ""), 7),
+                                     cell(f"{CERT_DOT.get(c,'')} {CERT_TXT.get(c,c)}", 7.5)])
+                    t = Table(rows, colWidths=FR(0.16, 0.13, 0.11, 0.17, 0.18, 0.10, 0.15)); t.setStyle(tstyle()); S.append(t)
+                elif blk.get("certainty_summary"):
+                    S.append(P("　敘事綜整：" + _safe(blk.get("certainty_summary")), 8, col="#555", sp=1))
+            _track_sof("第一軌 RCT（RoB 2）＝主力", tracks.get("rct"), "高 ⊕⊕⊕⊕")
+            _track_sof("第二軌 NRSI（ROBINS-I，獨立森林圖，critical 已剔除）", tracks.get("nrsi"), "低（起）")
+            sc = tracks.get("srma_context") or {}
+            if sc.get("reviews"):
+                S.append(P("<b>第三軌 既有 SR/MA（AMSTAR 2）＝討論對照，不進統合（防 double-counting）</b>", 9.5, sp=2))
+                rows = [["既有回顧", "AMSTAR2", "與本研究關係", "備註"]]
+                for r in sc["reviews"]:
+                    rows.append([cell(r.get("review", ""), 7.5), cell(r.get("amstar2_rating", ""), 7.5), cell(r.get("agreement", ""), 7.5), cell(r.get("note", "") or "", 7)])
+                t = Table(rows, colWidths=FR(0.40, 0.12, 0.18, 0.30)); t.setStyle(tstyle()); S.append(t)
+            if tracks.get("integration_note"):
+                S.append(P("　整合（分層結論）：" + _safe(tracks["integration_note"]), 8.5, col="#333", sp=1))
+
         S.append(Spacer(1, 2 * mm))
         S.append(P("<b>臨床建議底線（Authors' Conclusions）</b>", 11, sp=3))
         for b in (syn.get("bottom_line") or []):

@@ -5,6 +5,24 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["per_paper", "synthesis"],
+  "definitions": {
+    "sof_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "SoF 單列（per-track 共用；欄位同主 sof）",
+      "required": ["outcome", "assumed_control_risk", "corresponding_risk", "absolute_effect", "relative_effect", "n_participants_studies", "certainty"],
+      "properties": {
+        "outcome": { "type": "string" },
+        "assumed_control_risk": { "type": "string" },
+        "corresponding_risk": { "type": "string" },
+        "absolute_effect": { "type": "string" },
+        "relative_effect": { "type": "string" },
+        "n_participants_studies": { "type": "string" },
+        "certainty": { "type": "string" },
+        "comment": { "type": ["string", "null"] }
+      }
+    }
+  },
   "properties": {
     "per_paper": {
       "type": "array",
@@ -49,6 +67,69 @@
       "additionalProperties": false,
       "required": ["consistency", "vote_counting_check", "conflict_analysis", "weight_adjudication"],
       "properties": {
+        "tracks": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "多軌並行整合（暫存/交付容器）：三軌絕不混池、不混 GRADE、不混同一森林圖。每軌獨立 pool/forest/SoF/起始確定性。整合運算規則見 guardrails/multitrack_integration.md。機器看守 validate.py check_synthesis_tracks。",
+          "properties": {
+            "rct": {
+              "type": "object", "additionalProperties": false,
+              "description": "第一軌：RCT（RoB2）＝主力。主分析統合＋專屬森林圖；起始 high。",
+              "required": ["tool", "synthesis_mode", "included_paper_ids", "starting_certainty"],
+              "properties": {
+                "tool": { "const": "rob2" },
+                "synthesis_mode": { "enum": ["meta_analysis", "narrative"] },
+                "included_paper_ids": { "type": "array", "items": { "type": "string" } },
+                "excluded_ids": { "type": "array", "items": { "type": "string" }, "description": "敏感度分析剔除之高風險研究（仍屬本軌，非跨軌）" },
+                "forest_plot": { "type": ["string", "null"] },
+                "sensitivity_analysis": { "type": ["string", "null"], "description": "依 RoB 高低分層/剔除高風險的穩健性分析" },
+                "starting_certainty": { "const": "high" },
+                "sof": { "type": "array", "maxItems": 7, "items": { "$ref": "#/definitions/sof_row" } },
+                "certainty_summary": { "type": ["string", "null"] }
+              }
+            },
+            "nrsi": {
+              "type": "object", "additionalProperties": false,
+              "description": "第二軌：NRSI（ROBINS-I）＝真實世界輔助。獨立森林圖，絕不與 RCT 合併；critical 必剔除；異質性大改敘事綜整；起始 low（ROBINS-I 可 high 但常降至 low/very_low）。",
+              "required": ["tool", "synthesis_mode", "included_paper_ids", "excluded_critical_ids", "starting_certainty"],
+              "properties": {
+                "tool": { "const": "robins_i" },
+                "synthesis_mode": { "enum": ["meta_analysis", "narrative"], "description": "異質性過大→narrative（放棄統計合併）" },
+                "included_paper_ids": { "type": "array", "items": { "type": "string" } },
+                "excluded_critical_ids": { "type": "array", "items": { "type": "string" }, "description": "ROBINS-I=critical 者必列於此、且不得進 included（Cochrane Ch.25）" },
+                "forest_plot": { "type": ["string", "null"] },
+                "starting_certainty": { "enum": ["low", "high"] },
+                "sof": { "type": "array", "maxItems": 7, "items": { "$ref": "#/definitions/sof_row" } },
+                "certainty_summary": { "type": ["string", "null"] }
+              }
+            },
+            "srma_context": {
+              "type": "object", "additionalProperties": false,
+              "description": "第三軌：既有 SR/MA（AMSTAR2）＝討論對照基準。非 Overview 時，絕不作數據提取來源、不進統合（防 double-counting），僅於討論章節對照。",
+              "required": ["used_as_data_source", "role", "reviews"],
+              "properties": {
+                "used_as_data_source": { "const": false, "description": "鐵則：一般 SR 不可把他人 SR/MA 當數據源池化（除非本研究就是 Overview）" },
+                "role": { "const": "discussion_context" },
+                "is_overview": { "type": "boolean", "description": "若本研究即『回顧之綜覽 Overview』則 true（此時 SR/MA 才可為分析單位，另循 overview 流程）" },
+                "reviews": {
+                  "type": "array",
+                  "items": {
+                    "type": "object", "additionalProperties": false,
+                    "required": ["review", "amstar2_rating", "agreement"],
+                    "properties": {
+                      "review": { "type": "string" },
+                      "amstar2_rating": { "enum": ["high", "moderate", "low", "critically_low"] },
+                      "scope": { "type": ["string", "null"] },
+                      "agreement": { "enum": ["concordant", "discordant", "updates", "unclear"], "description": "與本研究 RCT/NRSI 結果的關係：一致/相左/更新翻轉/不明" },
+                      "note": { "type": ["string", "null"] }
+                    }
+                  }
+                }
+              }
+            },
+            "integration_note": { "type": ["string", "null"], "description": "分層結論：首要(RCT high)→次要支持(NRSI low,方向)→脈絡對照(SR/MA)。整合運算規則待補。" }
+          }
+        },
         "consistency": { "type": "string", "description": "依效果估計收斂，非結論篇數" },
         "vote_counting_check": { "type": "string", "description": "vote_counting 三層可取性" },
         "swim_check":        { "type": ["string", "null"] },

@@ -130,6 +130,35 @@ def main():
     allok &= _passes("Phase2 ROBINS-I critical 且 exclude 應通過",
                      V.check_p2_rob_routing(c(_ri(overall="critical", domains=crit_one, meta_analysis_action="exclude"))))
 
+    # ── 多軌並行整合：三軌絕不混池/防遺失（check_synthesis_tracks）──
+    def syn(tracks):
+        return {"tracks": tracks}
+    ok_rct = {"tool": "rob2", "synthesis_mode": "meta_analysis", "included_paper_ids": ["a", "b"],
+              "starting_certainty": "high", "certainty_summary": "high"}
+    ok_nrsi = {"tool": "robins_i", "synthesis_mode": "narrative", "included_paper_ids": ["c"],
+               "excluded_critical_ids": ["d"], "starting_certainty": "low", "certainty_summary": "low, narrative"}
+    ok_srma = {"used_as_data_source": False, "role": "discussion_context",
+               "reviews": [{"review": "Hu 2026", "amstar2_rating": "high", "agreement": "concordant"}]}
+    # 跨軌混池 → FAIL
+    allok &= _fires("Synthesis 跨軌混池（同 paper 在 RCT＋NRSI 池）",
+                    V.check_synthesis_tracks(syn({"rct": {**ok_rct, "included_paper_ids": ["a", "x"]},
+                                                  "nrsi": {**ok_nrsi, "included_paper_ids": ["x"]}})))
+    # NRSI critical 矛盾（included∩excluded_critical）→ FAIL
+    allok &= _fires("Synthesis NRSI critical 同時 included 與 excluded",
+                    V.check_synthesis_tracks(syn({"nrsi": {**ok_nrsi, "included_paper_ids": ["c", "d"], "excluded_critical_ids": ["d"]}})))
+    # SR/MA 當數據源（非 Overview）→ FAIL
+    allok &= _fires("Synthesis SR/MA 當數據源池化（非 Overview）",
+                    V.check_synthesis_tracks(syn({"srma_context": {**ok_srma, "used_as_data_source": True}})))
+    # 池化卻無 GRADE 輸出（防遺失）→ FAIL
+    allok &= _fires("Synthesis 池化(meta_analysis)卻無 sof/certainty（GRADE 遺失）",
+                    V.check_synthesis_tracks(syn({"rct": {"tool": "rob2", "synthesis_mode": "meta_analysis",
+                                                          "included_paper_ids": ["a"], "starting_certainty": "high"}})))
+    # 正向：三軌齊整、不混池 → 通過
+    allok &= _passes("Synthesis 三軌並行不混池 應通過",
+                     V.check_synthesis_tracks(syn({"rct": ok_rct, "nrsi": ok_nrsi, "srma_context": ok_srma})))
+    # 正向：無 tracks（單軌報告）→ 不適用、通過
+    allok &= _passes("Synthesis 無 tracks（單軌）應通過", V.check_synthesis_tracks({"sof": []}))
+
     print("\n" + ("✅ 全部分析端守門有效。" if allok else "❌ 有守門未如預期，請檢查。"))
     return 0 if allok else 1
 

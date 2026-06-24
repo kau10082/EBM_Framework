@@ -43,6 +43,16 @@
 - 自測：`selftest_analysis_guards.py` 擴為 **25 條**（新增 RoB2 遺失/漏填/木桶 ＋ grade_start 飄移 等）。
 - 仍誠實標記：跨階段『Phase 2 偏誤結果忠實帶入 Phase 3 GRADE 領域1（防跨關遺失）』尚未加機器 gate（待 Phase 3 檔產出後可於 selfcheck_consistency 補 C 條）。
 
+**缺失⑦（使用者定版）：多軌並行整合——三軌絕不混池、各自暫存檔/SoF；整合運算規則待補**
+- 規則（Cochrane）：RCT(RoB2) 主分析＋專屬森林圖(起始 high)；NRSI(ROBINS-I) **獨立森林圖、絕不與 RCT 合併**、critical 必剔除、異質性大改敘事；既有 SR/MA(AMSTAR2) **非 Overview 不得作數據源/池化**（防 double-counting），僅討論對照。結論分層：RCT(high)→NRSI(low,方向)→SR/MA 脈絡。
+- 落地（暫存檔/容器＋守門＋PDF 骨架）：
+  - schema `phase4_output.json`：synthesis 新增 `tracks{rct,nrsi,srma_context}` 三軌分隔容器（各軌 included/excluded/forest/sof/starting_certainty；srma const used_as_data_source=false、role=discussion_context；rct const tool=rob2/start high；nrsi tool=robins_i）＋ `definitions.sof_row`。
+  - `validate.py check_synthesis_tracks`（synthesis 階段）：跨軌混池／NRSI critical 矛盾／SR-MA 當數據源／池化卻無 GRADE 輸出 → FAIL。
+  - `guardrails/multitrack_integration.md` 新檔（完整規則）。
+  - `build_grade_pdf.py`：偵測 `synthesis.tracks` 時新增「5b 多軌並行證據」分軌 SoF 區塊（RCT-SoF／NRSI-SoF／SR-MA 討論對照表）。
+- 自測：`selftest_analysis_guards.py` 擴為 **31 條**（新增 6 條多軌：混池/critical 矛盾/SR-MA 數據源/GRADE 遺失/正向×2）。
+- **接口待補**：實際「整合運算方式」（各軌 pool 計算、敏感度/分層、SoF 數值組裝、最終 PDF 版型微調）使用者稍後提供；目前已備妥分隔容器與防混池守門，待規則到位即接上。
+
 **缺失④（使用者定版，已強化）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
 - 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低。
 - ROBINS-I 細節落地（依使用者補充）：
