@@ -56,12 +56,149 @@
           "note": { "type": "string" }
         }
       }
+    },
+    "rob_tool": {
+      "enum": ["rob2", "robins_i", "amstar2", "none"],
+      "description": "偏誤風險工具，須與 track 相符（機器看守 check_p2_rob_routing）：A→amstar2、B→rob2、C(NRSI)→robins_i、low→none。嚴禁拿 RoB2 套 NRSI。"
+    },
+    "robins_i": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track C（NRSI／回顧性世代/case-control/真實世界/非隨機換藥）專用 ROBINS-I 七領域（領域層級偏誤；映射 GRADE 領域1）。Cochrane Handbook Ch.25。",
+      "required": ["domains", "overall"],
+      "properties": {
+        "target_trial": { "type": ["string", "null"], "description": "模擬目標試驗：理想 RCT 應長怎樣（供比對偏離）" },
+        "effect_of_interest": { "enum": ["assignment", "adherence"], "description": "前置作業：關注效應＝分派效應(assignment, ITT-like) 或 遵循效應(adherence, PP-like)；影響領域4『偏離既定介入』判定" },
+        "cointerventions": { "type": "array", "items": { "type": "string" }, "description": "前置作業：預先指定可能伴隨發生的共同介入措施" },
+        "confounders_considered": { "type": "array", "items": { "type": "string" }, "description": "前置作業：預先指定的重要干擾因子（本題如：基線血嗜酸球、先前生物製劑/換藥原因、OCS 依賴、發作史、共病 CRSwNP、依從性…）；干擾為 NRSI 最致命領域，須非空" },
+        "domains": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported"],
+          "properties": {
+            "confounding": { "$ref": "#/definitions/robins_domain" },
+            "selection": { "$ref": "#/definitions/robins_domain" },
+            "classification": { "$ref": "#/definitions/robins_domain" },
+            "deviations": { "$ref": "#/definitions/robins_domain" },
+            "missing_data": { "$ref": "#/definitions/robins_domain" },
+            "measurement": { "$ref": "#/definitions/robins_domain" },
+            "selection_reported": { "$ref": "#/definitions/robins_domain" }
+          }
+        },
+        "overall": { "enum": ["low", "moderate", "serious", "critical", "no_information"], "description": "整體＝木桶原則：不得優於最不利領域；任一 serious→至少 serious、任一 critical→critical。NRSI 判 low 極罕見" },
+        "low_justification": { "type": ["string", "null"], "description": "若 overall=low 必附理由（NRSI 低偏誤極罕見，須說明殘餘干擾為何可忽略；機器看守強制）" },
+        "meta_analysis_action": { "enum": ["include", "exclude", "sensitivity_only"], "description": "對統合分析的處置；Cochrane Ch.25：overall=critical 之結果應直接 exclude（不提供有用效果證據）" }
+      }
+    },
+    "amstar2": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track A（SR/MA/NMA）專用 AMSTAR 2 方法學品質。16 題、其中 7 題為關鍵領域(2,4,7,9,11,13,15)；整體信心依關鍵瑕疵/非關鍵弱點數演算。機器看守 check_p2_rob_routing 驗算法一致。",
+      "required": ["critical_flaws", "noncritical_weaknesses", "overall_confidence", "basis"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "16 題逐題作答（透明表格之資料；Cochrane 建議報告須呈現每題評分＋理由＋整體評等）",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["item", "answer"],
+            "properties": {
+              "item": { "type": "integer", "minimum": 1, "maximum": 16 },
+              "answer": { "enum": ["yes", "partial_yes", "no", "no_meta_analysis"] },
+              "critical": { "type": "boolean", "description": "該題是否為關鍵領域（2,4,7,9,11,13,15）" },
+              "note": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "critical_flaws": { "type": "integer", "minimum": 0, "description": "關鍵領域瑕疵數（關鍵題答 no）" },
+        "noncritical_weaknesses": { "type": "integer", "minimum": 0, "description": "非關鍵弱點數" },
+        "overall_confidence": { "enum": ["high", "moderate", "low", "critically_low"], "description": "整體信心；須與瑕疵數演算一致（機器看守）" },
+        "basis": { "type": "string", "description": "評等理由（滿足/未滿足之關鍵領域）；Cochrane 要求透明呈現" },
+        "robis_concern": { "enum": ["low", "high", "unclear", null], "description": "ROBIS 輔助（選填）：整體偏誤關注" },
+        "search_recency": { "type": ["string", "null"], "description": "最近檢索截止日 YYYY-MM（時效性；過久列降級候選）" }
+      }
+    },
+    "rob2": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track B（RCT）專用 RoB 2 五領域（result 層級；整體＝最不利領域；映射 GRADE 領域1）。",
+      "required": ["domains", "overall"],
+      "properties": {
+        "effect_of_interest": { "enum": ["assignment", "adherence"], "description": "關注效應（影響領域2 判定）" },
+        "domains": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["randomization", "deviations", "missing_outcome", "measurement", "selection_reported"],
+          "properties": {
+            "randomization": { "$ref": "#/definitions/rob2_domain" },
+            "deviations": { "$ref": "#/definitions/rob2_domain" },
+            "missing_outcome": { "$ref": "#/definitions/rob2_domain" },
+            "measurement": { "$ref": "#/definitions/rob2_domain" },
+            "selection_reported": { "$ref": "#/definitions/rob2_domain" }
+          }
+        },
+        "overall": { "enum": ["low", "some_concerns", "high"], "description": "整體＝木桶原則：不得優於最不利領域（任一 high→high、任一 some_concerns→至少 some_concerns）" }
+      }
+    }
+  },
+  "definitions": {
+    "rob2_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["judgement"],
+      "properties": {
+        "judgement": { "enum": ["low", "some_concerns", "high"] },
+        "signalling": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "answer"],
+            "properties": {
+              "q": { "type": "string" },
+              "answer": { "enum": ["Y", "PY", "PN", "N", "NI"] }
+            }
+          }
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "robins_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["judgement"],
+      "properties": {
+        "judgement": { "enum": ["low", "moderate", "serious", "critical", "no_information"] },
+        "signalling": {
+          "type": "array",
+          "description": "ROBINS-I 信號問題作答（演算法導向判斷之依據）",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "answer"],
+            "properties": {
+              "q": { "type": "string" },
+              "answer": { "enum": ["Y", "PY", "PN", "N", "NI"], "description": "是/可能是/可能否/否/無資訊" }
+            }
+          }
+        },
+        "note": { "type": ["string", "null"] }
+      }
     }
   },
   "allOf": [
     {
       "if": { "properties": { "track": { "const": "A" } } },
-      "then": { "required": ["protocol_completeness"] }
+      "then": { "required": ["protocol_completeness", "rob_tool", "amstar2"], "properties": { "rob_tool": { "const": "amstar2" } } }
+    },
+    {
+      "if": { "properties": { "track": { "const": "B" } } },
+      "then": { "required": ["rob_tool", "rob2"], "properties": { "rob_tool": { "const": "rob2" } } }
+    },
+    {
+      "if": { "properties": { "track": { "const": "C" } } },
+      "then": { "required": ["rob_tool", "robins_i"], "properties": { "rob_tool": { "const": "robins_i" } } }
     }
   ]
 }

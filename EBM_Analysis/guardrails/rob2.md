@@ -16,3 +16,12 @@ source: 本檔即護欄正本（v6.0 規格）
 ‧ 領域5 報告結果選擇：是否依「取得未盲結果資料前即定稿的預先指定計畫」分析；所報數值結果是否（依其方向/大小/顯著性）從多個結果測量或多個分析中被選出。本領域只查研究「內」選擇（情境3）；選擇性「不報告」整個結果（情境1/2）屬綜整層級 → 見 [選擇性結果報告護欄]、[非報告偏誤／缺失證據評讀護欄] 與第13章。
 ‧ 整體判斷：於 result 層級（非研究層級）；演算法（riskofbias.info）只給「提議」判斷、作者可 override 並附理由；判斷讀作「實質偏誤 (material bias) 風險」；RoB 2 整體評估直接餵 GRADE 偏誤風險領域。
 ※ 信號問題的精確措辭與對映演算法不在本 prompt（僅議題層級摘要），實作須查 www.riskofbias.info。
+
+## Phase 2 結構化落地與機器看守（防漏填/遺失/飄移）
+- 每篇 RCT(track B) 記 `phase2.rob2`：五領域逐領域 `judgement∈{low, some_concerns, high}`（+選填 `signalling[]`、`note`）＋ `overall`；可選 `effect_of_interest`(assignment/adherence)。五領域＝randomization／deviations／missing_outcome／measurement／selection_reported。
+- **機器看守 `validate.py check_p2_rob_routing`（track B）**：
+  - schema 強制 track B 必帶 `rob2`＋`rob_tool=rob2`（**防遺失**：軌道 B 不得無 RoB 結果）。
+  - 五領域不得缺（**防漏填**）。
+  - **木桶原則**：`overall` 不得優於最不利領域（任一 high→high、任一 some_concerns→至少 some_concerns），否則 FAIL（**防飄移**）。
+  - 另由共用檢查擋『起始確定性↔軌道』飄移：track B → `grade_start=high`。
+- 三路徑對稱：RCT→RoB2(本檔)、NRSI→ROBINS-I([robins_i])、SR/MA→AMSTAR2([amstar2])，皆有「結構必填＋木桶/演算法一致」機器防護。

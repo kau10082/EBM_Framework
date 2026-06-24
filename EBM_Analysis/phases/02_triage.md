@@ -3,7 +3,7 @@ id: phase02_triage
 title: 第二階段 — 多軌分級與 GRADE 起始確定性
 input: phase1 輸出 + 原文
 output_schema: schema/phase2_triage.json
-guardrails: [integrity_check, selective_reporting, protocol_completeness]
+guardrails: [integrity_check, selective_reporting, protocol_completeness, rob2, robins_i, amstar2]
 ---
 
 ## 目標
@@ -19,6 +19,11 @@ guardrails: [integrity_check, selective_reporting, protocol_completeness]
    - 軌道 C（NRSI／觀察性）→ 起始「低」。若用 ROBINS-I 可起始「高」但一般因干擾／選擇偏誤降兩級；大效應且無偏誤解釋可經上調領域回升。
    - 低權重（case report／專家意見／動物細胞）→ 起始「極低」。
 3. **若軌道 A → 套用 [protocol_completeness]**（10 項逐查，缺項列降級候選並於臨床限制標註）。
+4. **偏誤風險『工具↔設計』路由（三路徑，機器看守 `validate.py check_p2_rob_routing`）**：依 track 開對應工具、寫 `rob_tool`——
+   - 軌道 A（SR/MA）→ `rob_tool=amstar2`（[amstar2]／ROBIS）。
+   - 軌道 B（RCT）→ `rob_tool=rob2`（[rob2] 五領域）。
+   - **軌道 C（NRSI：回顧性/世代/case-control/真實世界/非隨機換藥）→ `rob_tool=robins_i`（[robins_i] 七領域）。嚴禁拿 RoB2 套 NRSI。** 寫 `robins_i.domains`（七領域）＋`overall`；**`overall=low` 必附 `low_justification`**（NRSI 判低偏誤極罕見）。
+   - 三路徑各自評讀後，於 Phase 3/4 整合：每 outcome 的 GRADE 領域1 讀該證據體所屬路徑工具的結果，SoF/報告分路徑呈現再綜合（直接 RCT ＋ NRSI ＋ 間接 NMA），各標確定性與侷限。
 
 ## 輸出
-`track`、`grade_start`、`integrity_check` 結果、（SR/MA）`protocol_completeness[]`。
+`track`、`rob_tool`、`grade_start`、`integrity_check` 結果、（SR/MA）`protocol_completeness[]`、（NRSI）`robins_i{domains,overall,...}`。

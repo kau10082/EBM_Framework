@@ -15,12 +15,17 @@ sr_filter_composite_check.py — Gate ①『SR filter 須為複合語法（PubTy
 
 本守門對每條『SR 子腿（`<leg>-SR`，或 g0 role=SR_MA_NMA）且使用 Boolean query』的腿，
 斷言其實際 query **同時含**：
-  (1) 控制詞彙成分：SR 詞綁定 [pt]/[ptyp]/[mesh]/[mh]/[sb] 或 `pub_type:`；以及
-  (2) 自由文字成分：SR 詞綁定 [tiab]/[ti]/[tw]/[ab]/[title]，或 title/abstract 欄位語法，
-      或『裸詞』。**依 DB 方言收嚴**：PubMed/Embase 方括號方言（query 內含 [pt]/[tiab]/[mesh]…）下
-      裸詞＝all-fields（非 title/abstract），不予採計，須顯式綁 [tiab] 類欄位（標準 PubMed SR 過濾器即如此）；
-      EuropePMC/OpenAlex 等預設即搜 title/abstract，裸詞才視為自由文字（寬鬆 fallback）。
-缺任一成分 → FAIL（只靠 PubType＝會漏未索引最新 SR；只靠自由文字＝召回雜訊、非標準過濾）。
+  (1) 控制詞彙成分：SR 詞綁定 [pt]/[ptyp]/[mesh]/[mh]/[sb] 或 `pub_type:`／doctype 等；以及
+  (2) 自由文字成分（Title/Abstract）：SR 詞**欄位綁定** [tiab]/[ti]/[tw]/[ab]/[title]，或
+      title:/abstract:/ti:/ab:/title_and_abstract.search: 等欄位前綴語法。**裸詞不予採計**——
+      EuropePMC REST／OpenAlex 等預設搜『全文』，裸詞會把全文泛提及撈進來（噪音），不是 Title/Abstract
+      （2026-06 使用者糾正：先前把 EuropePMC 裸詞當 title/abstract 是錯的；EuropePMC 預設全文檢索）；以及
+  (3) 主題詞（MeSH/Emtree）成分：**凡所屬 DB 索引 MeSH/Emtree（PubMed/MEDLINE、EuropePMC、Embase…）
+      者，SR filter 必須真的並用 MeSH 成分**（`"…"[mesh]`／`MESH_TERM:"…"`），不可只用『出版類型＋自由文字』
+      就略過主題詞（使用者定版三成分＝PubType＋MeSH＋Title/Abstract）。DB 真無 MeSH 索引者（如 OpenAlex，
+      用 concepts/topics 非 MeSH）須於 g0 該 leg 標 `mesh_unavailable:true` 並註明理由＝誠實豁免，不偽造 MeSH 欄位。
+缺任一成分 → FAIL（只靠 PubType＝會漏未索引最新 SR；只靠自由文字＝召回雜訊、非標準過濾；
+MeSH-capable DB 略過 MeSH＝未達使用者定版三成分標準）。
 
 AI 合成腿（Consensus/OpenEvidence，role=ai_synthesis 或 exhaustible=false）以結構化參數
 （如 study_types）限定設計、無 [tiab] 欄位語法 → **豁免**本複合語法要求。
@@ -75,30 +80,46 @@ def _has_controlled(q):
         return True
     return False
 
-# PubMed/Embase 風格的『方括號欄位標籤』方言（任一 [pt]/[tiab]/[mesh]/[sb]…）：
-# 該方言內，『裸詞』其實是 all-fields（非 title/abstract），不算合格自由文字成分——
-# 必須顯式綁 [tiab]/[ti]/[tw]/[ab]（標準 PubMed SR 過濾器即如此）。
-# 反之 EuropePMC/OpenAlex 等預設即搜 title/abstract，裸詞才視為自由文字（寬鬆 fallback）。
-_BRACKET_TAG = r"\[\s*(?:" + CONTROLLED_TAGS + r"|" + FREETEXT_TAGS + r")\s*\]"
+# 主題詞（MeSH/Emtree）欄位語法：PubMed `"...."[mesh]/[mh]/[majr]`、EuropePMC `MESH_TERM:`、Embase Emtree。
+def _has_mesh(q):
+    """偵測 query 是否含『主題詞（MeSH/Emtree）』控制詞彙成分（MECIR C33 三成分之一）。"""
+    if re.search(r"\[\s*(?:mesh|mh|mh:noexp|majr)\s*\]", q, re.I):            # PubMed/MEDLINE [mesh]/[mh]/[majr]
+        return True
+    if re.search(r"mesh[_\s]?term\s*[:=]", q, re.I):                          # EuropePMC MESH_TERM:
+        return True
+    if re.search(r"(?<![a-z])mesh\s*[:=]", q, re.I):                          # 通用 mesh: 前綴
+        return True
+    if re.search(r"\bemtree\b", q, re.I):                                     # Embase Emtree（標名）
+        return True
+    return False
 
-def _is_bracket_dialect(q):
-    return bool(re.search(_BRACKET_TAG, q, re.I))
+# 「索引 MeSH/Emtree 主題詞」的 DB：這些 DB 的 SR 腿必須真的並用 MeSH 成分（不可只 PubType＋自由文字）。
+# OpenAlex 等無 MeSH 索引者天然不在此集合（以 work-type 等替代）；亦可於 g0 leg 標 mesh_unavailable:true 顯式豁免。
+MESH_CAPABLE_DB = ("pubmed", "medline", "europepmc", "epmc", "embase", "ovid", "cochrane", "central")
 
+def _norm_name(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+def _is_mesh_capable(name, meta):
+    """該腿所屬 DB 是否索引 MeSH/Emtree（→須含 MeSH 成分）。
+    leg meta 標 mesh_unavailable:true（DB 真無 MeSH 索引，如 OpenAlex）＝誠實豁免；否則依 DB 名判定。"""
+    if meta.get("mesh_unavailable"):
+        return False
+    nn = _norm_name(name)
+    return any(k in nn for k in MESH_CAPABLE_DB)
+
+# 自由文字成分：必須『欄位綁定』到 title/abstract（[tiab]/[ti]/[ab]/[tw] 或 title:/abstract:/ti:/ab:/
+# title_and_abstract.search: 等）。**裸詞不予採計**——在 EuropePMC REST／OpenAlex 等預設全文檢索的 DB，
+# 裸詞其實搜的是『全文』(會把全文泛提及撈進來＝噪音)，非 Title/Abstract，不算合格自由文字成分
+# （2026-06 使用者糾正：先前把 EuropePMC 裸詞當 title/abstract 是錯的，EuropePMC 預設全文檢索）。
 def _has_freetext(q):
-    """SR 詞綁定自由文字欄位 / title:abstract: 語法 / 裸詞（僅非方括號方言視裸詞為自由文字）。"""
+    """SR 詞綁定自由文字欄位（[tiab] 類）或 title:/abstract:/ti:/ab: 欄位前綴語法。裸詞不採計。"""
     if re.search(SR_TERM + r"\s*\[\s*" + FREETEXT_TAGS + r"\s*\]", q, re.I):
         return True
-    # 欄位前綴語法（OpenAlex/EuropePMC）：title:"systematic review" / abstract.search:meta-analysis / ti:(...)
+    # 欄位前綴語法（OpenAlex/EuropePMC）：title:"systematic review" / abstract:meta-analysis /
+    # title_and_abstract.search:"systematic review" / ti:(...)
     if re.search(r"(?:title|abstract|ti|ab|tiab)[\w.\s]*:\s*[\"(]?\s*" + SR_TERM, q, re.I):
         return True
-    # 裸詞（SR 詞之後沒有任何 [欄位] 標籤）＝多數 DB 預設搜 title/abstract（含 EuropePMC 預設）。
-    # 但 PubMed 方括號方言下裸詞＝all-fields，非 tiab，不予採計（依 DB 收嚴，回應 MECIR C33 精準度）。
-    if _is_bracket_dialect(q):
-        return False
-    for m in re.finditer(SR_TERM, q, re.I):
-        tail = q[m.end(): m.end() + 12]
-        if not re.match(r"\s*\[", tail):
-            return True
     return False
 
 def check(manifest, strategy):
@@ -125,18 +146,25 @@ def check(manifest, strategy):
         checked += 1
         ctrl = _has_controlled(q)
         free = _has_freetext(q)
-        if ctrl and free:
-            continue
-        if ctrl and not free:
-            fails.append(f"[{name}] SR filter 只用控制詞彙（出版類型/MeSH），缺自由文字（Title/Abstract）成分："
-                         "只靠 PubType/MeSH 會因索引時間差漏掉最新未索引 SR/MA（MECIR C33 須並用自由文字詞）。"
-                         "請補 `systematic review[tiab] OR meta-analysis[tiab]` 之類自由文字成分")
-        elif free and not ctrl:
-            fails.append(f"[{name}] SR filter 只用自由文字（Title/Abstract），缺控制詞彙（出版類型/MeSH）成分："
+        mesh = _has_mesh(q)
+        mesh_needed = _is_mesh_capable(name, meta)
+        # 逐成分核對（MECIR C33『出版類型/MeSH 控制詞彙 ＋ Title/Abstract 自由文字』；
+        # 索引 MeSH 的 DB 另須真的並用 MeSH 主題詞成分，不可只靠 PubType）。
+        if not free:
+            fails.append(f"[{name}] SR filter 缺『自由文字（Title/Abstract 欄位綁定）』成分："
+                         "只靠 PubType/MeSH 會因索引時間差漏掉最新未索引 SR/MA（MECIR C33 須並用自由文字詞）；"
+                         "**裸詞不算**（EuropePMC/OpenAlex 預設搜全文，裸詞＝全文泛提及噪音），"
+                         "請綁欄位如 `systematic review[tiab]`／`TITLE:\"systematic review\"`／"
+                         "`title_and_abstract.search:\"systematic review\"`")
+        if not ctrl:
+            fails.append(f"[{name}] SR filter 缺『控制詞彙（出版類型 PubType／主題詞 MeSH）』成分："
                          "標準 SR 過濾器須並用控制詞彙（如 systematic review[pt] OR \"meta-analysis\"[mesh]）以提精準")
-        else:
-            fails.append(f"[{name}] 標為 SR 子腿但 query 未見任何 SR 方法學過濾成分（既無 PubType/MeSH 亦無 Title/Abstract）："
-                         "SR 子腿必須以複合語法限定 systematic review/meta-analysis")
+        if mesh_needed and not mesh:
+            fails.append(f"[{name}] 此腿所屬 DB 索引 MeSH/Emtree 主題詞，但 SR filter 未見 MeSH 成分："
+                         "不可只用『出版類型＋自由文字』而略過主題詞（使用者定版三成分＝PubType＋MeSH＋Title/Abstract；"
+                         "MECIR C33）。請補 MeSH 成分（如 `\"Meta-Analysis as Topic\"[mesh]`／"
+                         "`MESH_TERM:\"Systematic Reviews as Topic\"`）；若該 DB 真無 MeSH 索引（如 OpenAlex），"
+                         "須在 g0 該 leg 標 `mesh_unavailable:true` 並註明理由（誠實豁免、不偽造 MeSH 欄位）")
     return fails
 
 def main():

@@ -59,32 +59,80 @@ def main():
     allok &= (not _srok)
     _sh_s.rmtree(_tmps, ignore_errors=True)
 
-    # SR filter 複合語法（MECIR C33）：SR 子腿只用出版類型 → 缺自由文字 → 必須 FAIL
+    # ⑤b 只消費『切題』：離題/全文及摘要皆無(待評估) 等同丟棄、不得進 g7_units（2026-06 使用者糾正）
+    _tu = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"uid":"u1","verdict":"切題"},{"uid":"u2","verdict":"離題"},
+                {"uid":"u3","verdict":"全文及摘要皆無"},{"uid":"u4","verdict":"切題"}],
+               _io_s.open(_tu/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    # 違規：把離題(u2)＋待評估(u3) 當背景灌進 ⑤b → 必須 FAIL
+    _js_s.dump({"records":[{"uid":"u1","role":"core"},{"uid":"u2","role":"background"},
+                           {"uid":"u3","role":"background"},{"uid":"u4","role":"core"}]},
+               _io_s.open(_tu/"g7_units.json","w",encoding="utf-8"))
+    allok &= _assert_fires("⑤b 把離題/待評估當背景灌進決定單位（不入分析鐵律）",
+        _gg_strat.check_units_only_concordant(_tu))
+    # 正向：只放切題(u1,u4)＋④新切題 → 應通過（防誤報）
+    _js_s.dump({"new_relevant":[{"uid":"u5"}]}, _io_s.open(_tu/"g4_citation_tracking.json","w",encoding="utf-8"))
+    _js_s.dump({"records":[{"uid":"u1","role":"core"},{"uid":"u4","role":"background"},{"uid":"u5","role":"core"}]},
+               _io_s.open(_tu/"g7_units.json","w",encoding="utf-8"))
+    _uok = _gg_strat.check_units_only_concordant(_tu)
+    print(("  ✅" if not _uok else "  ❌") + " ⑤b 只放切題(＋④新切題)應通過（防誤報）：" + ("通過" if not _uok else str(_uok)))
+    allok &= (not _uok)
+    _sh_s.rmtree(_tu, ignore_errors=True)
+
+    # 無法驗證(UNVERIFIED) 須與撤稿一樣剔除，不得入 ⑤b/交接/Zotero（2026-06 使用者糾正）
+    _tv = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"uid":"u1","pmid":"111","verdict":"VERIFIED"},
+                {"uid":"u2","pmid":None,"doi":None,"verify":"UNVERIFIED"}],
+               _io_s.open(_tv/"g6_verified.json","w",encoding="utf-8"))
+    # 違規：UNVERIFIED(u2) 被當背景留在 g7_units → 必須 FAIL
+    _js_s.dump({"records":[{"uid":"u1","role":"core","pmid":"111"},{"uid":"u2","role":"background"}]},
+               _io_s.open(_tv/"g7_units.json","w",encoding="utf-8"))
+    allok &= _assert_fires("無法驗證(UNVERIFIED)被當背景留在 ⑤b（須同撤稿剔除）",
+        _gg_strat.check_no_unverified(_tv))
+    # 正向：UNVERIFIED 已剔除、g7 只剩 VERIFIED → 應通過（防誤報）
+    _js_s.dump({"records":[{"uid":"u1","role":"core","pmid":"111"}]},
+               _io_s.open(_tv/"g7_units.json","w",encoding="utf-8"))
+    _vok = _gg_strat.check_no_unverified(_tv)
+    print(("  ✅" if not _vok else "  ❌") + " 無法驗證已剔除、g7 全 VERIFIED 應通過（防誤報）：" + ("通過" if not _vok else str(_vok)))
+    allok &= (not _vok)
+    _sh_s.rmtree(_tv, ignore_errors=True)
+
+    # SR filter 複合語法（MECIR C33，使用者定版三成分＝PubType＋MeSH＋Title/Abstract）：
     import sr_filter_composite_check as _src
     _strat_sr = {"sr_filter_decision":"applied",
                  "legs":[{"leg":"Europe PMC-SR","design_filter_allowed":True,"role":"SR_MA_NMA"},
+                         {"leg":"OpenAlex-SR","design_filter_allowed":True,"role":"SR_MA_NMA","mesh_unavailable":True},
                          {"leg":"Consensus-SR","role":"ai_synthesis","exhaustible":False}]}
+    # 只用出版類型 → 缺自由文字（且 MeSH-capable 缺 MeSH）→ 必須 FAIL
     allok &= _assert_fires("Gate① SR filter 只用出版類型(缺自由文字 Title/Abstract)",
-        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[pt] OR meta-analysis[pt])"}], _strat_sr))
+        _src.check([{"leg":"Europe PMC-SR","query":"(asthma) AND (systematic review[pt] OR meta-analysis[pt])"}], _strat_sr))
     # 只用自由文字、缺控制詞彙 → 也應 FAIL
     allok &= _assert_fires("Gate① SR filter 只用自由文字(缺控制詞彙 PubType/MeSH)",
-        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr))
-    # 正向：複合語法（PubType ＋ tiab）→ 應通過（防誤報）
+        _src.check([{"leg":"Europe PMC-SR","query":"(asthma) AND (systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr))
+    # ★ 使用者 2026-06 糾正之缺失①：MeSH-capable DB(EuropePMC) 的 SR 腿『裸詞』自由文字＝全文泛提及噪音、非 Title/Abstract → 必須 FAIL
+    allok &= _assert_fires("Gate① SR filter MeSH-capable DB 自由文字用『裸詞』(全文噪音非 Title/Abstract)＝缺合格自由文字",
+        _src.check([{"leg":"Europe PMC-SR","query":"(asthma) AND (PUB_TYPE:\"systematic-review\" OR \"systematic review\" OR \"meta-analysis\")"}], _strat_sr))
+    # ★ 使用者 2026-06 糾正之缺失②：MeSH-capable DB(EuropePMC) 的 SR 腿有 PubType＋欄位綁定自由文字但『缺 MeSH 主題詞』→ 必須 FAIL（這正是本輪手動抓到的 bug）
+    allok &= _assert_fires("Gate① SR filter MeSH-capable DB 略過 MeSH 主題詞(只 PubType＋Title/Abstract)＝未達三成分",
+        _src.check([{"leg":"Europe PMC-SR","query":"(asthma) AND (PUB_TYPE:\"systematic-review\" OR TITLE:\"systematic review\" OR ABSTRACT:\"meta-analysis\")"}], _strat_sr))
+    # 正向：EuropePMC 完整三成分（PubType ＋ MeSH ＋ 欄位綁定 Title/Abstract）→ 應通過（防誤報）
     _srcok = _src.check([{"leg":"Europe PMC-SR",
-                          "query":"(copd) AND (systematic review[pt] OR meta-analysis[pt] OR systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr)
-    print(("  ✅" if not _srcok else "  ❌") + " SR filter 複合語法(PubType＋tiab)應通過（防誤報）：" + ("通過" if not _srcok else str(_srcok)))
+                          "query":"(asthma) AND (PUB_TYPE:\"systematic-review\" OR MESH_TERM:\"Meta-Analysis as Topic\" OR TITLE:\"systematic review\" OR ABSTRACT:\"meta-analysis\")"}], _strat_sr)
+    print(("  ✅" if not _srcok else "  ❌") + " SR filter 三成分(PubType＋MeSH＋Title/Abstract)應通過（防誤報）：" + ("通過" if not _srcok else str(_srcok)))
     allok &= (not _srcok)
+    # 正向：PubMed 方括號方言三成分（[pt] ＋ [mesh] ＋ [tiab]）→ 應通過（防誤報）
+    _srcpm = _src.check([{"leg":"Europe PMC-SR",
+                          "query":"(asthma) AND (systematic review[pt] OR \"Meta-Analysis as Topic\"[mesh] OR systematic review[tiab] OR meta-analysis[tiab])"}], _strat_sr)
+    print(("  ✅" if not _srcpm else "  ❌") + " SR filter 方括號三成分([pt]＋[mesh]＋[tiab])應通過（防誤報）：" + ("通過" if not _srcpm else str(_srcpm)))
+    allok &= (not _srcpm)
+    # 正向：OpenAlex(無 MeSH 索引、標 mesh_unavailable) work-type 控制＋欄位綁定自由文字 → 豁免 MeSH、應通過（防誤報）
+    _srcoa = _src.check([{"leg":"OpenAlex-SR","query":"(asthma) AND type:review AND (title_and_abstract.search:\"systematic review\" OR title_and_abstract.search:\"meta-analysis\")"}], _strat_sr)
+    print(("  ✅" if not _srcoa else "  ❌") + " OpenAlex(mesh_unavailable)豁免 MeSH＋欄位綁定自由文字應通過（防誤報）：" + ("通過" if not _srcoa else str(_srcoa)))
+    allok &= (not _srcoa)
     # 正向：AI 合成腿(Consensus-SR, study_types 參數)豁免複合語法 → 不誤擋（防誤報）
-    _srcai = _src.check([{"leg":"Consensus-SR","query":"copd triple therapy"}], _strat_sr)
+    _srcai = _src.check([{"leg":"Consensus-SR","query":"asthma benralizumab"}], _strat_sr)
     print(("  ✅" if not _srcai else "  ❌") + " AI 合成 SR 腿豁免複合語法應通過（防誤報）：" + ("通過" if not _srcai else str(_srcai)))
     allok &= (not _srcai)
-    # 依 DB 收嚴（審查 item 1）：PubMed 方括號方言下，自由文字只給『裸詞』(=all-fields 非 tiab) → 仍視為缺自由文字 → FAIL
-    allok &= _assert_fires("Gate① SR filter(PubMed 方言)自由文字只給裸詞(non-tiab)＝缺自由文字",
-        _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (systematic review[pt] OR meta-analysis[pt] OR systematic review OR meta-analysis)"}], _strat_sr))
-    # 正向：非方括號方言(EuropePMC/OpenAlex 預設搜 title/abstract)裸詞自由文字 ＋ doctype 控制 → 應通過（防誤報）
-    _srcbare = _src.check([{"leg":"Europe PMC-SR","query":"(copd) AND (doctype:review OR meta-analysis)"}], _strat_sr)
-    print(("  ✅" if not _srcbare else "  ❌") + " 非方括號方言裸詞自由文字應通過（防誤報）：" + ("通過" if not _srcbare else str(_srcbare)))
-    allok &= (not _srcbare)
 
     # ②b 須以『標題＋摘要』初篩（Cochrane 紅線）
     import screen_2b_abstract_check as _s2b
