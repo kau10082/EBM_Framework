@@ -82,19 +82,41 @@ def check_p2_rob_routing(data):
     if track == "C":
         ri = data.get("robins_i") or {}
         doms = (ri.get("domains") or {})
+        need = ["confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported"]
+        overall = ri.get("overall")
         if not doms:
             errs.append("track=C(NRSI) 缺 robins_i.domains 七領域評估（ROBINS-I）")
         else:
-            need = ["confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported"]
             miss = [d for d in need if d not in doms]
             if miss:
                 errs.append(f"ROBINS-I 缺領域 {miss}（七領域須逐一判）")
             ni = [d for d in need if (doms.get(d) or {}).get("judgement") == "no_information"]
             if len(ni) >= 4:
                 errs.append(f"ROBINS-I 有 {len(ni)} 個領域填 no_information（{ni}）：疑以『無資訊』充數規避判定，請據實評或標 serious/critical")
-        if ri.get("overall") == "low" and not str(ri.get("low_justification") or "").strip():
+            # 木桶原則：整體不得優於最不利領域（任一 serious→至少 serious；任一 critical→critical）
+            RANK = {"low": 0, "moderate": 1, "serious": 2, "critical": 3}
+            dom_ranks = [RANK[(doms.get(d) or {}).get("judgement")] for d in need
+                         if (doms.get(d) or {}).get("judgement") in RANK]
+            if dom_ranks and overall in RANK:
+                worst = max(dom_ranks)
+                if RANK[overall] < worst:
+                    inv = {v: k for k, v in RANK.items()}
+                    worst_doms = [d for d in need if RANK.get((doms.get(d) or {}).get("judgement"), -1) == worst]
+                    errs.append(f"ROBINS-I 整體判定違反木桶原則：overall={overall} 優於最不利領域={inv[worst]}"
+                                f"（{worst_doms}）。整體不得低於最不利領域（任一 serious→至少 serious、任一 critical→critical）")
+        # 前置作業（評估前必備）
+        if ri.get("effect_of_interest") not in ("assignment", "adherence"):
+            errs.append("ROBINS-I 缺前置作業 effect_of_interest（assignment ITT-like／adherence PP-like）：影響領域4 判定")
+        if not (ri.get("confounders_considered") or []):
+            errs.append("ROBINS-I 缺前置作業 confounders_considered（預先指定的重要干擾因子，至少 1 個）：干擾為 NRSI 最致命領域")
+        # NRSI 判 low 極罕見：須附理由
+        if overall == "low" and not str(ri.get("low_justification") or "").strip():
             errs.append("ROBINS-I overall=low 但無 low_justification：NRSI 判低偏誤極罕見（殘餘干擾無法消除），"
                         "須明述為何殘餘干擾可忽略（Cochrane Ch.25 警語）")
+        # critical → 該結果應直接排除於統合（Cochrane Ch.25）
+        if overall == "critical" and ri.get("meta_analysis_action") != "exclude":
+            errs.append("ROBINS-I overall=critical 但 meta_analysis_action≠exclude：被評 critical 的 NRSI 結果"
+                        "無法提供有用效果證據，Cochrane Ch.25 規定應直接排除於統合（meta_analysis_action=exclude）")
     return errs
 
 

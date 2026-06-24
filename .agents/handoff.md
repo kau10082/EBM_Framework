@@ -26,14 +26,21 @@
 8. `EBM_Analysis/guardrails/robins_i.md`（新檔；ROBINS-I 七領域＋目標試驗＋本題干擾因子＋Low 警語＋GRADE 映射）
 9. `EBM_Analysis/phases/02_triage.md`（guardrails 增列 rob2/robins_i/amstar2；步驟 4 加 rob_tool 路由）
 
-**缺失④（使用者定版）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
-- 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低；
-  ROBINS-I overall=low 極罕見（殘餘干擾），須附理由。三路徑於 Phase 3/4 整合（各 outcome GRADE 領域1 讀對應工具）。
-- 修法：phase2 schema 強制 `rob_tool` 與 `track` 相符＋track C 須帶 `robins_i` 七領域；`validate.py check_p2_rob_routing`
-  再補語意檢查（拿錯工具 FAIL、缺七領域 FAIL、overall=low 無理由 FAIL、過半 no_information 充數 FAIL）。
-- 自測：`selftest_analysis_guards.py` 9 條全綠（5 負向＋4 正向防誤報）。
-- 想被重點看：(a) schema allOf 的 if/then 是否正確（track C 必帶 robins_i）；(b) `no_information ≥4` 充數門檻是否合理；
-  (c) 三路徑「整合到最後結果」目前以 phase2 路由＋robins_i.md 映射＋02_triage 步驟4 文件落地，Phase3/4 的 SoF 分路徑呈現尚屬規格層（未加機器 gate），是否需再補一道整合 gate。
+**缺失④（使用者定版，已強化）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
+- 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低。
+- ROBINS-I 細節落地（依使用者補充）：
+  - **前置作業**：`effect_of_interest`(assignment/adherence)、`confounders_considered`(非空)、`cointerventions`——皆機器強制。
+  - **七領域**＋時間軸三階段＋信號問題作答(Y/PY/PN/N/NI，`domains.<d>.signalling[]`)。
+  - **四級**(low/moderate/serious/critical)＋ NRSI 判 low 極罕見(須 `low_justification`)。
+  - **木桶原則**：`overall` 不得優於最不利領域（任一 serious→至少 serious、任一 critical→critical）。
+  - **critical → 排除於統合**：`overall=critical` 須 `meta_analysis_action=exclude`。
+- 機器看守 `validate.py check_p2_rob_routing`（接 p2；verify_all 自動帶）：拿錯工具／缺七領域／overall=low 無理由／
+  過半 no_information 充數／**木桶原則違反**／**critical 未排除**／**缺前置作業(effect_of_interest、confounders)** → 各自 FAIL。
+  schema(`phase2_triage.json`) 另以 allOf 強制 `rob_tool`↔`track`＋track C 須帶 `robins_i`，並加 `signalling`/`meta_analysis_action`/前置欄位。
+- 自測：`selftest_analysis_guards.py` **14 條全綠**（9 負向＋5 正向防誤報）。
+- 想被重點看：(a) 木桶原則 RANK 比較是否正確涵蓋 no_information（目前 no_information 不計入 floor、另以「過半 NI」擋充數）；
+  (b) critical→exclude 僅在 phase2 標記，Phase3/4 SoF 是否需再補「critical 不得出現在池化結果」整合 gate；
+  (c) 三路徑「整合到最後結果」目前在 phase2 路由＋robins_i.md 映射＋02_triage 步驟4（規格＋schema 層），Phase3/4 整合尚未加機器 gate，是否需補。
 
 **缺失②（本輪新增 gate）：⑤b 誤把『離題』當『背景』灌進分析**
 - 使用者定版：**『離題』(③ 清單三排除) 與『全文及摘要皆無/待評估』都等同丟棄、不入後續分析（corpus_seed）**；

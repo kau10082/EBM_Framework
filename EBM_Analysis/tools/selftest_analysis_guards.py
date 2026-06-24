@@ -23,47 +23,64 @@ def _passes(name, fails):
     return ok
 
 
+def _doms(j):
+    return {k: {"judgement": j} for k in
+            ("confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported")}
+
+
+def _ri(**kw):
+    """組合有效的 robins_i（含前置作業），可用 kw 覆寫。"""
+    base = {"effect_of_interest": "assignment", "confounders_considered": ["baseline eos", "prior biologic"],
+            "overall": "serious", "domains": _doms("serious")}
+    base.update(kw)
+    return base
+
+
 def main():
     allok = True
     base = {"paper_id": "x", "integrity_check": {"retraction": False, "erratum_or_eoc": False, "action": "none"}}
-    full_doms = {k: {"judgement": "serious"} for k in
-                 ("confounding", "selection", "classification", "deviations", "missing_data", "measurement", "selection_reported")}
+
+    def c(robins, track="C", tool="robins_i", gs="low"):
+        return {**base, "track": track, "grade_start": gs, "rob_tool": tool, "robins_i": robins}
 
     # 拿錯工具：NRSI(track C) 標 rob2 → FAIL
-    allok &= _fires("Phase2 NRSI(track C) 用 RoB2（須 ROBINS-I）",
-                    V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "rob2",
-                                            "robins_i": {"overall": "serious", "domains": full_doms}}))
+    allok &= _fires("Phase2 NRSI(track C) 用 RoB2（須 ROBINS-I）", V.check_p2_rob_routing(c(_ri(), tool="rob2")))
     # 拿錯工具：RCT(track B) 標 robins_i → FAIL
     allok &= _fires("Phase2 RCT(track B) 用 ROBINS-I（須 RoB2）",
                     V.check_p2_rob_routing({**base, "track": "B", "grade_start": "high", "rob_tool": "robins_i"}))
     # NRSI 缺七領域 → FAIL
-    allok &= _fires("Phase2 NRSI 缺 robins_i 七領域",
-                    V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "robins_i", "robins_i": {"overall": "serious", "domains": {}}}))
-    # ROBINS-I overall=low 無理由 → FAIL（NRSI 判低偏誤極罕見）
-    low_doms = {k: {"judgement": "low"} for k in full_doms}
+    allok &= _fires("Phase2 NRSI 缺 robins_i 七領域", V.check_p2_rob_routing(c(_ri(domains={}))))
+    # overall=low 無理由 → FAIL
     allok &= _fires("Phase2 ROBINS-I overall=low 無 low_justification",
-                    V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "robins_i",
-                                            "robins_i": {"overall": "low", "domains": low_doms}}))
-    # 過半領域 no_information → FAIL（防以無資訊充數）
-    ni_doms = {k: {"judgement": "no_information"} for k in full_doms}
+                    V.check_p2_rob_routing(c(_ri(overall="low", domains=_doms("low")))))
+    # 過半 no_information → FAIL
     allok &= _fires("Phase2 ROBINS-I 過半領域 no_information（充數規避）",
-                    V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "robins_i",
-                                            "robins_i": {"overall": "serious", "domains": ni_doms}}))
+                    V.check_p2_rob_routing(c(_ri(domains=_doms("no_information")))))
+    # 木桶原則：有 critical 領域卻 overall=serious → FAIL
+    crit_one = _doms("moderate"); crit_one["confounding"] = {"judgement": "critical"}
+    allok &= _fires("Phase2 木桶原則：critical 領域卻 overall=serious",
+                    V.check_p2_rob_routing(c(_ri(overall="serious", domains=crit_one, meta_analysis_action="include"))))
+    # critical 未排除於統合 → FAIL
+    allok &= _fires("Phase2 critical 未設 meta_analysis_action=exclude",
+                    V.check_p2_rob_routing(c(_ri(overall="critical", domains=crit_one, meta_analysis_action="include"))))
+    # 前置作業缺 effect_of_interest → FAIL
+    ri_no_eoi = _ri(); ri_no_eoi.pop("effect_of_interest")
+    allok &= _fires("Phase2 ROBINS-I 缺前置作業 effect_of_interest", V.check_p2_rob_routing(c(ri_no_eoi)))
+    # 前置作業缺 confounders_considered → FAIL
+    allok &= _fires("Phase2 ROBINS-I 缺前置作業 confounders_considered",
+                    V.check_p2_rob_routing(c(_ri(confounders_considered=[]))))
 
-    # 正向防誤報：NRSI 正確用 ROBINS-I、serious → 通過
-    allok &= _passes("Phase2 NRSI 正確用 ROBINS-I(serious) 應通過",
-                     V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "robins_i",
-                                             "robins_i": {"overall": "serious", "domains": full_doms}}))
-    # 正向：RCT 用 RoB2 → 通過
+    # 正向防誤報
+    allok &= _passes("Phase2 NRSI 正確用 ROBINS-I(serious) 應通過", V.check_p2_rob_routing(c(_ri())))
     allok &= _passes("Phase2 RCT 用 RoB2 應通過",
                      V.check_p2_rob_routing({**base, "track": "B", "grade_start": "high", "rob_tool": "rob2"}))
-    # 正向：SR/MA 用 AMSTAR2 → 通過
     allok &= _passes("Phase2 SR/MA 用 AMSTAR2 應通過",
                      V.check_p2_rob_routing({**base, "track": "A", "grade_start": "high", "rob_tool": "amstar2"}))
-    # 正向：ROBINS-I overall=low 附理由 → 通過
-    allok &= _passes("Phase2 ROBINS-I low 附 low_justification 應通過",
-                     V.check_p2_rob_routing({**base, "track": "C", "grade_start": "low", "rob_tool": "robins_i",
-                                             "robins_i": {"overall": "low", "low_justification": "雙胞胎設計、完整調整所有已知干擾且做 E-value 敏感度分析", "domains": low_doms}}))
+    allok &= _passes("Phase2 ROBINS-I low 附理由 應通過",
+                     V.check_p2_rob_routing(c(_ri(overall="low", domains=_doms("low"),
+                                                  low_justification="完整調整所有已知干擾＋E-value 敏感度分析"))))
+    allok &= _passes("Phase2 ROBINS-I critical 且 exclude 應通過",
+                     V.check_p2_rob_routing(c(_ri(overall="critical", domains=crit_one, meta_analysis_action="exclude"))))
 
     print("\n" + ("✅ 全部分析端守門有效。" if allok else "❌ 有守門未如預期，請檢查。"))
     return 0 if allok else 1
