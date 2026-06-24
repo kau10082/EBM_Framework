@@ -59,6 +59,26 @@ def main():
     allok &= (not _srok)
     _sh_s.rmtree(_tmps, ignore_errors=True)
 
+    # ⑤b 只消費『切題』：離題/全文及摘要皆無(待評估) 等同丟棄、不得進 g7_units（2026-06 使用者糾正）
+    _tu = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"uid":"u1","verdict":"切題"},{"uid":"u2","verdict":"離題"},
+                {"uid":"u3","verdict":"全文及摘要皆無"},{"uid":"u4","verdict":"切題"}],
+               _io_s.open(_tu/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    # 違規：把離題(u2)＋待評估(u3) 當背景灌進 ⑤b → 必須 FAIL
+    _js_s.dump({"records":[{"uid":"u1","role":"core"},{"uid":"u2","role":"background"},
+                           {"uid":"u3","role":"background"},{"uid":"u4","role":"core"}]},
+               _io_s.open(_tu/"g7_units.json","w",encoding="utf-8"))
+    allok &= _assert_fires("⑤b 把離題/待評估當背景灌進決定單位（不入分析鐵律）",
+        _gg_strat.check_units_only_concordant(_tu))
+    # 正向：只放切題(u1,u4)＋④新切題 → 應通過（防誤報）
+    _js_s.dump({"new_relevant":[{"uid":"u5"}]}, _io_s.open(_tu/"g4_citation_tracking.json","w",encoding="utf-8"))
+    _js_s.dump({"records":[{"uid":"u1","role":"core"},{"uid":"u4","role":"background"},{"uid":"u5","role":"core"}]},
+               _io_s.open(_tu/"g7_units.json","w",encoding="utf-8"))
+    _uok = _gg_strat.check_units_only_concordant(_tu)
+    print(("  ✅" if not _uok else "  ❌") + " ⑤b 只放切題(＋④新切題)應通過（防誤報）：" + ("通過" if not _uok else str(_uok)))
+    allok &= (not _uok)
+    _sh_s.rmtree(_tu, ignore_errors=True)
+
     # SR filter 複合語法（MECIR C33，使用者定版三成分＝PubType＋MeSH＋Title/Abstract）：
     import sr_filter_composite_check as _src
     _strat_sr = {"sr_filter_decision":"applied",

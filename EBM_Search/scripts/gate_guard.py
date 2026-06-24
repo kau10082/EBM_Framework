@@ -353,6 +353,47 @@ def check_units_no_nocontent(cache):
                 f"（會議摘要請標『待評估:會議摘要』＝有摘要內容）：{bad[:5]}"]
     return []
 
+def check_units_only_concordant(cache):
+    """⑤b 只能消費 ③『切題』候選（＋④ 引文追蹤新切題）。『離題』(清單三排除) 與『全文及摘要皆無/待評估』
+    **等同丟棄、不入後續分析**——嚴禁把它們餵進 g7_units（決定納入單位）當核心或背景。
+    （2026-06 使用者糾正：曾把 ③ 的 274 筆『離題』誤當『背景』灌進 ⑤b，使 corpus 由 561 切題膨脹成 835；
+      使用者定版：離題與待評估都不入分析。背景＝『切題中非核心』者，不是『離題』。）
+    判定：g7_units 每筆 uid 必須是 ③ g3_FINAL_screen 中 verdict=='切題' 者，或 ④ g4 的新切題；
+    出現 g3 中 verdict∈{離題,全文及摘要皆無} 的 uid → FAIL。"""
+    units = _load(cache / "g7_units.json")
+    if units is None:
+        return None
+    g3 = _load(cache / "g3_FINAL_screen.json")
+    if g3 is None:
+        return None
+    concordant = {r.get("uid") for r in g3 if (r.get("verdict") or "") == "切題"}
+    excluded = {r.get("uid"): (r.get("verdict") or "") for r in g3
+                if (r.get("verdict") or "") in ("離題", "全文及摘要皆無")}
+    g4 = _load(cache / "g4_citation_tracking.json") or {}
+    for r in (g4.get("new_relevant") or []):
+        if r.get("uid"):
+            concordant.add(r.get("uid"))
+    recs = units.get("records") if isinstance(units, dict) else units
+    if not isinstance(recs, list):
+        return None
+    bad = []
+    for r in recs:
+        if not isinstance(r, dict):
+            continue
+        uid = r.get("uid")
+        if uid in concordant:
+            continue
+        why = excluded.get(uid)
+        if why:
+            bad.append(f"{(r.get('title') or uid or '?')[:45]}（③判={why}）")
+        else:
+            bad.append(f"{(r.get('title') or uid or '?')[:45]}（uid 不在 ③切題/④新切題）")
+    if bad:
+        return [f"⑤b g7_units.json 有 {len(bad)} 筆非『切題』候選被納入決定單位："
+                f"『離題』與『全文及摘要皆無/待評估』等同丟棄、不入分析（背景＝切題中非核心，非離題）："
+                f"{bad[:6]}"]
+    return []
+
 def check_search_report_format(cache):
     """⑥ 報告格式『強制執行』：_search_report.json 必須符合使用者 2026-06-24 定版『5 段核心』格式——
     1 檢索基本參數(params: pico/databases/limits)、2 完整檢索字串(search_strings 逐字)、3 PRISMA 流程(flow)、
@@ -660,6 +701,7 @@ def _all_checks(cache):
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
             _safe("⑤b 不得有『待評估,無內容』(③Tier4終端桶不在⑤b重生)", check_units_no_nocontent, cache),
+            _safe("⑤b 只消費切題(離題/待評估等同丟棄、不入分析)", check_units_only_concordant, cache),
             _safe("⑥ 報告須照使用者 5 段格式(作者/年份/文獻類型 byline 等)", check_search_report_format, cache),
             _safe("③ 逐 Tier 停頓報告(T1→T2→T3→T4 不得跨層搶跑)", check_screen_tier_stops, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),

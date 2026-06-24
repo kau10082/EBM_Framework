@@ -1,11 +1,19 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-【初審】功能塊＝強化 SR filter 複合語法守門（把使用者手動抓到的缺失轉成機器 gate）。
+【初審】功能塊＝把兩個「使用者手動抓到的缺失」轉成機器 gate（SR filter 三成分強化 ＋ ⑤b 只消費切題）。
 
 **本輪審查範圍：僅以下檔案（請只讀這幾個檔的當前內容，勿審其他檔）**
-1. `EBM_Search/scripts/sr_filter_composite_check.py`
-2. `EBM_Search/scripts/selftest_guards.py`
-3. `EBM_Search/SEARCH_SPEC.md`（僅第 107 行附近新增的「★★ 三成分強化」一段）
+1. `EBM_Search/scripts/sr_filter_composite_check.py`（SR filter 三成分）
+2. `EBM_Search/scripts/gate_guard.py`（新增 `check_units_only_concordant` ＋註冊；其餘不動）
+3. `EBM_Search/scripts/selftest_guards.py`（SR 三成分回歸 ＋ ⑤b 只消費切題回歸）
+4. `EBM_Search/SEARCH_SPEC.md`（第 107 行附近「★★ 三成分強化」一段）
+
+**缺失②（本輪新增 gate）：⑤b 誤把『離題』當『背景』灌進分析**
+- 使用者定版：**『離題』(③ 清單三排除) 與『全文及摘要皆無/待評估』都等同丟棄、不入後續分析（corpus_seed）**；
+  背景＝『切題中非核心』者，**不是離題**。先前實跑誤把 ③ 的 274 筆離題當背景餵進 ⑤b，使語料由 561 切題膨脹成 835。
+- 修法：`gate_guard.check_units_only_concordant`——g7_units 每筆 uid 必須是 ③ `verdict=='切題'` 或 ④ 新切題；
+  出現 ③ 判 `離題/全文及摘要皆無` 的 uid → FAIL。已註冊進 `_all_checks` 與 `selftest_guards`（一負向＋一正向回歸）。
+- fresh-clone 自測：見下方對話（`selftest_guards.py` 全綠，含本 gate 兩條新測）。
 
 **背景／為何改**：執行 benralizumab vs mepolizumab 檢索的 Phase ⓪ 時，使用者人工抓到我寫的 `EuropePMC-SR` 過濾器
 不符其定版要求「出版類型(PubType) ＋ 主題詞(MeSH/Emtree) ＋ 自由文字(Title/Abstract)」三成分。追因發現
