@@ -620,9 +620,10 @@ def check_no_retracted(cache):
     ver = _load(cache / "g6_verified.json")
     if ver is None:
         return None
-    retr = {str(v.get("pmid")) for v in ver if v.get("verdict") == "RETRACTED" and v.get("pmid")}
+    def _vv(v): return v.get("verdict") or v.get("verify")   # 相容兩種鍵名（⑤a 寫 verdict／報告器寫 verify）
+    retr = {str(v.get("pmid")) for v in ver if _vv(v) == "RETRACTED" and v.get("pmid")}
     # Crossref is-retracted 多以 DOI 為憑——撤稿文獻可能無 PMID，須一併以 DOI 比對（審查 🔴 補強）
-    retr_dois = {_norm_doi(v.get("doi")) for v in ver if v.get("verdict") == "RETRACTED" and v.get("doi")}
+    retr_dois = {_norm_doi(v.get("doi")) for v in ver if _vv(v) == "RETRACTED" and v.get("doi")}
     retr_dois.discard(None)
     if not retr and not retr_dois:
         return []
@@ -650,6 +651,45 @@ def check_no_retracted(cache):
                 fails.append(f"撤稿 {p.get('pmid') or p.get('doi')} 在交接包 papers：禁進 GRADE 證據體")
     return fails
 
+
+def check_no_unverified(cache):
+    """無法驗證（UNVERIFIED）管控：⑤a 交叉驗證查不到存在性者（Crossref／PubMed 皆無、或完全無 ID 可查證）
+    **與撤稿一視同仁——嚴禁進下一關**（⑤b g7_units／交接包 corpus_seed／報告納入背景表／Zotero payload）。
+    （2026-06 使用者定版：『無法驗證跟撤稿一樣剔除，不可入下一關』；與 check_no_retracted 對稱。）
+    判定：g6_verified 標 UNVERIFIED 者，以 pmid／doi／uid 比對下游；命中即 FAIL（須剔除，不得當背景保留）。
+    註：以註冊號（NCT）為憑的登錄紀錄屬『registry-verified』，⑤a 不應標其 UNVERIFIED，故不在此誤殺。"""
+    ver = _load(cache / "g6_verified.json")
+    if ver is None:
+        return None
+    def _vv(v): return v.get("verdict") or v.get("verify")
+    unv_pmid = {str(v.get("pmid")) for v in ver if _vv(v) == "UNVERIFIED" and v.get("pmid")}
+    unv_doi = {_norm_doi(v.get("doi")) for v in ver if _vv(v) == "UNVERIFIED" and v.get("doi")}
+    unv_doi.discard(None)
+    unv_uid = {v.get("uid") for v in ver if _vv(v) == "UNVERIFIED" and v.get("uid")}
+    unv_uid.discard(None)
+    if not (unv_pmid or unv_doi or unv_uid):
+        return []
+    def _hit(uid, pmid, doi):
+        return (uid in unv_uid) or (pmid and str(pmid) in unv_pmid) or (_norm_doi(doi) in unv_doi)
+    fails = []
+    g7 = _load(cache / "g7_units.json")
+    recs = g7.get("records") if isinstance(g7, dict) else g7
+    if isinstance(recs, list):
+        for r in recs:
+            if _hit(r.get("uid"), r.get("pmid"), r.get("doi")):
+                fails.append(f"UNVERIFIED {r.get('pmid') or r.get('doi') or r.get('uid')} 在 ⑤b g7_units（{r.get('role')}）："
+                             "無法驗證須與撤稿一樣剔除、不得當核心/背景保留")
+    seed = _load(cache / "seed.json") or _load(cache / "_corpus_seed.json")
+    if seed:
+        for p in (seed.get("papers", []) if isinstance(seed, dict) else seed):
+            if _hit(p.get("uid") or p.get("paper_id"), p.get("pmid"), p.get("doi")):
+                fails.append(f"UNVERIFIED {p.get('pmid') or p.get('doi')} 在交接包 papers：禁進 GRADE 證據體（須剔除）")
+    pay = _load(cache / "g8_zotero_payload.json")
+    if pay:
+        for p in pay:
+            if _hit(p.get("uid"), p.get("pmid"), p.get("doi")):
+                fails.append(f"UNVERIFIED {p.get('pmid') or p.get('doi')} 在 Zotero payload：禁匯入（須先剔除）")
+    return fails
 
 
 def check_exhaust(cache):
@@ -711,7 +751,8 @@ def _all_checks(cache):
             _safe("③ 融合分層篩 分割閉合＋反坍縮", check_screen_partition, cache),
             _safe("③ 離題只在實取全文後定案(Tier3)", check_excl_requires_fulltext, cache),
             _safe("③『全文及摘要皆無』須證明三層實取皆失敗", check_nocontent_bucket, cache),
-            _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache)]
+            _safe("撤稿不得殘留納入/背景/Zotero", check_no_retracted, cache),
+            _safe("無法驗證(UNVERIFIED)須剔除(同撤稿,不得入⑤b/交接/Zotero)", check_no_unverified, cache)]
 
 
 def run(cache, quiet=False):

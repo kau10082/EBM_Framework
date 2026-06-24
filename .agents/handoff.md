@@ -4,9 +4,16 @@
 
 **本輪審查範圍：僅以下檔案（請只讀這幾個檔的當前內容，勿審其他檔）**
 1. `EBM_Search/scripts/sr_filter_composite_check.py`（SR filter 三成分）
-2. `EBM_Search/scripts/gate_guard.py`（新增 `check_units_only_concordant` ＋註冊；其餘不動）
-3. `EBM_Search/scripts/selftest_guards.py`（SR 三成分回歸 ＋ ⑤b 只消費切題回歸）
+2. `EBM_Search/scripts/gate_guard.py`（新增 `check_units_only_concordant`、`check_no_unverified`；
+   `check_no_retracted` 改相容 verdict/verify 兩鍵；皆已註冊；其餘不動）
+3. `EBM_Search/scripts/selftest_guards.py`（SR 三成分 ＋ ⑤b 只消費切題 ＋ 無法驗證剔除 三組回歸）
 4. `EBM_Search/SEARCH_SPEC.md`（第 107 行附近「★★ 三成分強化」一段）
+
+**缺失③（本輪新增 gate）：無法驗證(UNVERIFIED) 未與撤稿同等剔除**
+- 使用者定版：**『無法驗證』(⑤a Crossref／PubMed 查不到存在性、或完全無 ID 可查證) 要跟撤稿(RETRACTED)一樣剔除、不可入下一關**（⑤b／交接包／報告／Zotero）。先前只把無 ID 項『移背景』＝錯，應整筆排除。
+- 修法：`gate_guard.check_no_unverified`（對稱 `check_no_retracted`）——g6_verified 標 UNVERIFIED 者，以 pmid/doi/uid 比對 g7_units／seed／報告／Zotero payload，命中即 FAIL。NCT 登錄＝registry-verified、不誤殺。
+- 另把 `check_no_retracted` 的 verdict 判定改相容 `verify` 鍵（⑤a 寫 verdict、報告器寫 verify，避免鍵名不一致讓撤稿/無法驗證漏網）。
+- 已註冊進 `_all_checks`，`selftest_guards` 加一負向（UNVERIFIED 當背景留存→FAIL）＋一正向（全 VERIFIED→通過）。
 
 **缺失②（本輪新增 gate）：⑤b 誤把『離題』當『背景』灌進分析**
 - 使用者定版：**『離題』(③ 清單三排除) 與『全文及摘要皆無/待評估』都等同丟棄、不入後續分析（corpus_seed）**；

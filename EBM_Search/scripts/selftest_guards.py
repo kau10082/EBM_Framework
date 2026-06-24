@@ -79,6 +79,24 @@ def main():
     allok &= (not _uok)
     _sh_s.rmtree(_tu, ignore_errors=True)
 
+    # 無法驗證(UNVERIFIED) 須與撤稿一樣剔除，不得入 ⑤b/交接/Zotero（2026-06 使用者糾正）
+    _tv = Path(_tf_s.mkdtemp())
+    _js_s.dump([{"uid":"u1","pmid":"111","verdict":"VERIFIED"},
+                {"uid":"u2","pmid":None,"doi":None,"verify":"UNVERIFIED"}],
+               _io_s.open(_tv/"g6_verified.json","w",encoding="utf-8"))
+    # 違規：UNVERIFIED(u2) 被當背景留在 g7_units → 必須 FAIL
+    _js_s.dump({"records":[{"uid":"u1","role":"core","pmid":"111"},{"uid":"u2","role":"background"}]},
+               _io_s.open(_tv/"g7_units.json","w",encoding="utf-8"))
+    allok &= _assert_fires("無法驗證(UNVERIFIED)被當背景留在 ⑤b（須同撤稿剔除）",
+        _gg_strat.check_no_unverified(_tv))
+    # 正向：UNVERIFIED 已剔除、g7 只剩 VERIFIED → 應通過（防誤報）
+    _js_s.dump({"records":[{"uid":"u1","role":"core","pmid":"111"}]},
+               _io_s.open(_tv/"g7_units.json","w",encoding="utf-8"))
+    _vok = _gg_strat.check_no_unverified(_tv)
+    print(("  ✅" if not _vok else "  ❌") + " 無法驗證已剔除、g7 全 VERIFIED 應通過（防誤報）：" + ("通過" if not _vok else str(_vok)))
+    allok &= (not _vok)
+    _sh_s.rmtree(_tv, ignore_errors=True)
+
     # SR filter 複合語法（MECIR C33，使用者定版三成分＝PubType＋MeSH＋Title/Abstract）：
     import sr_filter_composite_check as _src
     _strat_sr = {"sr_filter_decision":"applied",
