@@ -32,6 +32,17 @@
 - 修法：schema `amstar2` 物件（items[16]/critical_flaws/noncritical_weaknesses/overall_confidence/basis/search_recency/robis_concern），track A allOf 必帶 `amstar2`＋`protocol_completeness`＋`rob_tool=amstar2`；`validate.py check_p2_rob_routing` track A 分支驗：整體信心↔瑕疵數演算一致、items 關鍵題 no 數＝critical_flaws、basis 非空。
 - 自測：`selftest_analysis_guards.py` 擴為 **20 條**（含 AMSTAR2 算法不一致/逐題不符/缺 basis 等負向＋正向防誤報）。
 
+**缺失⑥（使用者定版）：三路徑對稱防『漏填/遺失/飄移』——補齊 RoB 2 結構 ＋ 起始確定性防飄移**
+- 問題：RoB 2(track B) 原僅檢查 `rob_tool=rob2`，無五領域結構/完整性/木桶檢查，與 AMSTAR2、ROBINS-I 不對稱（會漏填/遺失/飄移）。
+- 修法：
+  - schema 加 `rob2` 物件（五領域 randomization/deviations/missing_outcome/measurement/selection_reported，judgement∈low/some_concerns/high，+overall+選填 signalling/effect_of_interest）＋`definitions.rob2_domain`；track B allOf 必帶 `rob2`＋`rob_tool=rob2`（**防遺失**）。
+  - `validate.py check_p2_rob_routing`：track B 五領域不得缺（**防漏填**）、overall 木桶原則不得優於最不利領域（**防飄移**）。
+  - 新增**起始確定性↔軌道**防飄移（涵蓋三路徑）：A/B→high、C(NRSI)→low 或 high(ROBINS-I)、low(case report 等)→very_low；偏離 FAIL。
+  - `guardrails/rob2.md` 補 Phase 2 結構化落地與機器看守段。
+- 三路徑現對稱：RCT→RoB2、NRSI→ROBINS-I、SR/MA→AMSTAR2 皆「結構必填＋木桶/演算法一致」機器防護。
+- 自測：`selftest_analysis_guards.py` 擴為 **25 條**（新增 RoB2 遺失/漏填/木桶 ＋ grade_start 飄移 等）。
+- 仍誠實標記：跨階段『Phase 2 偏誤結果忠實帶入 Phase 3 GRADE 領域1（防跨關遺失）』尚未加機器 gate（待 Phase 3 檔產出後可於 selfcheck_consistency 補 C 條）。
+
 **缺失④（使用者定版，已強化）：回顧性/非隨機研究(NRSI) 須用 ROBINS-I，不可用 RoB2；三路徑各自評讀再整合**
 - 規則（Cochrane Handbook Ch.25）：RCT→RoB2、**NRSI→ROBINS-I**、SR/MA→AMSTAR2；NRSI GRADE 起始低。
 - ROBINS-I 細節落地（依使用者補充）：

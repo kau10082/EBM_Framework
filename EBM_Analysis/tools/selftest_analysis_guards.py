@@ -72,8 +72,31 @@ def main():
 
     # 正向防誤報
     allok &= _passes("Phase2 NRSI 正確用 ROBINS-I(serious) 應通過", V.check_p2_rob_routing(c(_ri())))
-    allok &= _passes("Phase2 RCT 用 RoB2 應通過",
-                     V.check_p2_rob_routing({**base, "track": "B", "grade_start": "high", "rob_tool": "rob2"}))
+    def rb(overall, doms=None):
+        d = doms or {k: {"judgement": "low"} for k in
+                     ("randomization", "deviations", "missing_outcome", "measurement", "selection_reported")}
+        return {"overall": overall, "domains": d}
+
+    def b(rob2, gs="high"):
+        return {**base, "track": "B", "grade_start": gs, "rob_tool": "rob2", "rob2": rob2}
+
+    # track B 缺 rob2（防遺失）→ FAIL
+    allok &= _fires("Phase2 track B 缺 rob2 五領域（防遺失）",
+                    V.check_p2_rob_routing({**base, "track": "B", "grade_start": "high", "rob_tool": "rob2"}))
+    # RoB2 缺領域（防漏填）→ FAIL
+    allok &= _fires("Phase2 RoB2 缺領域（防漏填）",
+                    V.check_p2_rob_routing(b(rb("low", {"randomization": {"judgement": "low"}}))))
+    # RoB2 木桶違反：某領域 high 卻 overall some_concerns → FAIL
+    high_one = {k: {"judgement": "low"} for k in ("randomization", "deviations", "missing_outcome", "measurement", "selection_reported")}
+    high_one["measurement"] = {"judgement": "high"}
+    allok &= _fires("Phase2 RoB2 木桶違反（high 領域卻 overall some_concerns）",
+                    V.check_p2_rob_routing(b(rb("some_concerns", high_one))))
+    # grade_start 飄移：track B 卻 grade_start=low → FAIL
+    allok &= _fires("Phase2 grade_start 飄移（track B 卻 low）",
+                    V.check_p2_rob_routing(b(rb("low"), gs="low")))
+    # 正向：track B 五領域齊、overall 一致、grade_start=high → 通過
+    allok &= _passes("Phase2 RCT 用 RoB2(五領域齊,overall 一致) 應通過",
+                     V.check_p2_rob_routing(b(rb("high", high_one))))
     def a(amstar2, gs="high"):
         return {**base, "track": "A", "grade_start": gs, "rob_tool": "amstar2",
                 "protocol_completeness": [], "amstar2": amstar2}

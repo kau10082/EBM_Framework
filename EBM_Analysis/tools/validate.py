@@ -79,6 +79,30 @@ def check_p2_rob_routing(data):
     if track in ("A", "B", "C") and tool != expect:
         errs.append(f"track={track} 須用 rob_tool={expect}（實得 {tool!r}）："
                     f"偏誤工具不可拿錯——RCT→RoB2、NRSI(回顧性/世代/case-control/真實世界)→ROBINS-I、SR/MA→AMSTAR2")
+    # 起始確定性↔軌道『防飄移』：A/B 起始 high、low(case report 等)起始 very_low、C(NRSI) 起始 low 或 high(用 ROBINS-I)
+    gs = data.get("grade_start")
+    gs_expect = {"A": {"high"}, "B": {"high"}, "C": {"low", "high"}, "low": {"very_low"}}.get(track)
+    if gs_expect and gs not in gs_expect:
+        errs.append(f"grade_start={gs!r} 與 track={track} 不符（防飄移）：A/B→high、C(NRSI)→low(或用 ROBINS-I 起 high)、"
+                    f"low(case report 等)→very_low；起始確定性不得偏離軌道")
+    if track == "B":
+        rb = data.get("rob2") or {}
+        doms = (rb.get("domains") or {})
+        need = ["randomization", "deviations", "missing_outcome", "measurement", "selection_reported"]
+        overall = rb.get("overall")
+        if not doms:
+            errs.append("track=B(RCT) 缺 rob2.domains 五領域評估（RoB 2）")
+        else:
+            miss = [d for d in need if d not in doms]
+            if miss:
+                errs.append(f"RoB 2 缺領域 {miss}（五領域須逐一判，防漏填）")
+            RANK = {"low": 0, "some_concerns": 1, "high": 2}
+            dranks = [RANK[(doms.get(d) or {}).get("judgement")] for d in need if (doms.get(d) or {}).get("judgement") in RANK]
+            if dranks and overall in RANK and RANK[overall] < max(dranks):
+                inv = {v: k for k, v in RANK.items()}
+                worst = [d for d in need if RANK.get((doms.get(d) or {}).get("judgement"), -1) == max(dranks)]
+                errs.append(f"RoB 2 整體違反木桶原則：overall={overall} 優於最不利領域={inv[max(dranks)]}（{worst}）"
+                            f"（任一 high→high、任一 some_concerns→至少 some_concerns）")
     if track == "A":
         am = data.get("amstar2") or {}
         if not am:

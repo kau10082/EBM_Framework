@@ -118,9 +118,52 @@
         "robis_concern": { "enum": ["low", "high", "unclear", null], "description": "ROBIS 輔助（選填）：整體偏誤關注" },
         "search_recency": { "type": ["string", "null"], "description": "最近檢索截止日 YYYY-MM（時效性；過久列降級候選）" }
       }
+    },
+    "rob2": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Track B（RCT）專用 RoB 2 五領域（result 層級；整體＝最不利領域；映射 GRADE 領域1）。",
+      "required": ["domains", "overall"],
+      "properties": {
+        "effect_of_interest": { "enum": ["assignment", "adherence"], "description": "關注效應（影響領域2 判定）" },
+        "domains": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["randomization", "deviations", "missing_outcome", "measurement", "selection_reported"],
+          "properties": {
+            "randomization": { "$ref": "#/definitions/rob2_domain" },
+            "deviations": { "$ref": "#/definitions/rob2_domain" },
+            "missing_outcome": { "$ref": "#/definitions/rob2_domain" },
+            "measurement": { "$ref": "#/definitions/rob2_domain" },
+            "selection_reported": { "$ref": "#/definitions/rob2_domain" }
+          }
+        },
+        "overall": { "enum": ["low", "some_concerns", "high"], "description": "整體＝木桶原則：不得優於最不利領域（任一 high→high、任一 some_concerns→至少 some_concerns）" }
+      }
     }
   },
   "definitions": {
+    "rob2_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["judgement"],
+      "properties": {
+        "judgement": { "enum": ["low", "some_concerns", "high"] },
+        "signalling": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "answer"],
+            "properties": {
+              "q": { "type": "string" },
+              "answer": { "enum": ["Y", "PY", "PN", "N", "NI"] }
+            }
+          }
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    },
     "robins_domain": {
       "type": "object",
       "additionalProperties": false,
@@ -151,7 +194,7 @@
     },
     {
       "if": { "properties": { "track": { "const": "B" } } },
-      "then": { "required": ["rob_tool"], "properties": { "rob_tool": { "const": "rob2" } } }
+      "then": { "required": ["rob_tool", "rob2"], "properties": { "rob_tool": { "const": "rob2" } } }
     },
     {
       "if": { "properties": { "track": { "const": "C" } } },
