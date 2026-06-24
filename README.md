@@ -28,6 +28,41 @@ When you want to know whether a treatment actually works for a condition — and
 
 ---
 
+## 整個流程一覽 · The pipeline at a glance
+
+整條流程從一個臨床問題出發，一步步走到一份報告。它不是隨意拼湊的步驟，而是**每一關都踩在公認的國際學術標準上**——下圖右側標出了每一步所依據的規範（Cochrane、PRISMA、GRADE…）。
+
+This pipeline runs from a single clinical question all the way to a finished report. The steps aren't ad-hoc — **every stage stands on a recognized international academic standard**, shown on the right of the diagram below (Cochrane, PRISMA, GRADE…).
+
+```mermaid
+flowchart TD
+    Q["🩺 一個臨床問題 · A clinical question<br/>（PICO：對象・介入・對照・結果）"]
+
+    A["🔍 檢索 Search<br/>多個醫學資料庫、敏感度優先"]
+    B["✅ 查證 Verify<br/>Crossref／PubMed 交叉比對、去幻覺、撤稿剔除"]
+    C["📑 初篩與納入 Screen and include<br/>流程圖數字逐關對帳"]
+    D["⚖️ 偏誤風險 Risk of bias<br/>RCT→RoB 2 ｜ NRSI→ROBINS-I ｜ SR·MA→AMSTAR 2"]
+    E["📊 GRADE 證據體評級<br/>確定性算術重算、木桶原則"]
+    F["📝 產出報告 Report<br/>SoF、絕對效應、NNTB／NNTH"]
+    R["📄 報告 PDF／Markdown"]
+
+    Q --> A --> B --> C --> D --> E --> F --> R
+
+    sA(["📚 Cochrane Handbook 第 4 章<br/>PRISMA-S"]) -. 依據 .-> A
+    sC(["📚 PRISMA 2020 流程圖"]) -. 依據 .-> C
+    sD(["📚 Cochrane Handbook v6.5<br/>RoB 2 · ROBINS-I · AMSTAR 2"]) -. 依據 .-> D
+    sE(["📚 GRADE 工作組準則"]) -. 依據 .-> E
+    sF(["📚 PRISMA 2020 · GRADE SoF"]) -. 依據 .-> F
+
+    classDef std fill:#eaf2ff,stroke:#4a90d9,color:#1c3d5a;
+    class sA,sC,sD,sE,sF std;
+```
+
+> 兩道安全網貫穿全程：**每個關卡都會停下來等你點頭**才往下（人為把關），而且**定稿前要一鍵跑過整套機器檢查、全綠才生得出報告**（機器把關）。
+> Two safety nets run throughout: **it pauses at every checkpoint for your nod** before moving on, and **the report is produced only once a full battery of machine checks all pass**.
+
+---
+
 ## 它扮演的角色 · Its role
 
 它是一個**實證醫學的助手**：把「找文獻 → 查證 → 評分 → 寫報告」這串繁瑣又容易出錯的工作，變成一條有條理、可重複的流程。它在**每個步驟都會停下來，把結果攤給你看、問你要不要繼續**——你看過、點頭，它才往下走。

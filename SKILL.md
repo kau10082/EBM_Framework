@@ -1,13 +1,15 @@
 ---
 name: ebm-framework
 description: >-
-  實證醫學（EBM）端到端助手：先把文獻找齊、用 Crossref／PubMed 交叉驗證去幻覺，再做 GRADE 證據評讀，
-  最後出報告。**整條管線一律從檢索開始**，由 Claude 本身為運算引擎（不呼叫任何外部 LLM API）。
+  實證醫學（EBM）的端到端助手：把一個醫療問題，從「找文獻 → 一篇篇查證是否真的存在 →
+  依 GRADE 評估證據可不可信 → 整理成報告」一條龍走完。流程一律從檢索開始，全程以 Claude 本身
+  為運算引擎，並用 Crossref／PubMed 交叉比對來剔除不存在的引用（去幻覺），不呼叫任何外部 LLM API。
   當使用者說「EBM分析」「實證分析」「實證醫學分析」「對〈某主題／某藥〉做 EBM 分析」「幫我查文獻」
   「建立可信引用清單」「幫我查證這個主張」「驗證這些引用是不是真的」「交叉驗證 Crossref PubMed」，
-  或要為 EBM 評讀／衛教文／報告建立經查證的參考文獻時，啟動此 skill。也處理 EBM 分析的「封存／歸檔」。
-  An end-to-end evidence-based-medicine assistant: find the literature, cross-verify it against
-  Crossref/PubMed to remove hallucinations, then run a GRADE appraisal and produce a report.
+  或要為 EBM 評讀／衛教文／報告建立經查證的參考文獻時，啟動此 skill；也處理 EBM 分析的「封存／歸檔」。
+  An end-to-end evidence-based-medicine assistant: it takes a medical question all the way from
+  finding the literature, to checking each study really exists (cross-verified against Crossref/PubMed
+  to strip out hallucinations), to grading how trustworthy the evidence is with GRADE, to a finished report.
 ---
 
 # EBM_Framework — 實證醫學端到端 Skill
