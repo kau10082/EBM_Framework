@@ -35,7 +35,7 @@ When you want to know whether a treatment actually works for a condition — and
 This pipeline runs from a single clinical question all the way to a finished report. The steps aren't ad-hoc — **every stage stands on a recognized international academic standard**, shown on the right of the diagram below (Cochrane, PRISMA, GRADE…).
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "22px"}, "flowchart": {"padding": 30, "nodeSpacing": 70, "rankSpacing": 85}}}%%
+%%{init: {"themeVariables": {"fontSize": "22px"}, "flowchart": {"padding": 28, "nodeSpacing": 70, "rankSpacing": 85, "wrappingWidth": 900, "useMaxWidth": false}}}%%
 flowchart TD
     Q["🩺 一個臨床問題 · A clinical question<br/>（PICO：對象・介入・對照・結果）"]
 
