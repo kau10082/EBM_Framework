@@ -38,37 +38,37 @@ This pipeline runs from a single clinical question all the way to a finished rep
 flowchart TD
     Q["🩺 一個臨床問題 · A clinical question<br/>（PICO：對象・介入・對照・結果）"]
 
-    subgraph S["🔍 EBM_Search · 檢索與查證"]
+    subgraph S["🔍 EBM_Search · 檢索與查證 · Search and verify"]
       direction TB
-      S1["① 廣蒐去重<br/>六資料庫敏感度檢索 → 跨腿去重"]
-      S2["② 篩選策略<br/>訂連言軸與納入／排除準則"]
-      S2b["②b 高敏初篩<br/>以『標題＋摘要』寧留勿殺"]
-      S3["③ 嚴格離題篩選<br/>Tier 1 摘要→2 登錄/AI→3 全文→4 Unpaywall<br/>判定：切題／離題／全文及摘要皆無"]
-      S4["④ 引文追蹤<br/>以核心為種子滾雪球，逐輪至收斂"]
-      S5["⑤ 收斂後處理<br/>⑤a 交叉驗證去幻覺＋撤稿剔除<br/>⑤b 決定納入單位（Study 歸併・核心vs背景）"]
-      S6["⑥ 檢索報告 PDF<br/>PICO・檢索策略・PRISMA 流程・納入清單・進行中試驗"]
+      S1["① 廣蒐去重 · Broad search and de-dup<br/>六資料庫敏感度檢索 → 跨腿去重<br/>sensitivity-first across 6 databases, then de-duplicate"]
+      S2["② 篩選策略 · Screening strategy<br/>訂連言軸與納入／排除準則<br/>set conjunctive axes + inclusion/exclusion criteria"]
+      S2b["②b 高敏初篩 · High-sensitivity screen<br/>以『標題＋摘要』寧留勿殺<br/>title + abstract; keep when in doubt"]
+      S3["③ 嚴格離題篩選 · Strict relevance screen<br/>Tier 1 摘要 → 2 登錄/AI → 3 全文 → 4 Unpaywall<br/>判定：切題／離題／全文及摘要皆無<br/>verdict: relevant / off-topic / no text or abstract"]
+      S4["④ 引文追蹤 · Citation tracking<br/>以核心為種子滾雪球，逐輪至收斂<br/>snowball from core seeds until convergence"]
+      S5["⑤ 收斂後處理 · Post-convergence<br/>⑤a 交叉驗證去幻覺＋撤稿剔除 · cross-verify, drop hallucinated/retracted<br/>⑤b 決定納入單位（Study 歸併・核心vs背景）· decide units of inclusion"]
+      S6["⑥ 檢索報告 PDF · Search report<br/>PICO・檢索策略・PRISMA 流程・納入清單・進行中試驗<br/>PICO, strategy, PRISMA flow, included list, ongoing trials"]
       S1 --> S2 --> S2b --> S3 --> S4 --> S5 --> S6
     end
 
-    subgraph N["⚖️ EBM_Analysis · 評讀與報告"]
+    subgraph N["⚖️ EBM_Analysis · 評讀與報告 · Appraise and report"]
       direction TB
-      D["偏誤風險（工具配設計）<br/>RCT→RoB 2 ｜ NRSI→ROBINS-I ｜ SR·MA→AMSTAR 2"]
-      E["GRADE 證據體評級<br/>確定性算術重算、木桶原則"]
-      F["產出報告<br/>SoF、絕對效應、NNTB／NNTH"]
+      D["偏誤風險（工具配設計）· Risk of bias by design<br/>RCT→RoB 2 ｜ NRSI→ROBINS-I ｜ SR·MA→AMSTAR 2"]
+      E["GRADE 證據體評級 · Body-of-evidence GRADE<br/>確定性算術重算、木桶原則<br/>recompute certainty, weakest-link rule"]
+      F["產出報告 · Report<br/>SoF、絕對效應、NNTB／NNTH<br/>SoF, absolute effects, NNTB/NNTH"]
       D --> E --> F
     end
 
     Q --> S1
-    S6 -->|⑦ 交接包 corpus_seed| D
-    F --> R["📄 報告 PDF／Markdown"]
+    S6 -->|"⑦ 交接包 corpus_seed · handoff"| D
+    F --> R["📄 報告 · Report（PDF／Markdown）"]
 
-    g1(["📚 Cochrane Handbook 第 4 章 · PRISMA-S"]) -. 依據 .-> S1
-    g2(["📚 MECIR 高敏感檢索準則"]) -. 依據 .-> S2b
-    g5(["📚 Crossref／PubMed 存在性查證"]) -. 依據 .-> S5
-    g6(["📚 PRISMA 2020 流程圖"]) -. 依據 .-> S6
-    gD(["📚 Cochrane Handbook v6.5<br/>RoB 2 · ROBINS-I · AMSTAR 2"]) -. 依據 .-> D
-    gE(["📚 GRADE 工作組準則"]) -. 依據 .-> E
-    gF(["📚 PRISMA 2020 · GRADE SoF"]) -. 依據 .-> F
+    g1(["📚 Cochrane Handbook 第 4 章 Ch.4 · PRISMA-S"]) -. 依據 based on .-> S1
+    g2(["📚 MECIR 高敏感檢索準則 · sensitivity standards"]) -. 依據 based on .-> S2b
+    g5(["📚 Crossref／PubMed 存在性查證 · existence check"]) -. 依據 based on .-> S5
+    g6(["📚 PRISMA 2020 流程圖 · flow diagram"]) -. 依據 based on .-> S6
+    gD(["📚 Cochrane Handbook v6.5<br/>RoB 2 · ROBINS-I · AMSTAR 2"]) -. 依據 based on .-> D
+    gE(["📚 GRADE 工作組準則 · GRADE Working Group"]) -. 依據 based on .-> E
+    gF(["📚 PRISMA 2020 · GRADE SoF"]) -. 依據 based on .-> F
 
     classDef std fill:#eaf2ff,stroke:#4a90d9,color:#1c3d5a;
     class g1,g2,g5,g6,gD,gE,gF std;
