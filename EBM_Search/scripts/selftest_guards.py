@@ -383,23 +383,28 @@ def main():
     # (3b)『全文及摘要皆無』缺實取證明 → FAIL
     json.dump([{"uid":"z2","verdict":"全文及摘要皆無"}], io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
     allok &= _assert_fires("③『全文及摘要皆無』未證明三層實取皆失敗", gate_guard.check_nocontent_bucket(tmp))
-    # (3c) 正向：無內容且證明齊 → 通過（防誤報）
-    json.dump([{"uid":"z3","verdict":"全文及摘要皆無","fulltext_parse_attempted":True,"channels_exhausted":True}],
+    # (3c) 正向：無內容且證明齊（含 AI 合成已查）→ 通過（防誤報）
+    json.dump([{"uid":"z3","verdict":"全文及摘要皆無","fulltext_parse_attempted":True,"channels_exhausted":True,"ai_synthesis_checked":True}],
               io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
     _nc=gate_guard.check_nocontent_bucket(tmp)
     print(("  ✅" if not _nc else "  ❌")+" ③『全文及摘要皆無』證明齊應通過（防誤報）："+("通過" if not _nc else str(_nc)))
     allok &= (not _nc)
     # (3d)『全文及摘要皆無』有 DOI 卻無 unpaywall_checked（只試 PMC 就宣稱三層皆失敗）→ FAIL
-    json.dump([{"uid":"z4","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True}],
+    json.dump([{"uid":"z4","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True,"ai_synthesis_checked":True}],
               io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
     allok &= _assert_fires("③『全文及摘要皆無』有DOI卻沒查Unpaywall",
         [f for f in gate_guard.check_nocontent_bucket(tmp) if "unpaywall" in f.lower()])
-    # (3e) 正向：有 DOI 且 unpaywall_checked → 通過（防誤報）
-    json.dump([{"uid":"z5","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True,"unpaywall_checked":True}],
+    # (3e) 正向：有 DOI 且 unpaywall_checked＋ai_synthesis_checked → 通過（防誤報）
+    json.dump([{"uid":"z5","verdict":"全文及摘要皆無","doi":"10.1/x","fulltext_parse_attempted":True,"channels_exhausted":True,"unpaywall_checked":True,"ai_synthesis_checked":True}],
               io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
     _nc2=gate_guard.check_nocontent_bucket(tmp)
     print(("  ✅" if not _nc2 else "  ❌")+" ③『全文及摘要皆無』有DOI且查過Unpaywall應通過（防誤報）："+("通過" if not _nc2 else str(_nc2)))
     allok &= (not _nc2)
+    # (3f)『全文及摘要皆無』未查 AI 合成摘要（Tier 2 Consensus/OE 漏跑）→ FAIL（2026-06 使用者糾正之新規）
+    json.dump([{"uid":"z6","verdict":"全文及摘要皆無","fulltext_parse_attempted":True,"channels_exhausted":True}],
+              io.open(tmp/"g3_FINAL_screen.json","w",encoding="utf-8"))
+    allok &= _assert_fires("③『全文及摘要皆無』未查AI合成摘要(Tier2)",
+        [f for f in gate_guard.check_nocontent_bucket(tmp) if "ai_synthesis" in f.lower()])
     # 撤稿不得殘留
     json.dump([{"pmid":"999","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
     json.dump([{"pmid":"999","title":"retracted","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))

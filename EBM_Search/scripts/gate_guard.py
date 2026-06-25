@@ -116,12 +116,17 @@ def check_nocontent_bucket(cache):
     fulltext_parse_attempted=true ∧ channels_exhausted=true，且無 abstract/全文摘錄、非登錄(registry)、
     非 AI 合成內容（否則該筆其實有內容、應判切題/離題，不得丟此桶）。
     **且有 DOI 者須帶 unpaywall_checked=true（＝確有跑過 Tier 4 的 Unpaywall OA 探查）**：
-    Unpaywall 是獨立 Tier 4，『皆無』只能在 Tier 4 也查過後定案，不可只試 PMC（Tier 3）就 punt。取代舊『待評估雙桶』。"""
+    Unpaywall 是獨立 Tier 4，『皆無』只能在 Tier 4 也查過後定案，不可只試 PMC（Tier 3）就 punt。取代舊『待評估雙桶』。
+    **★ 且須帶 ai_synthesis_checked=true（＝Tier 2 的 AI 合成摘要 Consensus／OE 也查過）**：規格 Tier 2＝
+    『CT.gov 登錄欄位／AI 合成摘要 Consensus·OE』、內容鏈最後一關＝Consensus／OE AI 合成摘要；只有它也取不到
+    內容才算『皆無』。2026-06 使用者糾正：曾把 5 篇判『皆無』，補跑 Consensus AI 合成後當場救回 2 篇＝AI 管道
+    本該在 Tier 2 攔住卻被漏跑、守門又未要求此旗標，兩洞相疊。故宣稱『皆無』前須證明 AI 合成也查過。"""
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
     bad = []
     no_unpaywall = []
+    no_ai = []
     for r in g3:
         if (r.get("verdict") or "") != "全文及摘要皆無":
             continue
@@ -137,6 +142,9 @@ def check_nocontent_bucket(cache):
         # 有 Crossref 摘要/OA 全文，因漏跑 Unpaywall/Crossref 而誤判）。
         if r.get("doi") and not r.get("unpaywall_checked"):
             no_unpaywall.append((r.get("title") or r.get("doi") or r.get("uid") or "?")[:50])
+        # Tier 2 的 AI 合成摘要（Consensus／OE）也是必試 channel；『皆無』前須證明查過。
+        if not r.get("ai_synthesis_checked"):
+            no_ai.append((r.get("title") or r.get("uid") or r.get("doi") or "?")[:50])
     out = []
     if bad:
         out.append(f"③ 有 {len(bad)} 筆判『全文及摘要皆無』但其實有內容、或未證明三層實取皆失敗"
@@ -145,6 +153,10 @@ def check_nocontent_bucket(cache):
         out.append(f"③ 有 {len(no_unpaywall)} 筆判『全文及摘要皆無』且有 DOI 卻無 unpaywall_checked（未跑 Tier 4）："
                    f"『皆無』只能在 Tier 4（Unpaywall 全部 oa_locations 探查）也失敗後定案，"
                    f"不可只試 PMC（Tier 3）就 punt（用 fulltext_exhaust.py 跑完 Tier 4 再判）：{no_unpaywall[:5]}")
+    if no_ai:
+        out.append(f"③ 有 {len(no_ai)} 筆判『全文及摘要皆無』但無 ai_synthesis_checked（Tier 2 的 AI 合成摘要"
+                   f" Consensus／OE 未查過）：規格內容鏈最後一關＝AI 合成摘要，只有它也取不到才算『皆無』；"
+                   f"請先對這些跑 Consensus／OE AI 合成、撈到內容→改判切題/離題、撈不到→蓋 ai_synthesis_checked=true 再定案：{no_ai[:5]}")
     return out
 
 def check_screen_partition(cache):
