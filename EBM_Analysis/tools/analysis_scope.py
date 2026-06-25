@@ -28,6 +28,9 @@ except Exception: pass
 
 HERE = Path(__file__).resolve().parent
 ANALYSIS_TRACKS = {"full", "targeted_harms"}
+# .txt 視為『有完整全文』的最小位元組數：設在線上摘錄上限(~8000 字)之上，使被截斷的摘錄
+# 落入 need_manual（真全文 PDF/PMC body 普遍 >20k 字，遠超此門檻）。
+MIN_FULLTEXT_BYTES = 9000
 
 
 def _study_of(p):
@@ -49,18 +52,18 @@ def _has_fulltext(p, cache_dir, inputs_dir):
                     return True, f"p1:fulltext_obtained({a.get('channel')})"
         except Exception:
             pass
-    # 2) 本機 PDF／實取全文文字檔（.txt＝PMC/Unpaywall 抓回存檔）
+    # 2) 本機 PDF＝完整全文；或實取全文 .txt（但須『夠長』——線上摘錄常被截在 ~8000 字上限，
+    #    那只是摘錄、不足以抽完整結果表，不算『有全文』。門檻 MIN_FULLTEXT_BYTES 設在摘錄上限之上，
+    #    使 8000 字截斷摘錄落入 need_manual（2026-06 使用者糾正：3 篇 base 只有 8000 字摘錄卻被當有全文）。）
     if (Path(inputs_dir) / f"{pid}.pdf").exists():
         return True, "inputs/<id>.pdf"
-    if (Path(inputs_dir) / f"{pid}.txt").exists():
+    txtp = Path(inputs_dir) / f"{pid}.txt"
+    if txtp.exists() and txtp.stat().st_size >= MIN_FULLTEXT_BYTES:
         return True, "inputs/<id>.txt"
-    # 3) notes 標記：**只認『實際取得』marker**（full_text / have(manual) / have(local)）；
-    #    **嚴禁認 bare『全文=have』**——那可能是 ⑦ 交接包樂觀標的『線上可得但尚未實抓』(have+channel=online)；
-    #    當成已取得會讓 need_manual『需補全文最小集』被少報（2026-06 使用者糾正：⑦ 對只有摘要/AI 者亦標
-    #    have(online)→此處誤判已取得→需補全文名單漏列）。真已取得者必有本機 PDF/txt（上面已涵蓋）。
-    notes = p.get("notes") or ""
-    if re.search(r'全文=(full_text|have\((?:manual|local)\))', notes):
-        return True, "notes:全文=obtained"
+    # 3) **只信實際本機檔案／p1 證據，不信 notes 的『全文=…』marker**（2026-06 使用者糾正兩次而立）：
+    #    notes 可能被上游樂觀標 have(online) 或被『8000 字線上摘錄』誤標 have(manual)——兩者都不是可抽取的
+    #    完整全文。真正取得完整全文者必有本機 PDF 或夠長 .txt（上面已涵蓋）；故此處不再以 notes 判 have，
+    #    避免 need_manual 被少報（excerpt 充當 full）。
     return False, "全文尚未取得"
 
 
@@ -132,6 +135,29 @@ def _print(scope):
             print("  - " + w)
 
 
+def write_need_manual_list(scope, inputs_dir):
+    """確定性寫出 `需補全文清單.txt` 到 <inputs>/_fulltext_supplement/（每次算 scope 都重寫，
+    使它與 need_manual_fulltext 永遠同步、不會像手寫版那樣過時）。回傳寫出的路徑。
+    2026-06 使用者糾正而立：此清單『一定要給』，故改由本工具確定性產出，不靠 Claude 手寫。"""
+    sup = Path(inputs_dir) / "_fulltext_supplement"
+    sup.mkdir(parents=True, exist_ok=True)
+    nm = scope.get("need_manual_fulltext") or []
+    lines = ["需補全文清單（EBM Phase 0；analysis_scope.py 確定性產出，每次重算即更新）",
+             "=" * 72,
+             "說明：以下為『分析錨點且全文尚未取得』者（每核心 Study 主報告＋真 harms）。",
+             "      請把 PDF 放進本資料夾，檔名＝下方『建議檔名』(＝paper_id.pdf；多為 DOI 去斜線)。",
+             ""]
+    if not nm:
+        lines.append("（目前分析集全文皆已取得，無需補。）")
+    for r in nm:
+        tier = "核心主報告(full)" if r.get("grade_track") == "full" else "harms(targeted_harms)"
+        lines.append(f"- [{tier}] {r.get('title','')}")
+        lines.append(f"    建議檔名：{r.get('paper_id','')}.pdf   | Study：{r.get('study','—')}")
+    out = sup / "需補全文清單.txt"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", default=None); ap.add_argument("--inputs", default=None)
@@ -150,6 +176,8 @@ def main(argv):
     corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
     scope = compute(corpus, cache, inputs, include_background=a.include_background)
     _print(scope)
+    txt = write_need_manual_list(scope, inputs)   # 一律寫出『需補全文清單.txt』(確定性、永不過時)
+    print(f"\n📄 需補全文清單已寫出：{txt}（{len(scope.get('need_manual_fulltext') or [])} 篇）")
     if a.json:
         print("\n--- JSON ---"); print(json.dumps(scope, ensure_ascii=False, indent=2))
     if a.write:

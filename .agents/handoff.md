@@ -51,6 +51,17 @@
 
 **請 Antigravity 審查**：(a) MIN_SIM=0.55 門檻是否合理；(b) 是否該把它接成 gate_guard 硬 gate（讀 g6_verified／seed→audit→有 mismatch 即 FAIL），還是『⑤a 步驟必跑＋SEARCH_SPEC 鐵律』即足。
 
+### 2026-06-25（第八輪【初審】）本輪審查範圍＝1 檔
+- **修改 `EBM_Analysis/tools/analysis_scope.py`**
+
+**動機（使用者糾正：『需補全文 txt 一定要給、別手寫』）**：`需補全文清單.txt` 先前由我 run-cache 手寫，DOI 修正後忘了重寫→過時。兩個修正：
+1. **txt 改由工具確定性產出**：`analysis_scope.py` 每次跑都把 `need_manual_fulltext` 寫成 `<inputs>/_fulltext_supplement/需補全文清單.txt`（`write_need_manual_list()`），永遠與 scope 同步、不會過時、一定有檔。
+2. **`_has_fulltext` 只信本機檔案、不信 notes**：原本信任 notes `全文=have(manual)`，但 8000 字『線上摘錄』被誤標 have(manual)→被當完整全文→need_manual 少報（3 篇 base NMA 只有 8000 字摘錄卻沒列入需補）。改為：有本機 PDF 或 `.txt ≥ MIN_FULLTEXT_BYTES(9000)` 才算有全文（摘錄上限 ~8000 字落入需補）；**不再以 notes 的 `全文=…` 判 have**。
+
+**驗證**：檔案還原後重跑 → need_manual 正確＝3（rmed.2020／type-2 SR&NMA／anti-IL5/5R/13 NMA）、txt 自動寫出 3 篇；`selftest_analysis_guards.py`＝全部有效。repo↔AppData 同步。**尚未 commit。**
+
+**請 Antigravity 審查**：(a) MIN_FULLTEXT_BYTES=9000 是否穩健（耦合 resolve_one 的 8000 摘錄上限，若改上限需同步）；(b) 完全棄用 notes 判 have 會不會誤殺『真有全文但只記 notes、未留檔』的舊案（應無——真全文必留 PDF/txt）；(c) txt 目前只列 title＋建議檔名(paper_id)，無 DOI（corpus 未帶 doi）——是否該讓 ingest_seed 把 doi 帶進 corpus 以便 txt 列 DOI。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無當前仍存在的問題。screen_tiers.py 第三輪複審＝2✅＋1⚪、無 🔴/🟡，已處理並結案。）
