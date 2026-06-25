@@ -49,6 +49,16 @@
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑;不同意紀錄不可刪）
 
+### 2026-06-25（補記，run-cache 資料 bug ＋ ⑤a 流程教訓；非 committed 程式）使用者糾正『一篇重複』
+**情境**：Phase 0 補全文時使用者發現兩篇 PDF 一模一樣（同 size）。追下去＝**13 篇 base NMA 有 3 篇 DOI 錯誤**（hand-transcribed Consensus-SR DOI）：
+- `10.1016/j.jaip.2023.08.016`（標 Phinyo OCS NMA，DOI 實指 Campylobacter/CVID）＝正確 Phinyo `…11.007` 的**重複** → 丟棄。
+- `10.1183/13993003.02523-2017`（標 Anti-IL5/5R/13 NMA，DOI 實指 Omalizumab 文）→ 改正為 `10.1007/s00408-019-00310-8`。
+- `10.1136/bmjopen-2015-007709`（標 type-2 asthma SR&NMA，DOI 實指 Phase-2 trial）→ 改正為 `10.1186/s12931-019-1138-3`。
+**連帶**：後 2 篇先前以**錯 DOI**抓的全文＝抓到**錯論文內容**，已用正確 DOI 重抓覆蓋。base 13→**12**，重驗 DOI↔title 0 mismatch、0 need_manual。
+**根因＋教訓**：(a) Consensus 腿不給 DOI、Claude 手填易錯（這是固有風險）；(b) **我的 ⑤a 用了簡化『只查存在性＋撤稿』的自製 `g5a_verify.py`，沒做 DOI↔title 比對**——committed `xref_verify.py` 本來就做標題比對、會把這 3 筆判 UNVERIFIED 攔下，是我**繞過 committed 工具**才漏掉。
+**給 Antigravity 的待裁決問題**：是否該加一條 committed gate——『⑤a 的 `g6_verified` 對每筆 included 須帶 DOI↔title 比對證據（similarity≥門檻），否則 FAIL』，把『⑤a 一律走 xref_verify 標題比對、不得只查存在性』從靠自律變機器看守？（與 check_no_retracted 同位階）。另：Zotero 已匯入的 13 筆含這 3 筆 stale（1 dup＋2 錯 DOI），待清理重同步。
+
+
 ### 2026-06-25 第三輪複審結案（screen_tiers.py / SEARCH_SPEC.md）
 - **✅(a) 跨軸長詞遮蔽不會反向誤殺**：Antigravity 核對 `judge_axes` 長詞優先＋僅遮蔽該次命中 span，合法獨立命中不受阻。作者亦自驗現檔 `screen_tiers.py:55-77`（normalized masked＋longest-first＋span mask）。
 - **✅(b) finalize_check 的 fetched-proof 判準與 gate_guard 100% 一致**：Antigravity 字元級核對；作者自驗現檔 `screen_tiers.py:133-137` ＝ `gate_guard.check_screen_partition` 同條件。
