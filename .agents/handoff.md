@@ -1,6 +1,21 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-（無待審查項目——screen_tiers.py 三輪複審已結案，見「已處理」。）
+### 2026-06-25（第四輪【初審】）本輪審查範圍＝1 檔
+- **修改 `EBM_Search/scripts/build_search_report.py`**
+
+**動機**：⑥ 產 Phase 1 PDF 時，PDF 正規產生器出現 3 個 committed bug（先前只在 run-cache 繞過、未修 committed）：
+1. **(🔴 會 crash) `_out_dir` 只剝雙引號**（`build_search_report.py:82-88`）：settings.yaml 的 Windows 路徑用**單引號**（`pdf_output_dir: 'C:\…\reports'`，避免反斜線轉義），舊 regex `"?([^"\n]+)"?` 把單引號連同值一起回傳 `'C:\…'` → `makedirs` 報 WinError 123 crash、PDF 產不出。
+2. **(🟡 產出無副檔名) `--name` 未補 `.pdf`**（main）：傳 `--name foo`（無副檔名）→ 寫出 `foo`（無 `.pdf`），需手動改名。
+3. **(🔴 守門找不到) 渲染後未回寫 `pdf_path`**：產生器從不把 `pdf_path` 寫回 `_search_report.json` → gate_guard『Phase1 PDF 實體產出』報『無 pdf_path』，須手動登記。
+
+**修正**：
+1. regex 改 `['"]?([^'"\n#]+)['"]?`（容單/雙引號＋行內註解）→ 單引號設定可正確解析。
+2. main 補 `if not name.lower().endswith(".pdf"): name += ".pdf"`。
+3. `build()` 後把 `data["pdf_path"]=out_pdf` 回寫 `_search_report.json`。
+
+**驗證**：不帶 `--out`（靠單引號 config 解析）＋ `--name` 無副檔名 → 正確輸出 `…\reports\…Phase1.pdf`、pdf_path 已登記、檔案存在 159067 bytes。repo↔AppData 已同步。
+
+**請 Antigravity 審查**：(a) 單引號 regex 是否會誤吃路徑含 `#` 者（Windows 路徑通常無 `#`，但值得確認）；(b) `pdf_path` 回寫 `_search_report.json` 會不會與 `build_search_report_data.py` 的確定性重組衝突（下次重跑 data builder 會覆蓋掉 pdf_path，需重渲染才回填——是否可接受）。
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 

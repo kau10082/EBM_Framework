@@ -83,7 +83,9 @@ def _out_dir(arg):
     if arg: return arg
     cfg = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
     if cfg.exists():
-        m = re.search(r'pdf_output_dir\s*:\s*"?([^"\n]+)"?', cfg.read_text(encoding="utf-8"))
+        # 取值容許『單引號／雙引號／無引號』＋行內註解(# …)；單引號為 Windows 路徑常用寫法。
+        # 舊版只剝雙引號 → 單引號設定值會回傳 'C:\…'(含引號)→ makedirs 失敗(2026-06 使用者糾正)。
+        m = re.search(r'''pdf_output_dir\s*:\s*['"]?([^'"\n#]+)['"]?''', cfg.read_text(encoding="utf-8"))
         if m and m.group(1).strip(): return m.group(1).strip()
     return os.path.join(os.path.expanduser("~"), "Documents")
 
@@ -178,8 +180,16 @@ def main():
     data = json.loads(Path(src).read_text(encoding="utf-8"))
     out_dir = _out_dir(a.out); os.makedirs(out_dir, exist_ok=True)
     name = a.name or (re.sub(r'[^\w\-]+', '_', data.get("topic", "search")) + f'_SR_report_{data.get("search_date","")}.pdf')
+    if not name.lower().endswith(".pdf"): name += ".pdf"   # --name 未帶副檔名時補上(2026-06 使用者糾正：曾產出無副檔名檔)
     out_pdf = os.path.join(out_dir, name)
     build(data, out_pdf)
+    # 把 pdf_path 登記回 _search_report.json，供 gate_guard『Phase1 PDF 實體產出』找得到
+    # (舊版渲染後未回寫→守門報『_search_report.json 無 pdf_path』；2026-06 使用者糾正)
+    try:
+        data["pdf_path"] = out_pdf
+        Path(src).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        pass
     print("WROTE:", out_pdf, "|", os.path.getsize(out_pdf), "bytes")
 
 # ── SCHEMA_HINT（_search_report.json，5 段固定版型）─────────────────────────────
