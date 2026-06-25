@@ -270,6 +270,8 @@ def map_to_zotero(rec, collection_key, enrich=None):
         tags.append({"tag": "study:%s" % rec["study"]})
     if rec.get("role"):
         tags.append({"tag": "role:%s" % rec["role"]})
+    if rec.get("grade_track"):   # 使 Zotero 子集可依分析軌道(full/targeted_harms/…)篩出，鏡像 analysis_set
+        tags.append({"tag": "grade_track:%s" % rec["grade_track"]})
     if tags:
         item["tags"] = tags
     if collection_key:

@@ -32,6 +32,17 @@
 
 **請 Antigravity 審查**：(a) 移除 bare `全文=have` 信任會不會誤殺『真的已抓但只記 notes 未留檔』的舊案（應無——真已抓必留 PDF/txt）；(b) 是否該連 `build_corpus_seed.py` 也補『have+online 須帶實抓證明』的契約檢查，從源頭擋 over-claim。
 
+### 2026-06-25（第六輪【初審】）本輪審查範圍＝1 檔
+- **修改 `EBM_Search/scripts/zotero_import.py`**
+
+**動機（使用者糾正：『你並沒有匯入 Zotero』）**：兩個問題——
+1. **(流程缺失) Phase 0 步驟 6 的 Zotero 匯入我漏執行**：使用者已選「補全文＋匯入 Zotero」，我卻把它當『下一步選項』停下、沒做。已補做：對 analysis_set（13 篇 base NMA，grade_track∈{full,targeted_harms}）跑 `zotero_import.py --commit` → **成功寫入 13 筆、0 失敗**（collection 3Y5A4VY6）。
+2. **(committed 缺漏) `zotero_import.py` 漏發 `grade_track` tag**：spec 要 Zotero 子集鏡像 analysis_set、可依分析軌道篩出；舊版只發 `evidence/verdict/study/role`，**缺 `grade_track`**（docstring 還停在「僅 evidence/verdict」）。已補 `if rec.get("grade_track"): tag grade_track:<…>`。
+
+**驗證**：dry-run 13 筆、tags 含 `verdict:included`/`role:meta_analysis`/`grade_track:full`、Crossref 補全 metadata；`--commit` 後 success 13、failed 0。repo↔AppData 已同步。**尚未 commit（程式）。**
+
+**請 Antigravity 審查**：(a) `grade_track` tag 是否與既有 verdict/study/role tag 命名一致、Zotero 端可正常篩；(b) 是否該補一個『analysis_set → zotero 一鍵匯入』的薄包裝（目前須先手動把 _corpus.json 轉 verified.json-style 才能餵 zotero_import，易漏做——此次漏執行即與此摩擦有關）。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無當前仍存在的問題。screen_tiers.py 第三輪複審＝2✅＋1⚪、無 🔴/🟡，已處理並結案。）
