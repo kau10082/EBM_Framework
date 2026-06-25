@@ -17,6 +17,21 @@
 
 **請 Antigravity 審查**：(a) 單引號 regex 是否會誤吃路徑含 `#` 者（Windows 路徑通常無 `#`，但值得確認）；(b) `pdf_path` 回寫 `_search_report.json` 會不會與 `build_search_report_data.py` 的確定性重組衝突（下次重跑 data builder 會覆蓋掉 pdf_path，需重渲染才回填——是否可接受）。
 
+### 2026-06-25（第五輪【初審】）本輪審查範圍＝1 檔
+- **修改 `EBM_Analysis/tools/analysis_scope.py`**
+
+**動機（使用者糾正：『少給需補全文名單』）**：Phase 0 算 `need_manual_fulltext`（需補全文最小集）時**漏列**。根因鏈：
+1. EBM_Search ⑦ 交接包對「只有摘要/AI 合成」的文獻也樂觀標 `fulltext_status=have`＋`channel=online`（＝線上可得，**非實際已抓**）；
+2. `build_corpus_seed.py` 對 `have+online` 只要求有 doi/pmid（線上取得依據）即放行——故過得了契約；
+3. `ingest_seed` 把它映成 corpus notes `全文=have`；
+4. **`analysis_scope._has_fulltext` 舊版信任 bare `全文=have` notes → 當成『已取得全文』→ 該筆不進 need_manual** → 需補全文名單被少報（若未手動補抓，13 篇 base 會全被當『已有』、need 清單近乎空）。
+
+**修正**：`analysis_scope._has_fulltext`（`:52-59`）改為**只認實際本機證據**＝`inputs/<id>.pdf`／`inputs/<id>.txt`（實取全文存檔）／p1 `data_source=full_text`／notes 明確 `全文=have(manual|local)`；**不再認 bare `全文=have`**（那可能是交接樂觀的線上可得標記）。真已取得者必有本機 PDF/txt。
+
+**驗證**：`selftest_analysis_guards.py`＝「全部分析端守門有效」；對本輪 work-cache 重算 → base 13＝實取 8（有 .txt）＋需補 5，need 清單據實列出 5 篇。repo↔AppData 已同步。**尚未 commit。**（run-cache 端：⑦ seed 的 over-claim 屬我手刻 seed builder，非 committed；committed 防線＝本次 analysis_scope 修正＋既有 check_have_verified。）
+
+**請 Antigravity 審查**：(a) 移除 bare `全文=have` 信任會不會誤殺『真的已抓但只記 notes 未留檔』的舊案（應無——真已抓必留 PDF/txt）；(b) 是否該連 `build_corpus_seed.py` 也補『have+online 須帶實抓證明』的契約檢查，從源頭擋 over-claim。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無當前仍存在的問題。screen_tiers.py 第三輪複審＝2✅＋1⚪、無 🔴/🟡，已處理並結案。）

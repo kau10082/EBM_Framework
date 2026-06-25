@@ -49,13 +49,18 @@ def _has_fulltext(p, cache_dir, inputs_dir):
                     return True, f"p1:fulltext_obtained({a.get('channel')})"
         except Exception:
             pass
-    # 2) 本機 PDF
+    # 2) 本機 PDF／實取全文文字檔（.txt＝PMC/Unpaywall 抓回存檔）
     if (Path(inputs_dir) / f"{pid}.pdf").exists():
         return True, "inputs/<id>.pdf"
-    # 3) notes 標記
+    if (Path(inputs_dir) / f"{pid}.txt").exists():
+        return True, "inputs/<id>.txt"
+    # 3) notes 標記：**只認『實際取得』marker**（full_text / have(manual) / have(local)）；
+    #    **嚴禁認 bare『全文=have』**——那可能是 ⑦ 交接包樂觀標的『線上可得但尚未實抓』(have+channel=online)；
+    #    當成已取得會讓 need_manual『需補全文最小集』被少報（2026-06 使用者糾正：⑦ 對只有摘要/AI 者亦標
+    #    have(online)→此處誤判已取得→需補全文名單漏列）。真已取得者必有本機 PDF/txt（上面已涵蓋）。
     notes = p.get("notes") or ""
-    if re.search(r'全文=(full_text|have)\b', notes):
-        return True, "notes:全文=have"
+    if re.search(r'全文=(full_text|have\((?:manual|local)\))', notes):
+        return True, "notes:全文=obtained"
     return False, "全文尚未取得"
 
 
