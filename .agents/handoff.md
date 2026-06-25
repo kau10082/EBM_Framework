@@ -43,11 +43,24 @@
 
 **請 Antigravity 審查**：(a) `grade_track` tag 是否與既有 verdict/study/role tag 命名一致、Zotero 端可正常篩；(b) 是否該補一個『analysis_set → zotero 一鍵匯入』的薄包裝（目前須先手動把 _corpus.json 轉 verified.json-style 才能餵 zotero_import，易漏做——此次漏執行即與此摩擦有關）。
 
+### 2026-06-25（第七輪【初審】）本輪審查範圍＝2 檔（補上 error 3 的 committed 防線）
+- **新增 `EBM_Search/scripts/doi_title_audit.py`**
+- **修改 `EBM_Search/SEARCH_SPEC.md`**（⑤a 加『DOI↔標題一致性』鐵律）
+
+**動機**：error 3（3 篇 Consensus-SR 手填 DOI 錯、⑤a 只查存在性沒抓到）先前只『資料修＋提案 gate』、未建 committed 防線。現補：`doi_title_audit.py`＝獨立 Crossref DOI↔標題稽核器（`audit(records)`／`title_sim()`／`--in`／`--selftest`），low-similarity＝DOI 可能填錯→標 UNVERIFIED；SEARCH_SPEC 立鐵律『⑤a 必查 DOI↔title、嚴禁只查存在性』。**驗證**：`--selftest` 三案全過（同題 0.97、異題 0.22、空題 0）；對修正後 12 base 跑 audit＝0 mismatch。repo↔AppData 已同步。**尚未 commit。**
+
+**請 Antigravity 審查**：(a) MIN_SIM=0.55 門檻是否合理；(b) 是否該把它接成 gate_guard 硬 gate（讀 g6_verified／seed→audit→有 mismatch 即 FAIL），還是『⑤a 步驟必跑＋SEARCH_SPEC 鐵律』即足。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無當前仍存在的問題。screen_tiers.py 第三輪複審＝2✅＋1⚪、無 🔴/🟡，已處理並結案。）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑;不同意紀錄不可刪）
+
+### 2026-06-25（補記，操作失誤；非 committed 程式）Zotero 匯入重複 24 筆
+**情境**：Phase 0 步驟 6 Zotero 匯入。第一次 `--commit` 已成功匯 12；但接著查 collection 的 GET **回傳陳舊的 0**（Zotero API 最終一致性延遲），我誤判成空集合、又用 **`--no-dedup`** 匯第二次 → collection 變 **24 筆（每 DOI 2 份）**。使用者出手自清，並指示『Zotero 重複我自己清』。
+**性質**：**操作失誤、非 committed 程式 bug**——`zotero_import.py` 預設 dedup 是對的，是我手動加 `--no-dedup` 又在 GET=0 未驗證下硬匯。
+**防線/教訓**：(a) 已寫 auto-memory：Zotero 破壞性操作交使用者、預設 dry-run+report、GET 回 0 須先驗證不可硬匯；(b) **不改 `zotero_import.py` 契約**（預設 dedup 正確）。**給 Antigravity 的待裁決問題**：是否值得讓 `zotero_import.py` 在『剛 --commit 後 dedup GET 卻回 0』時印警告（防最終一致性延遲導致重匯）？傾向不必（屬 API 邊緣行為，正解是別 --no-dedup）。
 
 ### 2026-06-25（補記，run-cache 資料 bug ＋ ⑤a 流程教訓；非 committed 程式）使用者糾正『一篇重複』
 **情境**：Phase 0 補全文時使用者發現兩篇 PDF 一模一樣（同 size）。追下去＝**13 篇 base NMA 有 3 篇 DOI 錯誤**（hand-transcribed Consensus-SR DOI）：
