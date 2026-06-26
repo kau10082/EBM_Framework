@@ -49,7 +49,7 @@ verdict:
 # 建議的對外工作資料夾基底＝ <Windows 文件>\EBM_Framework\，底下分 reports / fulltext / packages。
 report:
   pdf_output_dir: ""                 # EBM_Search 報告成品；留空＝解析 <文件> 已知資料夾。建議 <文件>\EBM_Framework\reports
-  fulltext_dir: ""                   # 人工補全文＋交接包；留空＝<文件>\EBM_fulltext\。建議 <文件>\EBM_Framework\fulltext
+  fulltext_dir: ""                   # ★【補全文夾全域唯一真相】人工補全文＋交接包(_corpus_seed.json)＋Phase 0 補全文都用此根（per-topic 子夾在其下）。留空＝<文件>\EBM_fulltext\。建議 <文件>\EBM_Framework\fulltext。一般只設這個即可（可被 analysis.fulltext_dir 覆寫、被 run_state.paths.fulltext_dir 優先）。
 
 packaging:
   output_dir: ""                     # 打包 ZIP 輸出（選用）。建議 <文件>\EBM_Framework\packages
@@ -60,6 +60,6 @@ analysis:
   work_dir: ""                       # ★執行期資料夾：inputs/cache/outputs/runs 寫這底下；留空＝寫到專案 EBM_Analysis/ 內（Claude Code 專案模式）。
                                      #   打包成 skill 用時務必設成 <文件>\EBM_Framework\work，否則 run 資料會寫進安裝包、重匯入時被洗掉。env 覆寫：EBM_WORKDIR
   pdf_output_dir: ""                 # 評讀成品 PDF；留空＝寫到工作夾 outputs/。建議 <文件>\EBM_Framework\reports
-  fulltext_dir: ""                   # Phase 0 人工補全文（grade_track∈full/targeted_harms 取不到全文者放這）；留空＝回退 EBM_Analysis/inputs/_fulltext_supplement/
+  fulltext_dir: ""                   # 〔向後相容／覆寫用〕Phase 0 補全文夾的『覆寫』鍵——通常**留空**，補全文以上面 `report.fulltext_dir` 為唯一真相；僅當要讓 Phase 0 補全文與交接包分家時才設此。解析序：run_state.paths.fulltext_dir → analysis.fulltext_dir → report.fulltext_dir → inputs/_fulltext_supplement。
   cjk_font: "C:/Windows/Fonts/msjh.ttc"   # PDF CJK 字型（系統字型）
   min_fulltext_bytes: 9000   # analysis_scope：.txt 視為『有完整全文』的最小位元組數（設在線上摘錄上限~8000字之上，使截斷摘錄落入 need_manual）；改摘錄上限時改這一處

@@ -131,6 +131,15 @@ def main(argv=None):
         return 2
 
     ft_dir = _fulltext_dir(seed, seed_path)
+    # ★ 把交接包『實際絕對路徑』寫進 run_state.paths.fulltext_dir（Antigravity 第十一輪 🟡a）：
+    #   使 analysis_scope._supplement_dir branch 1 永遠精準命中（補件與 _corpus_seed.json 同夾），
+    #   不受 slug 與 EBM_Search `<題目_日期>` 子夾命名差異影響。prisma_audit 亦由此找 _search_report.json。
+    if not args.dry_run:
+        try:
+            import run_state   # sys.path 已於模組頂端(line 44)指向 tools/
+            run_state.update(paths={"fulltext_dir": os.path.abspath(ft_dir)})
+        except Exception as _e:
+            sys.stderr.write("  （提醒：run_state.paths.fulltext_dir 未能寫入：%s）\n" % str(_e)[:80])
     overlap = _build_overlap(papers)
 
     # ── 1. 複製 PDF 進 inputs/ ──────────────────────────────

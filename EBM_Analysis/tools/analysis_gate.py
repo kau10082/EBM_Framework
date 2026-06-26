@@ -58,21 +58,24 @@ def check_fulltext_content_audited(state, cache_dir):
     `fulltext_title_audit.py --out cache/_fulltext_audit.json` 產），缺檔或有 mismatch 即 FAIL——
     『內容放錯 paper_id』(實測 updated-NMA 的全文其實是 Edris) 不可靜默進 GRADE。輕量、不連網、不跑子程序。"""
     state = state or {}
-    stage = str(state.get("stage") or "").lower()
-    if not any(m in stage for m in FINAL_MARKERS):
-        return []  # 未到定稿
     cache = Path(cache_dir)
-    if not (cache / "_synthesis.json").exists():
-        return []
     corpus = _load(cache / "_corpus.json")
     base = [p for p in (corpus or {}).get("papers", []) if p.get("grade_track") in ("full", "targeted_harms")] if corpus else []
     if not base:
         return []  # 無 base 可稽核
+    # 兩個觸發點（R12b pre-check）：(1) 定稿(FINAL_MARKERS)＋_synthesis 已在；(2) Phase 1 抽取已開始
+    #   ——cache 出現任何 <pid>.p1.json。後者把『漏稽核』提前到抽取一開始就攔下，免白費 Phase 1–3。
+    stage = str(state.get("stage") or "").lower()
+    at_final = any(m in stage for m in FINAL_MARKERS) and (cache / "_synthesis.json").exists()
+    extraction_started = any((cache / f"{p['paper_id']}.p1.json").exists() for p in base)
+    if not (at_final or extraction_started):
+        return []  # Phase 0 中、尚未抽取也未定稿 → 放行（不擾 mid-analysis）
     audit = _load(cache / "_fulltext_audit.json")
     if audit is None:
-        return ["定稿階段卻無 _fulltext_audit.json：Phase 0 須跑 "
+        when = "已定稿" if at_final else "已開始 Phase 1 抽取(出現 *.p1.json)"
+        return [f"{when}卻無 _fulltext_audit.json：Phase 0 須先跑 "
                 "`fulltext_title_audit.py --out cache/_fulltext_audit.json`（本機全文內容↔標題稽核），"
-                "確認無『內容放錯 paper_id』才可進抽取/定稿"]
+                "確認無『內容放錯 paper_id』才可進抽取/定稿（否則恐白費 Phase 1–3）"]
     mm = audit.get("mismatch")
     if isinstance(mm, int) and mm > 0:
         ids = [m.get("paper_id") for m in (audit.get("mismatches") or [])][:5]
@@ -142,7 +145,20 @@ def main():
         f3 = check_fulltext_content_audited({"stage": "phase4_final"}, str(d2))
         ok5 = not f3
         print(("✅" if ok5 else "❌") + " selftest：內容稽核乾淨應放行 — " + ("放行（正確）" if ok5 else "誤擋！"))
-        sys.exit(0 if (ok and ok2 and ok3 and ok4 and ok5) else 1)
+        # R12b pre-check：未定稿但抽取已開始(出現 *.p1.json)＋無稽核產物 → 提前 FAIL
+        d3 = Path(tempfile.mkdtemp())
+        (d3 / "_corpus.json").write_text(json.dumps({"papers": [{"paper_id": "A", "grade_track": "full"}]}), encoding="utf-8")
+        (d3 / "A.p1.json").write_text("{}", encoding="utf-8")   # 抽取已開始
+        f4 = check_fulltext_content_audited({"stage": "phase1_extract"}, str(d3))
+        ok6 = bool(f4)
+        print(("✅" if ok6 else "❌") + " selftest：抽取已開始卻未稽核應提前 FAIL（pre-check）— " + ("會 FAIL（有效）" if ok6 else "未 FAIL！"))
+        # 反向：Phase 0 中(未抽取未定稿)＋無稽核 → 放行（不擾）
+        d4 = Path(tempfile.mkdtemp())
+        (d4 / "_corpus.json").write_text(json.dumps({"papers": [{"paper_id": "A", "grade_track": "full"}]}), encoding="utf-8")
+        f5 = check_fulltext_content_audited({"stage": "phase0_triage"}, str(d4))
+        ok7 = not f5
+        print(("✅" if ok7 else "❌") + " selftest：Phase 0 中(未抽取)應放行 — " + ("放行（正確）" if ok7 else "誤擋！"))
+        sys.exit(0 if (ok and ok2 and ok3 and ok4 and ok5 and ok6 and ok7) else 1)
     # 解析 work
     if a.cache:
         cache = a.cache
