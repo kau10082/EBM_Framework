@@ -9,6 +9,8 @@
 **本輪審查範圍：僅以下檔案**
 - `EBM_Search/scripts/build_search_report_data.py`
 - `EBM_Search/scripts/build_search_report.py`
+- `EBM_Search/scripts/gate_guard.py`
+- `EBM_Search/scripts/selftest_guards.py`
 
 **問題背景**：使用者實跑 SITT-vs-delayed-SITT 主題、產出 ⑥ PDF 後回報「PRISMA 流程中間有空格沒填清楚」。追因＝`build_search_report_data.py` 組流程數字時用了**與實際 `g2b_screen.json`／`g6_verified.json` 不符的鍵名**，讀不到值→格子留空、且數字不對帳。
 
@@ -23,7 +25,15 @@
 **改後實測（本 run cache 重新產出）**：PRISMA 六列全部填滿且端到端對帳：
 `1279 → ②b −92 →1187 → ③ −980離題−185皆無 →切題22 → ④ +3 →25 → ⑤a −1無法驗證 →24 → ⑤b 背景15→核心9`。`gate_guard --cache` 全 PASS、`build_search_report.py` 重產 PDF 成功（含 CJK 字型）。
 
+**避免復發（使用者要求：如何防止同類錯誤再發生）——三道防線＋一條回歸測試**：
+這兩個 bug 的共通根因＝**靜默失敗**：產生器讀錯 cache 鍵→寫出空白/0 的格子，卻無任何檢查擋下；且既有 `funnel_check.py` 找的是 `funnel`＋`【算式】`結構，與現行 `flow`（start/excluded/remain）結構**對不上**→等同休眠，沒人在看流程格。故補：
+1. **產生器大聲失敗**（`build_search_report_data.py`）：組 flow 前硬擋——9 個流程數字（nU/surv/drop/n_hit/n_off/n_no/n_new/retracted/unverified）任一非 `int`（疑似鍵名不符讀到空字串）即 `raise ValueError` 並指名缺哪個數，不再靜默出空格。
+2. **機器守門補洞**（`gate_guard.check_search_report_format`）：新增 PRISMA `flow` 每列稽核——每格 start/excluded/remain 去空白後須非空、不得含 `None`；非首列的 start/remain 須含數字（流程計數不得只剩標籤無數）。負向實測：注入空白 ②b remain→gate 正確 FAIL。
+3. **PDF 守門防誤報**（`gate_guard.check_pdf_emitted`）：相對 `pdf_path` 時回退到 `cache/相對`、`cache/檔名` 再判，避免 repo 根執行 hook 時相對路徑解析失敗→假性 FAIL（與產生器登記 abspath 雙保險）。
+4. **回歸測試**（`selftest_guards.py`）：新增「報告 PRISMA flow 格留空/缺數字」案例，固化此防線（`selftest_guards.py` 全 PASS）。
+
 **想被重點看 / 自己不確定的點**：
+- (d) 是否該乾脆**讓 `funnel_check.py` 也認得 `flow` 結構**（目前它只認 `funnel`＋`【算式】`，對現行報告等同休眠）？本輪選擇把流程稽核補進 `check_search_report_format`（已涵蓋空格/缺數），未動 `funnel_check`；請評估是否需進一步整併以免兩套流程檢查語意分歧。
 - (a) ⑤a 語意改動：把「UNVERIFIED 保留」改為「剔除」是否與 spec 一致？我的依據是 `check_unverified_excluded`（UNVERIFIED 不得入⑤b/交接/Zotero）＝實際就是剔除，原報告器文字「保留」與 gate 矛盾，故改。請確認此解讀。
 - (b) 相容鍵名取值順序是否有遺漏的 run-schema 變體（特別是 `kept` 可能為 list 的防呆）。
 - (c) **fresh-clone 限制（據實說明）**：此修改在 `build_search_report_data.py`，其輸出依賴本 run 的 cache 產物（g0~g7），無法在空 fresh-clone 有意義單獨重跑；本輪以「同一份 cache 重新產出報告＋全 gate PASS＋PDF 重產成功」為證，非空跑。

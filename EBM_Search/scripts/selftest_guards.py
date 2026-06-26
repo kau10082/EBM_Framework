@@ -300,6 +300,14 @@ def main():
     invalid_byline["included"] = [{"byline":"A triple trial / RCT", "title":"Title", "pmid":"123"}]
     json.dump(invalid_byline, io.open(_t6/"_search_report.json","w",encoding="utf-8"))
     allok &= _assert_fires("報告 included byline 缺年份/疑退回截斷標題", gate_guard.check_search_report_format(_t6))
+    # 回歸（2026-06 使用者實測缺失）：PRISMA flow 格留空/缺數字須被擋（產生器讀錯 cache 鍵→空格 bug）。
+    blank_cell = dict(valid)
+    blank_cell["flow"] = [{"stage":"1","start":"—","excluded":"—","remain":"100"},
+                          {"stage":"②b","start":"100","excluded":"剔除 ","remain":""},   # remain 留空＝本輪 bug
+                          {"stage":"③","start":"","excluded":"離題 5","remain":"切題 3"}]  # start 留空
+    json.dump(blank_cell, io.open(_t6/"_search_report.json","w",encoding="utf-8"))
+    allok &= _assert_fires("報告 PRISMA flow 格留空/缺數字", gate_guard.check_search_report_format(_t6))
+    json.dump(valid, io.open(_t6/"_search_report.json","w",encoding="utf-8"))  # 還原合規檔
     shutil.rmtree(_t6, ignore_errors=True)
 
     # ── ②b→③ 停頓點守門回歸（②b 完成後須經使用者確認才可進 ③，防搶跑）──

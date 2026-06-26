@@ -200,6 +200,17 @@ def build_data(cache, mailto):
     n_new = (g4.get("n_new_concordant") or g4.get("new_切題")
              or len(g4track.get("new_relevant") or [])
              or len(g4.get("hits") or []) or 0)
+    # 自驗（防本輪 bug 復發）：PRISMA 每個流程數字都必須是整數。本輪根因＝讀 cache 用了不符的鍵名
+    # （survivors/dropped/verify/n_new_concordant）→ 讀到空字串 "" → 格子留空、流程不對帳，卻無人擋。
+    # 故在組 flow 前硬擋：任一數字非 int（疑似鍵名不符讀到空值）即 raise，讓產生器『大聲失敗』而非靜默出空格。
+    _flow_nums = {"union(nU)": nU, "②b保留(surv)": surv, "②b剔除(drop)": drop,
+                  "③切題(n_hit)": n_hit, "③離題(n_off)": n_off, "③皆無(n_no)": n_no,
+                  "④新增(n_new)": n_new, "撤稿(retracted)": retracted, "無法驗證(unverified)": unverified}
+    _bad = [k for k, v in _flow_nums.items() if not isinstance(v, int)]
+    if _bad:
+        raise ValueError("PRISMA 流程數字缺失/非整數（疑似 cache 鍵名與產生器不符→讀到空值）：%s。"
+                         "請確認 g2b_screen.json（kept/removed 由 records 實算）、g6_verified.json（verdict）、"
+                         "g4_citation*.json（new_relevant/hits）的鍵名與本產生器一致。" % ", ".join(_bad))
     flow = [
         {"stage": "識別 Identification：六腿廣蒐→跨腿去重", "start": "—", "excluded": "—", "remain": "%s（文獻聯集）" % nU},
         {"stage": "②b 高敏初篩（標題＋摘要）", "start": str(nU), "excluded": "剔除明顯離題 %s" % drop, "remain": str(surv)},
