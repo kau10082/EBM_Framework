@@ -8,6 +8,7 @@
 
 **本輪審查範圍：僅以下檔案**
 - `EBM_Search/scripts/build_search_report_data.py`
+- `EBM_Search/scripts/build_search_report.py`
 
 **問題背景**：使用者實跑 SITT-vs-delayed-SITT 主題、產出 ⑥ PDF 後回報「PRISMA 流程中間有空格沒填清楚」。追因＝`build_search_report_data.py` 組流程數字時用了**與實際 `g2b_screen.json`／`g6_verified.json` 不符的鍵名**，讀不到值→格子留空、且數字不對帳。
 
@@ -16,6 +17,8 @@
 2. **撤稿/無法驗證數**（line 64-65）：原讀 `r.get("verify")`，但 ⑤a 落檔 `g6_verified.json` 用的是 `verdict` 鍵 → retracted/unverified 恆為 0。改用 `_vv(r)=r.get("verify") or r.get("verdict")`（與 `gate_guard` 同樣相容寫法），並把 **UNRESOLVED**（無 PMID/DOI 可驗）一併計入 unverified。
 3. **④ 引文追蹤新增切題數**（原 line 195）：原讀 `g4.get("n_new_concordant")`（我方檔案無此鍵）→ 恆顯示「+0」、流程不對帳（③ 22 vs ⑤b 9+15=24 對不上）。改為相容讀 `n_new_concordant`／`new_切題`／`g4_citation_tracking.json` 的 `new_relevant`／`g4.hits`。
    並同步把 ⑤a 流程語意由「UNVERIFIED 保留」改為「撤稿＋無法驗證皆剔除、不入分析」（與 `gate_guard.check_unverified_excluded`「UNVERIFIED 不得入⑤b」一致；remain 改為扣掉 retracted＋unverified）。
+
+**另一處（`build_search_report.py`，同屬本 ⑥ 報告功能塊）**：PDF 渲染後回寫 `pdf_path` 用的是**相對路徑**（`cache/...`）。Stop hook 的 `gate_guard --auto --hook` 由 **repo 根**（`CLAUDE_PROJECT_DIR`）執行，相對路徑解析失敗→誤報「Phase1 PDF 不存在」。已改為登記 `os.path.abspath(out_pdf)`（絕對路徑），不受 CWD 影響。實測：自 repo 根跑 `gate_guard --auto --hook` 由 FAIL 轉 PASS（exit 0）。
 
 **改後實測（本 run cache 重新產出）**：PRISMA 六列全部填滿且端到端對帳：
 `1279 → ②b −92 →1187 → ③ −980離題−185皆無 →切題22 → ④ +3 →25 → ⑤a −1無法驗證 →24 → ⑤b 背景15→核心9`。`gate_guard --cache` 全 PASS、`build_search_report.py` 重產 PDF 成功（含 CJK 字型）。
