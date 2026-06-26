@@ -174,6 +174,13 @@ def main():
     print(("  ✅" if _unv else "  ❌") + " 標題缺如(.txt 截掉封面)→unverifiable 不誤殺（防誤報）")
     allok &= _unv
 
+    # PDF 渲染器跳脫回歸（2026-06 使用者回報：資料含 '<'(如 '<MCID') 讓 reportlab paragraph 崩潰）
+    import build_grade_pdf as BGP
+    _m = BGP._markup("RR0.75 mepo <MCID & >baseline <b>粗</b>")
+    _esc_ok = ("&lt;MCID" in _m) and ("&amp;" in _m) and ("&gt;baseline" in _m) and ("<b>粗</b>" in _m)
+    print(("  ✅" if _esc_ok else "  ❌") + " PDF 渲染器跳脫 <>& 並保留 <b>（防資料含 < 崩潰；防誤殺粗體）")
+    allok &= _esc_ok
+
     print("\n" + ("✅ 全部分析端守門有效。" if allok else "❌ 有守門未如預期，請檢查。"))
     return 0 if allok else 1
 

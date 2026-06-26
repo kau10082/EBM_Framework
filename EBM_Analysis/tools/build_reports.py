@@ -160,6 +160,17 @@ def final_report():
 
     # ★ 標準版型＝Cochrane 後半段 6 段（與 PDF build_grade_pdf --layout cochrane5 同步；
     #   2026-06 使用者定為 analysis 階段 PDF/MD 統一格式）。
+    # 〇、文獻篩選流程（PRISMA-style；2026-06 使用者要求新增於最前）
+    flow = syn.get("screening_flow", [])
+    if flow:
+        L += ["## 〇、文獻篩選流程（Study Selection Flow，PRISMA-style）", "",
+              "> 從多源廣蒐到最終納入分析的逐階段識別／排除／留存（檢索→篩選→收斂）。", "",
+              _row(["階段", "流入", "排除（理由）", "留存／結果", "說明"]), _row(["---"] * 5)]
+        for f in flow:
+            L.append(_row([f.get("stage", ""), f.get("start", ""), f.get("excluded", ""),
+                           f.get("remain", ""), f.get("note", "") or ""]))
+        L.append("")
+
     # 一、納入研究特徵摘要表
     if sc:
         L += ["## 一、納入研究特徵摘要表（Characteristics of Included Studies）", "",
@@ -176,9 +187,13 @@ def final_report():
     # 二、個別試驗偏誤風險評估
     rs = syn.get("rob_summary", [])
     if rs:
-        L += ["## 二、個別試驗偏誤風險評估（Risk of Bias 2）", "",
-              "> 逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出瑕疵來源。", "",
-              _row(["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]), _row(["---"] * 8)]
+        _rsec = syn.get("rob_section") or {}
+        _rtitle = _rsec.get("title") or "個別試驗偏誤風險評估（Risk of Bias 2）"
+        _rintro = _rsec.get("intro") or "逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出瑕疵來源。"
+        _rdef = ["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]
+        _rcols = ((_rsec.get("columns") or _rdef) + _rdef[len(_rsec.get("columns") or _rdef):])[:8]
+        L += [f"## 二、{_rtitle}", "", f"> {_rintro}", "",
+              _row(_rcols), _row(["---"] * 8)]
         for r in rs:
             L.append(_row([r["trial"], r["randomization"], r["deviations"], r["missing_data"], r["measurement"],
                            r["selective_reporting"], f"**{r['overall']}**",

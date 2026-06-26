@@ -50,6 +50,20 @@ def _safe(t):
     return s
 
 
+# 允許保留的 reportlab 行內標籤（其餘 < > & 一律跳脫，避免資料含 '<'(如 '<MCID') 讓 paragraph parser 崩潰）
+_KEEP_TAGS = ("b", "/b", "i", "/i", "sup", "/sup", "sub", "/sub", "br/")
+
+
+def _markup(t):
+    """資料→reportlab 安全標記：先 TOFU 淨化，再跳脫 & < >（修『資料含 < 使 PDF 崩潰』bug，
+    2026-06 使用者回報），最後還原白名單行內標籤(<b>/<i>/<sup>/<sub>/<br/>)使刻意粗體仍有效。
+    註：TOFU_MAP 會把 ≤→'<='、≥→'>='，跳脫後成 '&lt;='/'&gt;='，渲染為字面 '<='/'>='、不再破壞解析。"""
+    s = _safe(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    for tag in _KEEP_TAGS:
+        s = s.replace("&lt;%s&gt;" % tag, "<%s>" % tag)
+    return s
+
+
 def build(infile, out, font=None, layout="cochrane5"):
     data = json.loads(Path(infile).read_text(encoding="utf-8"))
     syn = data.get("synthesis", data)
@@ -62,11 +76,11 @@ def build(infile, out, font=None, layout="cochrane5"):
     F = _register_font(font)
 
     def P(t, sz=10, sp=2, col="#000000"):
-        return Paragraph(f'<font name="{F}" size="{sz}" color="{col}">{_safe(t)}</font>',
+        return Paragraph(f'<font name="{F}" size="{sz}" color="{col}">{_markup(t)}</font>',
                          ParagraphStyle("s", leading=sz + 4, spaceAfter=sp, wordWrap="CJK"))
     def H(t, sz=13): return P("<b>" + t + "</b>", sz, sp=5)
     def cell(t, sz=8):
-        return Paragraph(f'<font name="{F}" size="{sz}">{_safe(t)}</font>',
+        return Paragraph(f'<font name="{F}" size="{sz}">{_markup(t)}</font>',
                          ParagraphStyle("c", leading=sz + 2, wordWrap="CJK"))
     def tstyle():
         return TableStyle([("FONTNAME", (0, 0), (-1, -1), F), ("FONTSIZE", (0, 0), (-1, -1), 8),
@@ -86,6 +100,18 @@ def build(infile, out, font=None, layout="cochrane5"):
     if layout == "cochrane5":
         # 欄寬以『比例』分配，保證欄數正確且總和恰為頁寬 W（避免超寬/欄數不符）
         FR = lambda *fr: [round(f * W, 2) for f in fr]
+        # ── 0 文獻篩選流程（PRISMA-style；2026-06 使用者要求新增於最前）──
+        flow = syn.get("screening_flow") or []
+        if flow:
+            S.append(H("0、文獻篩選流程（Study Selection Flow，PRISMA-style）"))
+            S.append(P("從多源廣蒐到最終納入分析的逐階段識別／排除／留存（檢索→篩選→收斂）。", 8.5, col="#555", sp=3))
+            rows = [["階段", "流入", "排除（理由）", "留存／結果", "說明"]]
+            for fstage in flow:
+                rows.append([cell(fstage.get("stage", ""), 7.5), cell(fstage.get("start", ""), 7.5),
+                             cell(fstage.get("excluded", ""), 7.5), cell(fstage.get("remain", ""), 7.5),
+                             cell(fstage.get("note", "") or "", 7)])
+            t = Table(rows, colWidths=FR(0.26, 0.10, 0.22, 0.18, 0.24)); t.setStyle(tstyle()); S.append(t)
+            S.append(Spacer(1, 3 * mm))
         # ── 1 納入研究特徵摘要表（7 欄）──
         S.append(H("1、納入研究特徵摘要表（Characteristics of Included Studies）"))
         S.append(P("證明各試驗臨床上『可擺在一起比』（Cochrane Ch9）：研究設計／基準風險／介入·對照精確內容／追蹤時框。", 8.5, col="#555", sp=3))
@@ -99,10 +125,13 @@ def build(infile, out, font=None, layout="cochrane5"):
             S.append(P("· 基準風險分層：" + st.get("baseline_risk", "") + " → " + st.get("absolute_reduction", ""), 8, col="#555", sp=1))
         S.append(Spacer(1, 3 * mm))
 
-        # ── 2 個別試驗偏誤風險評估（8 欄）──
-        S.append(H("2、個別試驗偏誤風險評估（Risk of Bias 2）"))
-        S.append(P("逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出設計瑕疵。", 8.5, col="#555", sp=3))
-        rows = [["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]]
+        # ── 2 偏誤風險／方法學品質評估（8 欄；標題＋欄名隨分析單位而異：RCT→RoB2、SR/NMA→AMSTAR2、MAIC→TSD18）──
+        rsec = syn.get("rob_section") or {}
+        S.append(H("2、" + (rsec.get("title") or "個別試驗偏誤風險評估（Risk of Bias 2）")))
+        S.append(P(rsec.get("intro") or "逐篇逐領域 RoB 2（Cochrane Ch8）；對 some concerns/high 具體點出設計瑕疵。", 8.5, col="#555", sp=3))
+        _defcols = ["試驗", "隨機化", "偏離介入", "缺失資料", "結果測量", "選擇性報告", "整體", "瑕疵說明（concern 來源）"]
+        _cols = rsec.get("columns") or _defcols
+        rows = [(_cols + _defcols[len(_cols):])[:8]]
         for r in (syn.get("rob_summary") or []):
             rows.append([cell(r.get("trial", ""), 7.5), cell(r.get("randomization", ""), 7.5), cell(r.get("deviations", ""), 7.5),
                          cell(r.get("missing_data", ""), 7.5), cell(r.get("measurement", ""), 7.5), cell(r.get("selective_reporting", ""), 7.5),

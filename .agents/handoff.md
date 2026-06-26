@@ -32,6 +32,35 @@
 (b) `_lcs_frac` 用最長連續片段比例，對副標題缺失/標點差異是否過嚴或過鬆；(c) 是否該把它從『Phase 0 步驟必跑＋
 selftest 回歸』再升成像 `gate_guard` 那樣的 Stop-hook 機器 gate（分析端目前無 Stop-hook gate 基建，需評估）。
 
+### 2026-06-26（第十輪【初審】）本輪審查範圍＝3 檔
+- **修改 `EBM_Analysis/tools/build_grade_pdf.py`**（🔴 跳脫 bug ＋ 2 項版型增強）
+- **修改 `EBM_Analysis/tools/build_reports.py`**（MD 同步增強，與 PDF 同資料源）
+- **修改 `EBM_Analysis/tools/selftest_analysis_guards.py`**（加跳脫回歸）
+
+**動機**：產 FINAL_REPORT 時連續 failed＝**真 committed bug** ＋ 使用者另提 2 項版型要求：
+1. **(🔴 會 crash) PDF 渲染器未跳脫 XML 特殊字元**：`build_grade_pdf` 的 `P()`／`cell()` 只做 TOFU 淨化(`_safe`)、
+   **未跳脫 `< > &`**。任何資料含字面 `<`（如 SoF 的 `<MCID`、`<10研究`）會被 reportlab paragraph parser 當成標籤
+   → `ValueError: Parse error: saw </para> instead of </font>` → PDF 產不出（這就是先前一直 failed 的根因）。
+   且 `TOFU_MAP` 把 `≤→'<='` 反而**引入** `<`，更易觸發。
+2. **(🟡 標題不符分析法) RoB2 段標題寫死「Risk of Bias 2」**：本案為 Overview（單位＝SR/NMA/MAIC），用 RoB2 名稱不當；
+   使用者要求隨分析法改（AMSTAR2／MAIC）。
+3. **(🟡 缺篩選流程) 報告最前缺 PRISMA 篩選流程**：使用者要求表格最前新增文獻篩選 section。
+
+**修正**：
+1. 新增 module 級 `_markup(t)`＝`_safe`(TOFU)→跳脫 `& < >`→**還原白名單行內標籤**(`<b>/<i>/<sup>/<sub>/<br/>`)；
+   `P()`／`cell()` 改用 `_markup`（不再用 `_safe`）。刻意粗體仍有效、資料含 `<` 不再崩潰。
+2. 第 2 段標題/前言/欄名改**資料驅動**：讀 `syn.rob_section.{title,intro,columns}`，無則回退 RoB2 預設（通用、換主題自適用）。
+3. 新增 `syn.screening_flow`（PRISMA-style）→ 渲染為**第 0 段**（cochrane5 layout，置於納入特徵表之前）。
+   `build_reports.py` 同步加 MD 版的『〇、文獻篩選流程』與資料驅動的第二段標題（PDF/MD 同格式同源）。
+
+**驗證**：以含字面 `<` 的 `_synthesis.json` 重產 → **成功**（266→271KB、4 頁、tofu 0）；篩選流程數字(1,061→921→切題517→3 anchors)、
+AMSTAR2 標題、新欄名、`<MCID` 皆正確顯示。`render_smoketest` 另揪出 **C11 SoF 須含死亡**（已補全因死亡列＋腳註 h，誠實標『未綜整、事件罕見』）。
+`selfcheck_consistency` ✅、`render_smoketest` ✅、`selftest_analysis_guards`（新增跳脫回歸 `_markup` 跳脫 `<>&` 且保留 `<b>`）✅。**尚未 commit。**
+
+**請 Antigravity 審查**：(a) `_markup` 白名單還原是否會被資料中字面 `<b>` 誤觸（極罕見，可接受？）；(b) `rob_section` 欄名代換
+（AMSTAR2 關鍵領域塞進 RoB2 欄位）是否清楚、或應另設 Overview 專用版面；(c) screening_flow 數字應否由工具自 `_search_report.flow`＋
+analysis funnel 自動帶入（目前手填於 `_synthesis.json`，有漂移風險）。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無。）
