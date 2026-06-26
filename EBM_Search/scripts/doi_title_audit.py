@@ -76,6 +76,7 @@ def _selftest():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="infile"); ap.add_argument("--mailto", default="ebm@example.com")
+    ap.add_argument("--out", dest="outfile", help="寫出稽核結果 JSON（如 cache/g6_title_audit.json，供 gate_guard 確認 ⑤a 做過比對）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     try: sys.stdout.reconfigure(encoding="utf-8")
@@ -87,6 +88,11 @@ def main():
     recs = json.loads(open(a.infile, encoding="utf-8").read())
     recs = recs if isinstance(recs, list) else recs.get("papers") or recs.get("records") or []
     mism = audit(recs, a.mailto)
+    n_doi = sum(1 for r in recs if (r.get("doi") or "").strip())
+    if a.outfile:
+        with open(a.outfile, "w", encoding="utf-8") as f:
+            json.dump({"checked": n_doi, "min_sim": MIN_SIM, "mismatches": mism}, f, ensure_ascii=False, indent=1)
+        print(f"wrote {a.outfile} (checked={n_doi}, mismatches={len(mism)})")
     print(f"DOI↔title MISMATCHES: {len(mism)}")
     for m in mism:
         print(f"  sim={m['sim']} | DOI {m['doi']}\n     recorded: {m['recorded'][:64]}\n     crossref: {m['crossref'][:64]}")

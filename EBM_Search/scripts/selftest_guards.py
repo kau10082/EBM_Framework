@@ -413,6 +413,28 @@ def main():
     json.dump([{"doi":"10.1/retracted","verdict":"RETRACTED"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
     json.dump([{"doi":"10.1/RETRACTED","title":"doi-only","verdict":"background"}], io.open(tmp/"g8_zotero_payload.json","w",encoding="utf-8"))
     allok &= _assert_fires("撤稿僅有 DOI（無PMID）也須擋下", gate_guard.check_no_retracted(tmp))
+    # ⑤a DOI↔title 機器 gate（Antigravity 第七輪 🔴）：有 DOI 納入候選但無稽核產物 → FAIL
+    json.dump([{"doi":"10.1/x","title":"a NMA","verdict":"included"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
+    for _f in (tmp/"g6_title_audit.json",):
+        if _f.exists(): _f.unlink()
+    allok &= _assert_fires("⑤a 有DOI候選卻未跑 doi_title_audit（無 g6_title_audit）",
+        gate_guard.check_doi_title_audited(tmp))
+    # 有稽核產物但 mismatches 非空（DOI 填錯）→ FAIL
+    json.dump({"checked":1,"min_sim":0.55,"mismatches":[{"doi":"10.1/x","sim":0.2}]},
+              io.open(tmp/"g6_title_audit.json","w",encoding="utf-8"))
+    allok &= _assert_fires("⑤a DOI↔title 稽核有不符未解決",
+        gate_guard.check_doi_title_audited(tmp))
+    # 稽核乾淨（mismatches=[]）→ 通過（防誤報）
+    json.dump({"checked":1,"min_sim":0.55,"mismatches":[]},
+              io.open(tmp/"g6_title_audit.json","w",encoding="utf-8"))
+    _da = gate_guard.check_doi_title_audited(tmp)
+    print(("  ✅" if not _da else "  ❌") + " ⑤a DOI↔title 稽核乾淨應通過（防誤報）：" + ("通過" if not _da else str(_da)))
+    allok &= (not _da)
+    # 納入候選全無 DOI（純 NCT 登錄）→ 無可稽核、放行（防誤殺）
+    json.dump([{"nct":"NCT01","title":"reg only","verdict":"included"}], io.open(tmp/"g6_verified.json","w",encoding="utf-8"))
+    _dn = gate_guard.check_doi_title_audited(tmp)
+    print(("  ✅" if not _dn else "  ❌") + " ⑤a 納入候選全無 DOI 應放行（防誤殺）：" + ("通過" if not _dn else str(_dn)))
+    allok &= (not _dn)
     shutil.rmtree(tmp, ignore_errors=True)
 
     # ④ 引文追蹤篩選方式：只憑標題丟棄 → FAIL；批次抓摘要+標題摘要篩 → 通過

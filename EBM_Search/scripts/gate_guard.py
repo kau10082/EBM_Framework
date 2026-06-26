@@ -704,6 +704,35 @@ def check_no_unverified(cache):
     return fails
 
 
+def check_doi_title_audited(cache):
+    """⑤a DOI↔標題一致性『機器 gate』（Antigravity 第七輪 🔴 而升）：
+    SEARCH_SPEC 立『⑤a 必查 DOI↔title、嚴禁只查存在性』為鐵律，但只靠 SPEC 易被遺忘繞過——
+    故升為機器 gate。判定：⑤a 一旦產出 g6_verified（交叉驗證已做），就必須有對應的稽核產物
+    g6_title_audit.json（由 `doi_title_audit.py --in <納入候選> --out g6_title_audit.json` 產），
+    且 mismatches 須為空；否則 FAIL（手填錯 DOI 會在後段才爆）。
+    稽核產物本身離線可讀（gate 不連網）；連網比對在 ⑤a 跑 doi_title_audit 時做、結果落檔。"""
+    ver = _load(cache / "g6_verified.json")
+    if ver is None:
+        return None   # ⑤a 未到此關
+    # 有 DOI 的納入候選才需稽核；若 g6_verified 全無 DOI，則無可稽核、放行。
+    def _vv(v): return v.get("verdict") or v.get("verify")
+    has_doi = any((v.get("doi") or "").strip() for v in ver
+                  if _vv(v) not in ("RETRACTED", "UNVERIFIED"))
+    if not has_doi:
+        return []
+    audit = _load(cache / "g6_title_audit.json")
+    if audit is None:
+        return ["⑤a 已產 g6_verified 但無 g6_title_audit.json：⑤a 對有 DOI 的納入候選必須跑 "
+                "doi_title_audit.py（--out g6_title_audit.json）做 Crossref『DOI↔實際標題』比對，"
+                "不得只查存在性（存在性無法擋手填錯 DOI——錯 DOI 指向的論文通常也存在）"]
+    mism = audit.get("mismatches") if isinstance(audit, dict) else None
+    if mism:
+        ds = [m.get("doi") for m in mism][:5]
+        return [f"⑤a DOI↔title 稽核有 {len(mism)} 筆不符未解決（DOI 可能填錯，sim<{audit.get('min_sim')}）：{ds}"
+                "；須修正 DOI 或標 UNVERIFIED 後重跑稽核，mismatches 清空才可放行"]
+    return []
+
+
 def check_exhaust(cache):
     man = _load(cache / "g1_legs_manifest.json")
     if man is None:
@@ -751,6 +780,7 @@ def _all_checks(cache):
             _safe("②b 須以標題＋摘要高敏初篩(禁只憑標題)", check_2b_abstract_screen, cache),
             _safe("④→⑤a 停頓點(引文追蹤後須核准才可交叉驗證)", check_citation_stop, cache),
             _safe("⑤a→⑤b 停頓點(交叉驗證/撤稿後須核准才可決定納入單位)", check_xref_stop, cache),
+            _safe("⑤a DOI↔title 一致性(必跑 doi_title_audit 落檔；非只查存在性，防手填錯DOI)", check_doi_title_audited, cache),
             _safe("⑤b→⑥ 停頓點(決定納入單位後須核准才可產三表/報告)", check_units_stop, cache),
             _safe("⑤b 不得有『待評估,無內容』(③Tier4終端桶不在⑤b重生)", check_units_no_nocontent, cache),
             _safe("⑤b 只消費切題(離題/待評估等同丟棄、不入分析)", check_units_only_concordant, cache),

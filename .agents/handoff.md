@@ -1,72 +1,32 @@
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-### 2026-06-25（第四輪【初審】）本輪審查範圍＝1 檔
-- **修改 `EBM_Search/scripts/build_search_report.py`**
-
-**動機**：⑥ 產 Phase 1 PDF 時，PDF 正規產生器出現 3 個 committed bug（先前只在 run-cache 繞過、未修 committed）：
-1. **(🔴 會 crash) `_out_dir` 只剝雙引號**（`build_search_report.py:82-88`）：settings.yaml 的 Windows 路徑用**單引號**（`pdf_output_dir: 'C:\…\reports'`，避免反斜線轉義），舊 regex `"?([^"\n]+)"?` 把單引號連同值一起回傳 `'C:\…'` → `makedirs` 報 WinError 123 crash、PDF 產不出。
-2. **(🟡 產出無副檔名) `--name` 未補 `.pdf`**（main）：傳 `--name foo`（無副檔名）→ 寫出 `foo`（無 `.pdf`），需手動改名。
-3. **(🔴 守門找不到) 渲染後未回寫 `pdf_path`**：產生器從不把 `pdf_path` 寫回 `_search_report.json` → gate_guard『Phase1 PDF 實體產出』報『無 pdf_path』，須手動登記。
-
-**修正**：
-1. regex 改 `['"]?([^'"\n#]+)['"]?`（容單/雙引號＋行內註解）→ 單引號設定可正確解析。
-2. main 補 `if not name.lower().endswith(".pdf"): name += ".pdf"`。
-3. `build()` 後把 `data["pdf_path"]=out_pdf` 回寫 `_search_report.json`。
-
-**驗證**：不帶 `--out`（靠單引號 config 解析）＋ `--name` 無副檔名 → 正確輸出 `…\reports\…Phase1.pdf`、pdf_path 已登記、檔案存在 159067 bytes。repo↔AppData 已同步。
-
-**請 Antigravity 審查**：(a) 單引號 regex 是否會誤吃路徑含 `#` 者（Windows 路徑通常無 `#`，但值得確認）；(b) `pdf_path` 回寫 `_search_report.json` 會不會與 `build_search_report_data.py` 的確定性重組衝突（下次重跑 data builder 會覆蓋掉 pdf_path，需重渲染才回填——是否可接受）。
-
-### 2026-06-25（第五輪【初審】）本輪審查範圍＝1 檔
-- **修改 `EBM_Analysis/tools/analysis_scope.py`**
-
-**動機（使用者糾正：『少給需補全文名單』）**：Phase 0 算 `need_manual_fulltext`（需補全文最小集）時**漏列**。根因鏈：
-1. EBM_Search ⑦ 交接包對「只有摘要/AI 合成」的文獻也樂觀標 `fulltext_status=have`＋`channel=online`（＝線上可得，**非實際已抓**）；
-2. `build_corpus_seed.py` 對 `have+online` 只要求有 doi/pmid（線上取得依據）即放行——故過得了契約；
-3. `ingest_seed` 把它映成 corpus notes `全文=have`；
-4. **`analysis_scope._has_fulltext` 舊版信任 bare `全文=have` notes → 當成『已取得全文』→ 該筆不進 need_manual** → 需補全文名單被少報（若未手動補抓，13 篇 base 會全被當『已有』、need 清單近乎空）。
-
-**修正**：`analysis_scope._has_fulltext`（`:52-59`）改為**只認實際本機證據**＝`inputs/<id>.pdf`／`inputs/<id>.txt`（實取全文存檔）／p1 `data_source=full_text`／notes 明確 `全文=have(manual|local)`；**不再認 bare `全文=have`**（那可能是交接樂觀的線上可得標記）。真已取得者必有本機 PDF/txt。
-
-**驗證**：`selftest_analysis_guards.py`＝「全部分析端守門有效」；對本輪 work-cache 重算 → base 13＝實取 8（有 .txt）＋需補 5，need 清單據實列出 5 篇。repo↔AppData 已同步。**尚未 commit。**（run-cache 端：⑦ seed 的 over-claim 屬我手刻 seed builder，非 committed；committed 防線＝本次 analysis_scope 修正＋既有 check_have_verified。）
-
-**請 Antigravity 審查**：(a) 移除 bare `全文=have` 信任會不會誤殺『真的已抓但只記 notes 未留檔』的舊案（應無——真已抓必留 PDF/txt）；(b) 是否該連 `build_corpus_seed.py` 也補『have+online 須帶實抓證明』的契約檢查，從源頭擋 over-claim。
-
-### 2026-06-25（第六輪【初審】）本輪審查範圍＝1 檔
-- **修改 `EBM_Search/scripts/zotero_import.py`**
-
-**動機（使用者糾正：『你並沒有匯入 Zotero』）**：兩個問題——
-1. **(流程缺失) Phase 0 步驟 6 的 Zotero 匯入我漏執行**：使用者已選「補全文＋匯入 Zotero」，我卻把它當『下一步選項』停下、沒做。已補做：對 analysis_set（13 篇 base NMA，grade_track∈{full,targeted_harms}）跑 `zotero_import.py --commit` → **成功寫入 13 筆、0 失敗**（collection 3Y5A4VY6）。
-2. **(committed 缺漏) `zotero_import.py` 漏發 `grade_track` tag**：spec 要 Zotero 子集鏡像 analysis_set、可依分析軌道篩出；舊版只發 `evidence/verdict/study/role`，**缺 `grade_track`**（docstring 還停在「僅 evidence/verdict」）。已補 `if rec.get("grade_track"): tag grade_track:<…>`。
-
-**驗證**：dry-run 13 筆、tags 含 `verdict:included`/`role:meta_analysis`/`grade_track:full`、Crossref 補全 metadata；`--commit` 後 success 13、failed 0。repo↔AppData 已同步。**尚未 commit（程式）。**
-
-**請 Antigravity 審查**：(a) `grade_track` tag 是否與既有 verdict/study/role tag 命名一致、Zotero 端可正常篩；(b) 是否該補一個『analysis_set → zotero 一鍵匯入』的薄包裝（目前須先手動把 _corpus.json 轉 verified.json-style 才能餵 zotero_import，易漏做——此次漏執行即與此摩擦有關）。
-
-### 2026-06-25（第七輪【初審】）本輪審查範圍＝2 檔（補上 error 3 的 committed 防線）
-- **新增 `EBM_Search/scripts/doi_title_audit.py`**
-- **修改 `EBM_Search/SEARCH_SPEC.md`**（⑤a 加『DOI↔標題一致性』鐵律）
-
-**動機**：error 3（3 篇 Consensus-SR 手填 DOI 錯、⑤a 只查存在性沒抓到）先前只『資料修＋提案 gate』、未建 committed 防線。現補：`doi_title_audit.py`＝獨立 Crossref DOI↔標題稽核器（`audit(records)`／`title_sim()`／`--in`／`--selftest`），low-similarity＝DOI 可能填錯→標 UNVERIFIED；SEARCH_SPEC 立鐵律『⑤a 必查 DOI↔title、嚴禁只查存在性』。**驗證**：`--selftest` 三案全過（同題 0.97、異題 0.22、空題 0）；對修正後 12 base 跑 audit＝0 mismatch。repo↔AppData 已同步。**尚未 commit。**
-
-**請 Antigravity 審查**：(a) MIN_SIM=0.55 門檻是否合理；(b) 是否該把它接成 gate_guard 硬 gate（讀 g6_verified／seed→audit→有 mismatch 即 FAIL），還是『⑤a 步驟必跑＋SEARCH_SPEC 鐵律』即足。
-
-### 2026-06-25（第八輪【初審】）本輪審查範圍＝1 檔
-- **修改 `EBM_Analysis/tools/analysis_scope.py`**
-
-**動機（使用者糾正：『需補全文 txt 一定要給、別手寫』）**：`需補全文清單.txt` 先前由我 run-cache 手寫，DOI 修正後忘了重寫→過時。兩個修正：
-1. **txt 改由工具確定性產出**：`analysis_scope.py` 每次跑都把 `need_manual_fulltext` 寫成 `<inputs>/_fulltext_supplement/需補全文清單.txt`（`write_need_manual_list()`），永遠與 scope 同步、不會過時、一定有檔。
-2. **`_has_fulltext` 只信本機檔案、不信 notes**：原本信任 notes `全文=have(manual)`，但 8000 字『線上摘錄』被誤標 have(manual)→被當完整全文→need_manual 少報（3 篇 base NMA 只有 8000 字摘錄卻沒列入需補）。改為：有本機 PDF 或 `.txt ≥ MIN_FULLTEXT_BYTES(9000)` 才算有全文（摘錄上限 ~8000 字落入需補）；**不再以 notes 的 `全文=…` 判 have**。
-
-**驗證**：檔案還原後重跑 → need_manual 正確＝3（rmed.2020／type-2 SR&NMA／anti-IL5/5R/13 NMA）、txt 自動寫出 3 篇；`selftest_analysis_guards.py`＝全部有效。repo↔AppData 同步。**尚未 commit。**
-
-**請 Antigravity 審查**：(a) MIN_FULLTEXT_BYTES=9000 是否穩健（耦合 resolve_one 的 8000 摘錄上限，若改上限需同步）；(b) 完全棄用 notes 判 have 會不會誤殺『真有全文但只記 notes、未留檔』的舊案（應無——真全文必留 PDF/txt）；(c) txt 目前只列 title＋建議檔名(paper_id)，無 DOI（corpus 未帶 doi）——是否該讓 ingest_seed 把 doi 帶進 corpus 以便 txt 列 DOI。
+（第 4–8 輪已結案——處置與逐條 disposition 見下方「已處理 / 2026-06-26 處理第四～八輪審查結果」；本區清空，待下一批送審。）
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
-（無當前仍存在的問題。screen_tiers.py 第三輪複審＝2✅＋1⚪、無 🔴/🟡，已處理並結案。）
+（第 4–8 輪審查結果已由 Claude Code 全數採納處置，見「已處理」；本區清空。）
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑;不同意紀錄不可刪）
+
+### 2026-06-26 處理第四～八輪審查結果（1🔴＋4🟡＋多⚪；全部採納，無不同意）
+所有 5 個 selftest 套件改後全綠（public_legs／doi_title_audit／screen_tiers／selftest_guards／selftest_analysis_guards）。
+
+- **第四輪 `build_search_report.py`**
+  - **✅已修 (a) 🟡 regex 對含 `#` 路徑提前截斷**：`_out_dir` 改用 **`yaml.safe_load`**（檔內 line 48 既已 import yaml）正規解析 `report.pdf_output_dir`，單/雙引號、行內註解、含 `#` 的合法路徑都交 yaml 處理；舊寬鬆 regex 退為 yaml 不可用時的 fallback。驗證：`_out_dir(None)` → `…\OneDrive\文件\EBM_Framework\reports`（引號剝除、無截斷、「文件」完整）。`build_search_report.py:82-100`。
+  - **⚪採納 (b)**：`pdf_path` 回寫 `_search_report.json` 與確定性重組的衝突可接受（中間產物，重渲染補回）；維持現狀。
+- **第五輪 `analysis_scope.py` ＋ `build_corpus_seed.py`**
+  - **⚪採納 (a)**：棄用 bare notes 不誤殺舊案（無實體檔案後續抽取必失敗，提早判 need_manual 是正確 fail-safe）；維持。
+  - **✅已修 (b) 🟡 fail-early at source**：`build_corpus_seed.py` 新增 `fulltext_warnings()`＋main 印非阻擋 ⚠️：full 軌標 `have(online)` 卻無 `pdf_file` → 提示『線上可讀≠可抽取的完整全文，Phase 0 仍須補全文』。**採非阻擋警示而非硬 error**：線上讀是框架 by-design（`have+online` 帶 doi/pmid 即合法），硬擋會破壞既有流程；下游 `analysis_scope` 檔案實證防線仍為主防線，本警示在交接當下就讓使用者看見『這些之後仍須補』。`build_corpus_seed.py:153-166, 198-202`。
+- **第六輪 `zotero_import.py`**
+  - **⚪採納 (a)**：`grade_track:xxx` 命名與既有 tag 一致、Zotero 可篩；無動作。
+  - **⚪採納 (b)**：一鍵匯入包裝**不在底層 `zotero_import.py` 加裝**，依 Antigravity 建議留待 Phase 0 腳本（`00_triage.md` 為 Zotero 權威匯入點）；本輪不實作，記為未來改善。
+- **第七輪 `doi_title_audit.py` / `SEARCH_SPEC.md`（含本批唯一 🔴）**
+  - **⚪採納 (a)**：`MIN_SIM=0.55` 合理穩健；維持。
+  - **✅已修 (b) 🔴 升機器 gate**：新增 **`gate_guard.check_doi_title_audited`**——`g6_verified.json` 存在且含有 DOI 的納入候選時，要求 `g6_title_audit.json` 存在且 `mismatches` 為空，否則 FAIL（gate 離線讀檔；連網比對在 ⑤a 落檔時做）。配套：`doi_title_audit.py` 加 `--out` 把 `{checked,min_sim,mismatches}` 落檔；`SEARCH_SPEC.md` ⑤a 鐵律補機器 gate 條文；`selftest_guards.py` 加 4 案（無稽核產物→FAIL／有不符未解→FAIL／乾淨→pass／全無 DOI(純 NCT)→放行防誤殺）。全綠。`gate_guard.py:707-732`、`gate_guard.py:_all_checks`。
+- **第八輪 `analysis_scope.py`**
+  - **✅已修 (a) 🟡 MIN_FULLTEXT_BYTES 隱式耦合**：抽到 **`settings.yaml`→`analysis.min_fulltext_bytes: 9000`**，`analysis_scope._min_fulltext_bytes()` 從設定讀、讀不到退 9000——耦合（線上摘錄上限）改一處可調。註：`8000` 非任何 code 常數（係線上摘錄被截的經驗長度），故無從 import 集中，改設定化是最合適作法。`analysis_scope.py:31-49`。
+  - **⚪採納 (b)**：完全棄 notes 判 have 不誤殺舊案（理由同第五輪 a）；維持（並順手修掉檔頭 docstring 仍寫『notes 判 have』的過時敘述）。
+  - **✅已修 (c) ⚪ ingest 帶 DOI**：`ingest_seed.py` 把 `doi/pmid` 原樣帶入 corpus；`analysis_scope` rec 帶 `doi`、`需補全文清單.txt` 改列 DOI（corpus 未帶時顯示『（交接包未帶；可用標題檢索）』）。`ingest_seed.py:180-186`、`analysis_scope.py`。
 
 ### 2026-06-25（補記，操作失誤；非 committed 程式）Zotero 匯入重複 24 筆
 **情境**：Phase 0 步驟 6 Zotero 匯入。第一次 `--commit` 已成功匯 12；但接著查 collection 的 GET **回傳陳舊的 0**（Zotero API 最終一致性延遲），我誤判成空集合、又用 **`--no-dedup`** 匯第二次 → collection 變 **24 筆（每 DOI 2 份）**。使用者出手自清，並指示『Zotero 重複我自己清』。

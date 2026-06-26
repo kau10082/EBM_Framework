@@ -83,10 +83,20 @@ def _out_dir(arg):
     if arg: return arg
     cfg = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
     if cfg.exists():
-        # 取值容許『單引號／雙引號／無引號』＋行內註解(# …)；單引號為 Windows 路徑常用寫法。
-        # 舊版只剝雙引號 → 單引號設定值會回傳 'C:\…'(含引號)→ makedirs 失敗(2026-06 使用者糾正)。
-        m = re.search(r'''pdf_output_dir\s*:\s*['"]?([^'"\n#]+)['"]?''', cfg.read_text(encoding="utf-8"))
-        if m and m.group(1).strip(): return m.group(1).strip()
+        # 用 yaml.safe_load 正規解析（單/雙引號、行內註解、含 '#' 的合法路徑都由 yaml 處理）。
+        # 早期用 regex 剝引號脆弱：只剝雙引號→單引號值含引號 makedirs 失敗(2026-06 使用者糾正)；
+        # 改 regex 容單引號後仍會被路徑內 '#' 提前截斷(Antigravity 第四輪 🟡)。本檔上方已 import yaml，故統一用之。
+        try:
+            import yaml
+            conf = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+            v = ((conf.get("report") or {}).get("pdf_output_dir")
+                 or (conf.get("search") or {}).get("pdf_output_dir")
+                 or conf.get("pdf_output_dir"))
+            if v and str(v).strip(): return str(v).strip()
+        except Exception:
+            # yaml 不可用/解析失敗 → 退回寬鬆 regex（容單/雙引號＋行內註解；極罕見路徑含 '#' 才會誤截）
+            m = re.search(r'''pdf_output_dir\s*:\s*['"]?([^'"\n#]+)['"]?''', cfg.read_text(encoding="utf-8"))
+            if m and m.group(1).strip(): return m.group(1).strip()
     return os.path.join(os.path.expanduser("~"), "Documents")
 
 def build(data, out_pdf):

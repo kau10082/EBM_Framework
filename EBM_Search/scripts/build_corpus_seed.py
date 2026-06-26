@@ -151,6 +151,22 @@ def validate(seed):
     return errs
 
 
+def fulltext_warnings(seed):
+    """非阻擋警示（Antigravity 第五輪 🟡 fail-early）：have+online 是『線上可讀』、**非本機已存完整全文**。
+    對 grade_track=full 的納入候選，若標 have/have_manual 卻無 pdf_file（線上管道）→ 提醒：下游 Phase 0
+    抽取需『實際取得完整全文』，光線上可讀＋8000 字摘錄不足以抽結果表（analysis_scope 已據此要求補全文）。
+    僅警示、不擋（線上讀是 by-design）；目的是在交接當下就讓使用者看見『這些之後仍須補全文』。"""
+    warns = []
+    for i, p in enumerate(seed.get("papers", [])):
+        tag = "papers[%d](%s)" % (i, p.get("paper_id") or p.get("title", "?")[:40])
+        track = (p.get("suggested") or {}).get("grade_track")
+        if track == "full" and p.get("fulltext_status") in ("have", "have_manual") \
+           and p.get("fulltext_channel") == "online" and not p.get("pdf_file"):
+            warns.append("%s：full 軌標 have(online) 但無本機 pdf_file——線上可讀≠可抽取的完整全文；"
+                         "Phase 0 仍須補全文後才能抽結果表" % tag)
+    return warns
+
+
 def _resolve_out_dir(args, seed):
     if args.out_dir:
         return os.path.abspath(args.out_dir)
@@ -197,6 +213,12 @@ def main(argv=None):
         for e in errs:
             sys.stderr.write("   - %s\n" % e)
         return 2
+
+    warns = fulltext_warnings(seed)
+    if warns:
+        sys.stderr.write("⚠️ 全文狀態提醒(%d 條，非阻擋；這些 full 候選之後仍須補全文)：\n" % len(warns))
+        for w in warns:
+            sys.stderr.write("   - %s\n" % w)
 
     papers = seed["papers"]
     n_inc = sum(1 for p in papers if p.get("verdict") == "included")

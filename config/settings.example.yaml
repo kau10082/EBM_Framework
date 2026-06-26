@@ -62,3 +62,4 @@ analysis:
   pdf_output_dir: ""                 # 評讀成品 PDF；留空＝寫到工作夾 outputs/。建議 <文件>\EBM_Framework\reports
   fulltext_dir: ""                   # Phase 0 人工補全文（grade_track∈full/targeted_harms 取不到全文者放這）；留空＝回退 EBM_Analysis/inputs/_fulltext_supplement/
   cjk_font: "C:/Windows/Fonts/msjh.ttc"   # PDF CJK 字型（系統字型）
+  min_fulltext_bytes: 9000   # analysis_scope：.txt 視為『有完整全文』的最小位元組數（設在線上摘錄上限~8000字之上，使截斷摘錄落入 need_manual）；改摘錄上限時改這一處

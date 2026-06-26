@@ -179,6 +179,12 @@ def main(argv=None):
         }
         if p.get("title"):
             item["title"] = p["title"]
+        # DOI/PMID 原樣帶入 corpus（Antigravity 第八輪 (c)）：使 analysis_scope 的『需補全文清單.txt』
+        # 能列 DOI，大幅提升使用者手動找文獻的效率；亦供下游 Zotero/稽核以 ID 比對。
+        if p.get("doi"):
+            item["doi"] = p["doi"]
+        if p.get("pmid"):
+            item["pmid"] = p["pmid"]
         if p.get("design_hint"):
             item["design"] = p["design_hint"]
         if p.get("included_trials"):
