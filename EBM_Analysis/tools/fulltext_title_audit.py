@@ -170,6 +170,7 @@ def main(argv):
     ap.add_argument("--cache", default=None); ap.add_argument("--inputs", default=None)
     ap.add_argument("--corpus", default=None)
     ap.add_argument("--json", action="store_true"); ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--out", dest="outfile", help="寫出稽核結果 JSON（如 cache/_fulltext_audit.json，供 analysis_gate 確認已稽核且無 mismatch）")
     a = ap.parse_args(argv)
     if a.selftest:
         return _selftest()
@@ -199,6 +200,15 @@ def main(argv):
         print("🔴 內容放錯 paper_id（須換成正確全文或修正 paper_id，不可進抽取）：")
         for r in bad:
             print(f"   - {r['paper_id']}：本機全文開頭其實是『{r.get('best_other_id')}』那篇（own={r['own']}<{r['best_other']}）")
+    if a.outfile:
+        out = {"base": len(base), "mismatch": len(bad), "unverifiable": len(unv), "no_fulltext": len(nf),
+               "ok": len(res) - len(bad) - len(unv) - len(nf),
+               "mismatches": [{"paper_id": r["paper_id"], "best_other_id": r.get("best_other_id"),
+                               "own": r.get("own"), "best_other": r.get("best_other")} for r in bad],
+               "results": res}
+        with open(a.outfile, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=1)
+        print(f"📝 稽核結果已寫出：{a.outfile}（mismatch={len(bad)}）")
     if a.json:
         print("\n--- JSON ---"); print(json.dumps(res, ensure_ascii=False, indent=2))
     return 2 if bad else 0

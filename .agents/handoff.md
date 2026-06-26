@@ -32,6 +32,37 @@ inputs 後援）。`selftest_analysis_guards` 全綠。repo 單一副本。**尚
 是否該讓 ingest/handoff 確保把『交接包實際夾』寫進 `run_state.paths.fulltext_dir`，使 branch 1 永遠命中？(b) `analysis`
 與 `report` 兩個 fulltext_dir 鍵語意重疊，是否該在 spec/example 釐清何者為 Phase0 補全文唯一真相。
 
+### 2026-06-26（第十二輪【初審】）本輪審查範圍＝5 檔（落實先前 2 項延後 🟡 增強）
+- **新增 `EBM_Analysis/tools/build_screening_flow.py`**（R10c：screening_flow 自動化）
+- **修改 `EBM_Analysis/tools/build_reports.py`**（渲染前自動帶入 screening_flow）
+- **修改 `EBM_Analysis/tools/analysis_gate.py`**（R9c：內容稽核升 Stop-hook 硬 gate）
+- **修改 `EBM_Analysis/tools/fulltext_title_audit.py`**（加 `--out` 落檔供 gate 讀）
+- **修改 `EBM_Analysis/phases/00_triage.md`**（步驟 5 命令補 `--out cache/_fulltext_audit.json`）
+
+**動機**：處理 Antigravity 第 9–10 輪採納為待辦的 2 項 🟡 增強。先前『分析端無 Stop-hook gate 基建』的前提
+**已過時**——`analysis_gate.py` 早已是分析端輕量 Stop-hook 守門（比照 search 端 gate_guard）。
+
+**A. screening_flow 自動化（R10c：防手填漂移）**
+  `build_screening_flow.build()`：檢索漏斗自 `_search_report.json` 的 `flow`（位置同 prisma_audit：
+  `run_state.paths.fulltext_dir/_search_report.json`）＋分析尾段自 `_corpus.json` grade_track 計數（最終 anchors＝
+  full(＋targeted_harms)、降背景＝light_summary）衍生；找不到檢索報告則優雅降級。`merge_into_synthesis()` 預設
+  **僅當缺漏才寫**（手填值保留；`--force`/`--refresh-flow` 才覆寫）。`build_reports.main` 渲染前自動帶入。
+
+**B. 內容稽核升硬 gate（R9c）**
+  `fulltext_title_audit.py` 加 `--out` 把結果（含 `mismatch` 計數＋清單）落 `cache/_fulltext_audit.json`；
+  `analysis_gate.check_fulltext_content_audited`：**定稿階段(stage∈FINAL_MARKERS)＋有 base＋_synthesis 已在**時，
+  缺 `_fulltext_audit.json` 或 `mismatch>0` → FAIL（離線讀產物、不連網不跑子程序，比照 search 端
+  `check_doi_title_audited`）。已併入 `analysis_gate.run` 的檢查串。
+
+**驗證**：`build_screening_flow --selftest`（4 案：漏斗+尾段組裝／anchor 標註／無報告降級／merge 三態）✅；
+`analysis_gate --selftest`（PDF gate 2 案＋內容稽核 gate 3 案：缺產物 FAIL／mismatch FAIL／乾淨放行）✅；
+`fulltext_title_audit --selftest` ✅；`selftest_analysis_guards` ✅；5 檔 py_compile 全過、import OK。**尚未 commit。**
+
+**請 Antigravity 審查**：(a) screening_flow 分析尾段僅自 corpus 推『最終 anchors＋降背景數』，中間態(候選→收斂)
+無法自動還原——這樣的『漏斗＋單一尾段』是否足夠，或該另記 Phase 0 各階段計數供完整還原；(b) 內容稽核 gate 綁
+`FINAL_MARKERS` 定稿觸發，但 `_fulltext_audit.json` 是否該在 inputs 仍在時(Phase 0)就強制存在、而非等定稿才檢；
+(c) `build_reports` 自動覆寫策略（缺漏才填、手填優先）是否合理。
+
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
 （無。）

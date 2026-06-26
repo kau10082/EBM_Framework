@@ -267,6 +267,17 @@ def final_report():
 
 
 def main():
+    # 渲染前：自動補 screening_flow（PRISMA 篩選流程）——自 _search_report.flow＋corpus 衍生，免手填防漂移
+    # （Antigravity 第十輪 🟡c）。僅當 _synthesis.json 缺 screening_flow 才寫（手填值保留；--refresh-flow 強制重建）。
+    if (CACHE / "_synthesis.json").exists():
+        try:
+            import build_screening_flow as _bsf
+            _flow = _bsf.build(str(CACHE))
+            _w, _r = _bsf.merge_into_synthesis(str(CACHE), _flow, force=("--refresh-flow" in sys.argv))
+            if _w:
+                sys.stderr.write(f"· screening_flow 自動帶入：{_r}\n")
+        except Exception as _e:
+            sys.stderr.write(f"· screening_flow 自動帶入略過（{_e}）\n")
     # 渲染前硬 gate：統合自我一致性（RoB2 overall=最不利／贊助偏誤歸發表偏誤／SoF 合併效應註來源）
     if (CACHE / "_synthesis.json").exists() and "--skip-consistency" not in sys.argv:
         try:

@@ -52,6 +52,35 @@ def check_pdf_at_finalize(state, cache_dir, outputs_dir):
             f"卻找不到合規 PDF（grade_pdf / outputs/FINAL_REPORT.pdf 不存在或 < {MIN_PDF_BYTES} bytes）："
             "無合規 PDF 不算完成（且定稿前須自跑 verify_all.py 貼 PASS）"]
 
+def check_fulltext_content_audited(state, cache_dir):
+    """定稿階段：base 文獻『本機全文內容↔paper_id 標題』稽核須做過且無 mismatch（Antigravity 第九輪 🟡c 升 gate）。
+    比照 search 端 `gate_guard.check_doi_title_audited`：離線讀稽核產物 `_fulltext_audit.json`（由
+    `fulltext_title_audit.py --out cache/_fulltext_audit.json` 產），缺檔或有 mismatch 即 FAIL——
+    『內容放錯 paper_id』(實測 updated-NMA 的全文其實是 Edris) 不可靜默進 GRADE。輕量、不連網、不跑子程序。"""
+    state = state or {}
+    stage = str(state.get("stage") or "").lower()
+    if not any(m in stage for m in FINAL_MARKERS):
+        return []  # 未到定稿
+    cache = Path(cache_dir)
+    if not (cache / "_synthesis.json").exists():
+        return []
+    corpus = _load(cache / "_corpus.json")
+    base = [p for p in (corpus or {}).get("papers", []) if p.get("grade_track") in ("full", "targeted_harms")] if corpus else []
+    if not base:
+        return []  # 無 base 可稽核
+    audit = _load(cache / "_fulltext_audit.json")
+    if audit is None:
+        return ["定稿階段卻無 _fulltext_audit.json：Phase 0 須跑 "
+                "`fulltext_title_audit.py --out cache/_fulltext_audit.json`（本機全文內容↔標題稽核），"
+                "確認無『內容放錯 paper_id』才可進抽取/定稿"]
+    mm = audit.get("mismatch")
+    if isinstance(mm, int) and mm > 0:
+        ids = [m.get("paper_id") for m in (audit.get("mismatches") or [])][:5]
+        return [f"_fulltext_audit.json 有 {mm} 筆內容↔標題 mismatch 未解決（內容放錯 paper_id）：{ids}"
+                "；須換正確全文或修正 paper_id 後重跑稽核"]
+    return []
+
+
 def _resolve():
     """回傳 (work_root, cache_dir, outputs_dir, state) 或 None（無法解析）。不建立資料夾。"""
     try:
@@ -69,10 +98,12 @@ def _active(cache):
 
 def run(cache, outputs, state, quiet=False):
     fails = []
-    try:
-        fails = check_pdf_at_finalize(state, cache, outputs)
-    except Exception as e:
-        fails = [f"analysis_gate 自身例外（fail-closed）：{str(e)[:80]}"]
+    for _fn in (lambda: check_pdf_at_finalize(state, cache, outputs),
+                lambda: check_fulltext_content_audited(state, cache)):
+        try:
+            fails += _fn() or []
+        except Exception as e:
+            fails.append(f"analysis_gate 自身例外（fail-closed）：{str(e)[:80]}")
     if fails:
         print("❌ analysis_gate 攔截："); [print("  -", f) for f in fails]; return 1
     if not quiet:
@@ -95,7 +126,23 @@ def main():
         none_fail = check_pdf_at_finalize({"stage": "phase3_done"}, str(d), str(d))
         ok2 = not none_fail
         print(("✅" if ok2 else "❌") + " selftest：未到定稿應放行 — " + ("放行（正確）" if ok2 else "誤擋！"))
-        sys.exit(0 if (ok and ok2) else 1)
+        # 內容稽核 gate：定稿＋有 base 卻無 _fulltext_audit.json → FAIL
+        d2 = Path(tempfile.mkdtemp()); (d2 / "_synthesis.json").write_text("{}", encoding="utf-8")
+        (d2 / "_corpus.json").write_text(json.dumps({"papers": [{"paper_id": "A", "grade_track": "full"}]}), encoding="utf-8")
+        f1 = check_fulltext_content_audited({"stage": "phase4_final"}, str(d2))
+        ok3 = bool(f1)
+        print(("✅" if ok3 else "❌") + " selftest：定稿有 base 卻未跑內容稽核應 FAIL — " + ("會 FAIL（有效）" if ok3 else "未 FAIL（失效！）"))
+        # 有稽核產物但 mismatch>0 → FAIL
+        (d2 / "_fulltext_audit.json").write_text(json.dumps({"mismatch": 1, "mismatches": [{"paper_id": "A"}]}), encoding="utf-8")
+        f2 = check_fulltext_content_audited({"stage": "phase4_final"}, str(d2))
+        ok4 = bool(f2)
+        print(("✅" if ok4 else "❌") + " selftest：內容稽核有 mismatch 應 FAIL — " + ("會 FAIL（有效）" if ok4 else "未 FAIL！"))
+        # 稽核乾淨(mismatch=0) → 放行
+        (d2 / "_fulltext_audit.json").write_text(json.dumps({"mismatch": 0, "mismatches": []}), encoding="utf-8")
+        f3 = check_fulltext_content_audited({"stage": "phase4_final"}, str(d2))
+        ok5 = not f3
+        print(("✅" if ok5 else "❌") + " selftest：內容稽核乾淨應放行 — " + ("放行（正確）" if ok5 else "誤擋！"))
+        sys.exit(0 if (ok and ok2 and ok3 and ok4 and ok5) else 1)
     # 解析 work
     if a.cache:
         cache = a.cache
