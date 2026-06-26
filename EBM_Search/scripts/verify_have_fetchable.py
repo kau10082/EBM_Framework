@@ -140,16 +140,32 @@ def _load_papers(path):
     obj = json.loads(Path(path).read_text(encoding="utf-8"))
     return obj.get("papers", obj if isinstance(obj, list) else [])
 
+
+def _write_back(path, papers):
+    """把 verify() 蓋好的 fulltext_verified（與降階 need_supplement）回寫原檔，保留外層 wrapper。
+    （否則本器只在記憶體改 papers，gate_guard.check_have_verified 讀檔仍見不到 fulltext_verified→
+    『跑了 verify 卻過不了守門』；2026-06 使用者實測缺失。可用 --no-write 關閉。）"""
+    p = Path(path)
+    obj = json.loads(p.read_text(encoding="utf-8"))
+    if isinstance(obj, dict) and isinstance(obj.get("papers"), list):
+        obj["papers"] = papers
+    else:
+        obj = papers
+    p.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="infile", required=True)
     ap.add_argument("--min-chars", type=int, default=3000)
     ap.add_argument("--only-included", action="store_true")
+    ap.add_argument("--no-write", action="store_true", help="只驗不回寫（預設會把 fulltext_verified 回寫原檔）")
     a = ap.parse_args()
     papers = _load_papers(a.infile)
     res = verify(papers, min_chars=a.min_chars, only_included=a.only_included)
-    print("verify_have_fetchable：實抓驗證 %d 筆 have(online)；通過 %d、假 have %d"
-          % (res["checked"], res["ok"], len(res["false_have"])))
+    if not a.no_write:
+        _write_back(a.infile, papers)   # 回寫 fulltext_verified，讓 gate_guard 讀得到（否則白驗）
+    print("verify_have_fetchable：實抓驗證 %d 筆 have(online)；通過 %d、假 have %d%s"
+          % (res["checked"], res["ok"], len(res["false_have"]), "" if a.no_write else "（已回寫原檔）"))
     for f in res["false_have"]:
         print("  ❌ 假 have（判有全文但實抓不到，應改 need-supplement）：%s | pmid=%s | doi=%s | 取回 %d 字元 | %s"
               % (f["paper_id"], f["pmid"], f["doi"], f["chars"], f["title"]))

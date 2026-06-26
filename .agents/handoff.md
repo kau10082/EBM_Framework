@@ -11,6 +11,7 @@
 - `EBM_Search/scripts/build_search_report.py`
 - `EBM_Search/scripts/gate_guard.py`
 - `EBM_Search/scripts/selftest_guards.py`
+- `EBM_Search/scripts/verify_have_fetchable.py`
 
 **問題背景**：使用者實跑 SITT-vs-delayed-SITT 主題、產出 ⑥ PDF 後回報「PRISMA 流程中間有空格沒填清楚」。追因＝`build_search_report_data.py` 組流程數字時用了**與實際 `g2b_screen.json`／`g6_verified.json` 不符的鍵名**，讀不到值→格子留空、且數字不對帳。
 
@@ -31,6 +32,8 @@
 2. **機器守門補洞**（`gate_guard.check_search_report_format`）：新增 PRISMA `flow` 每列稽核——每格 start/excluded/remain 去空白後須非空、不得含 `None`；非首列的 start/remain 須含數字（流程計數不得只剩標籤無數）。負向實測：注入空白 ②b remain→gate 正確 FAIL。
 3. **PDF 守門防誤報**（`gate_guard.check_pdf_emitted`）：相對 `pdf_path` 時回退到 `cache/相對`、`cache/檔名` 再判，避免 repo 根執行 hook 時相對路徑解析失敗→假性 FAIL（與產生器登記 abspath 雙保險）。
 4. **回歸測試**（`selftest_guards.py`）：新增「報告 PRISMA flow 格留空/缺數字」案例，固化此防線（`selftest_guards.py` 全 PASS）。
+
+**⑦ 交接時另抓到一個同類『靜默 no-op』缺失（`verify_have_fetchable.py`）**：該器 `verify()` 在記憶體把 `fulltext_verified=True` 蓋上去，但 `main()` **從不回寫檔案**→ 跑完 `verify_have_fetchable.py --in seed.json --only-included`（正是 `gate_guard.check_have_verified` FAIL 訊息建議的指令）後，seed 檔仍無 `fulltext_verified`→守門依舊 FAIL，使用者照建議做卻過不了關。已修：新增 `_write_back()` 並在 `main()` 預設回寫（`--no-write` 可關），保留外層 `papers` wrapper。實測：對本 run seed 跑一次→6 筆 `fulltext_verified=true` 落檔、`gate_guard` 由 FAIL 轉 PASS。
 
 **想被重點看 / 自己不確定的點**：
 - (d) 是否該乾脆**讓 `funnel_check.py` 也認得 `flow` 結構**（目前它只認 `funnel`＋`【算式】`，對現行報告等同休眠）？本輪選擇把流程稽核補進 `check_search_report_format`（已涵蓋空格/缺數），未動 `funnel_check`；請評估是否需進一步整併以免兩套流程檢查語意分歧。
