@@ -53,7 +53,41 @@ def _study_of(p):
     return m.group(1) if m else "—"
 
 
-def _has_fulltext(p, cache_dir, inputs_dir):
+def _supplement_dir(inputs_dir):
+    """『需補全文清單.txt』與使用者補件 PDF 的資料夾，依序解析（2026-06 使用者要求 honor config——
+    修正『設定 report.fulltext_dir 有值、但本工具卻寫死 <inputs>/_fulltext_supplement』的不一致）：
+      1) `run_state.paths.fulltext_dir`：EBM_Search→Analysis 交接包(_corpus_seed.json)所在的 per-topic 夾，
+         補件與交接包同處（最可靠；其值本身即由 config report.fulltext_dir 衍生）。
+      2) config `report.fulltext_dir` 有設值：用 `<fulltext_dir>/<run_state.slug>`（取不到 slug 則用根，
+         避免跨主題覆蓋）。
+      3) 回退 `<inputs>/_fulltext_supplement/`（fulltext_dir 留空時的原行為）。"""
+    st = {}
+    try:
+        sys.path.insert(0, str(HERE)); import run_state
+        st = run_state.load() or {}
+        ftd = (st.get("paths") or {}).get("fulltext_dir")
+        if ftd and str(ftd).strip():
+            return Path(str(ftd).strip())
+    except Exception:
+        pass
+    try:
+        import yaml
+        cfg = Path(__file__).resolve().parents[2] / "config" / "settings.yaml"
+        conf = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        # 兩個 config 鍵（見 settings.example.yaml）：`analysis.fulltext_dir`＝Phase 0 補全文專用鍵（優先）；
+        #   `report.fulltext_dir`＝「人工補全文＋交接包」根（相容；使用者多半只設這個，補件即與交接包同根）。
+        #   2026-06 修：原僅讀 analysis.* 卻拿到 None（使用者未設）→ 永遠落回退分支；改為 analysis→report 皆認。
+        fd = ((conf.get("analysis") or {}).get("fulltext_dir")
+              or (conf.get("report") or {}).get("fulltext_dir") or "").strip()
+        if fd:
+            slug = (st.get("slug") or "").strip() if isinstance(st, dict) else ""
+            return Path(fd) / slug if slug else Path(fd)
+    except Exception:
+        pass
+    return Path(inputs_dir) / "_fulltext_supplement"
+
+
+def _has_fulltext(p, cache_dir, inputs_dir, sup_dir=None):
     pid = p["paper_id"]
     # 1) p1 證據
     p1 = Path(cache_dir) / f"{pid}.p1.json"
@@ -70,11 +104,15 @@ def _has_fulltext(p, cache_dir, inputs_dir):
     # 2) 本機 PDF＝完整全文；或實取全文 .txt（但須『夠長』——線上摘錄常被截在 ~8000 字上限，
     #    那只是摘錄、不足以抽完整結果表，不算『有全文』。門檻 MIN_FULLTEXT_BYTES 設在摘錄上限之上，
     #    使 8000 字截斷摘錄落入 need_manual（2026-06 使用者糾正：3 篇 base 只有 8000 字摘錄卻被當有全文）。）
-    if (Path(inputs_dir) / f"{pid}.pdf").exists():
-        return True, "inputs/<id>.pdf"
-    txtp = Path(inputs_dir) / f"{pid}.txt"
-    if txtp.exists() and txtp.stat().st_size >= MIN_FULLTEXT_BYTES:
-        return True, "inputs/<id>.txt"
+    #    ★ 同時掃 inputs/ 與『補全文夾』(sup_dir)——使用者直接把 PDF 丟進補全文夾即被偵測，免再手動搬進 inputs。
+    for base, tag in ((Path(inputs_dir), "inputs"), (Path(sup_dir) if sup_dir else None, "補全文夾")):
+        if base is None:
+            continue
+        if (base / f"{pid}.pdf").exists():
+            return True, f"{tag}/<id>.pdf"
+        txtp = base / f"{pid}.txt"
+        if txtp.exists() and txtp.stat().st_size >= MIN_FULLTEXT_BYTES:
+            return True, f"{tag}/<id>.txt"
     # 3) **只信實際本機檔案／p1 證據，不信 notes 的『全文=…』marker**（2026-06 使用者糾正兩次而立）：
     #    notes 可能被上游樂觀標 have(online) 或被『8000 字線上摘錄』誤標 have(manual)——兩者都不是可抽取的
     #    完整全文。真正取得完整全文者必有本機 PDF 或夠長 .txt（上面已涵蓋）；故此處不再以 notes 判 have，
@@ -84,12 +122,13 @@ def _has_fulltext(p, cache_dir, inputs_dir):
 
 def compute(corpus, cache_dir, inputs_dir, include_background=False):
     papers = corpus["papers"]
+    sup_dir = _supplement_dir(inputs_dir)   # 補全文夾（honor config；一次解析、全程共用）
     wanted = set(ANALYSIS_TRACKS) | ({"light_summary"} if include_background else set())
     analysis_set, must, optional = [], [], []
     for p in papers:
         if p.get("grade_track") not in wanted:
             continue
-        has, why = _has_fulltext(p, cache_dir, inputs_dir)
+        has, why = _has_fulltext(p, cache_dir, inputs_dir, sup_dir)
         rec = {"paper_id": p["paper_id"], "study": _study_of(p), "grade_track": p.get("grade_track"),
                "role": p.get("role"), "relevance": p.get("relevance"),
                "is_primary_report": bool(p.get("is_primary_report")),
@@ -122,6 +161,7 @@ def compute(corpus, cache_dir, inputs_dir, include_background=False):
     return {"analysis_set": analysis_set,
             "need_manual_fulltext": must,            # 補這些即可（增進分析的最小集）
             "optional_fulltext": optional,           # full 次級 overlap 報告，補了不增進核心 GRADE
+            "supplement_dir": str(sup_dir),          # 補全文夾（honor config；need-list 寫此、亦掃此偵測 PDF）
             "warnings": warnings}                    # 防呆警示（需回 Phase 0 修；不阻擋）
 
 
@@ -152,16 +192,17 @@ def _print(scope):
 
 
 def write_need_manual_list(scope, inputs_dir):
-    """確定性寫出 `需補全文清單.txt` 到 <inputs>/_fulltext_supplement/（每次算 scope 都重寫，
-    使它與 need_manual_fulltext 永遠同步、不會像手寫版那樣過時）。回傳寫出的路徑。
+    """確定性寫出 `需補全文清單.txt` 到『補全文夾』（honor config analysis.fulltext_dir，見 `_supplement_dir`；
+    每次算 scope 都重寫，與 need_manual_fulltext 永遠同步、不會像手寫版那樣過時）。回傳寫出的路徑。
     2026-06 使用者糾正而立：此清單『一定要給』，故改由本工具確定性產出，不靠 Claude 手寫。"""
-    sup = Path(inputs_dir) / "_fulltext_supplement"
+    sup = Path(scope.get("supplement_dir") or _supplement_dir(inputs_dir))
     sup.mkdir(parents=True, exist_ok=True)
     nm = scope.get("need_manual_fulltext") or []
     lines = ["需補全文清單（EBM Phase 0；analysis_scope.py 確定性產出，每次重算即更新）",
              "=" * 72,
+             f"補全文夾：{sup}",
              "說明：以下為『分析錨點且全文尚未取得』者（每核心 Study 主報告＋真 harms）。",
-             "      請把 PDF 放進本資料夾，檔名＝下方『建議檔名』(＝paper_id.pdf；多為 DOI 去斜線)。",
+             "      請把 PDF 放進本資料夾（即上方路徑），檔名＝下方『建議檔名』(＝paper_id.pdf；多為 DOI 去斜線)。",
              ""]
     if not nm:
         lines.append("（目前分析集全文皆已取得，無需補。）")
@@ -176,13 +217,44 @@ def write_need_manual_list(scope, inputs_dir):
     return out
 
 
+def _selftest():
+    import tempfile, shutil
+    ok = True
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        inp = tmp / "inputs"; sup = tmp / "sup"; cache = tmp / "cache"
+        for d in (inp, sup, cache):
+            d.mkdir()
+        (sup / "P1.pdf").write_bytes(b"%PDF-1.4 dummy")                       # 補全文夾的 PDF
+        has, why = _has_fulltext({"paper_id": "P1"}, cache, inp, sup)
+        c1 = has and "補全文夾" in why
+        print(("  ✅" if c1 else "  ❌") + f" 補全文夾的 PDF 被偵測為有全文（免再搬進 inputs）：{why}"); ok &= c1
+        (sup / "P2.txt").write_text("x" * (MIN_FULLTEXT_BYTES + 10), encoding="utf-8")
+        (sup / "P3.txt").write_text("x" * 100, encoding="utf-8")
+        h2, _2 = _has_fulltext({"paper_id": "P2"}, cache, inp, sup)
+        h3, _3 = _has_fulltext({"paper_id": "P3"}, cache, inp, sup)
+        c2 = h2 and not h3
+        print(("  ✅" if c2 else "  ❌") + f" 補全文夾 .txt 夠長判有、過短(摘錄)判無：P2={h2} P3={h3}"); ok &= c2
+        h4, _4 = _has_fulltext({"paper_id": "P9"}, cache, inp, sup)
+        print(("  ✅" if not h4 else "  ❌") + " 兩處皆無檔→無全文"); ok &= (not h4)
+        c4 = isinstance(_supplement_dir(str(inp)), Path)
+        print(("  ✅" if c4 else "  ❌") + f" _supplement_dir 回傳 Path：{_supplement_dir(str(inp))}"); ok &= c4
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("✅ analysis_scope selftest 全過" if ok else "❌ 有失敗")
+    return 0 if ok else 1
+
+
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", default=None); ap.add_argument("--inputs", default=None)
     ap.add_argument("--corpus", default=None)
     ap.add_argument("--json", action="store_true"); ap.add_argument("--write", action="store_true")
     ap.add_argument("--include-background", action="store_true")
+    ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
+    if a.selftest:
+        return _selftest()
     try:
         sys.path.insert(0, str(HERE)); import workdir
         cache = a.cache or workdir.cache_dir()
