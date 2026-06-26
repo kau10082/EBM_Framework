@@ -155,7 +155,9 @@ def final_report():
     sc = syn.get("study_characteristics", [])
     if sc:
         drugs = "、".join(dict.fromkeys(r["drug"] for r in sc))
-        L += [f"**證據基礎**：{len(sc)} 項隨機對照試驗，涵蓋 {drugs}。詳見各 `*.report.md` 與 `synthesis.md`。", ""]
+        # 設計感知：證據體標籤由 syn.evidence_base_label 決定（NRSI 不得誤稱『隨機對照試驗』）。
+        _eb = syn.get("evidence_base_label") or "項隨機對照試驗"
+        L += [f"**證據基礎**：{len(sc)} {_eb}，涵蓋 {drugs}。詳見各 `*.report.md` 與 `synthesis.md`。", ""]
     L += ["---", ""]
 
     # ★ 標準版型＝Cochrane 後半段 6 段（與 PDF build_grade_pdf --layout cochrane5 同步；
@@ -177,7 +179,9 @@ def final_report():
               "> 證明各試驗臨床上可比（Cochrane Ch9）：設計／基準風險／介入·對照精確內容／追蹤。", "",
               _row(["試驗", "研究設計", "N／族群", "介入臂", "對照臂", "追蹤", "主要終點"]), _row(["---"] * 7)]
         for r in sc:
-            L.append(_row([r["trial"], (r.get("phase", "") + "；多中心雙盲平行"), r["n"],
+            # 設計感知：有 design_detail 用之（NRSI），否則回退 RCT 預設描述。
+            _dd = r.get("design_detail") or ((r.get("phase", "") + "；多中心雙盲平行"))
+            L.append(_row([r["trial"], _dd, r["n"],
                            f'{r["drug"]}（{r["dose"]}）', r["comparator"], r["duration"], r["primary_outcome"]]))
         L.append("")
         for st in syn.get("baseline_risk_strata", []):

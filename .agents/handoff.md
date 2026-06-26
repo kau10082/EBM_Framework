@@ -12,6 +12,7 @@
 - `EBM_Search/scripts/gate_guard.py`
 - `EBM_Search/scripts/selftest_guards.py`
 - `EBM_Search/scripts/verify_have_fetchable.py`
+- `EBM_Analysis/tools/build_reports.py`
 
 **問題背景**：使用者實跑 SITT-vs-delayed-SITT 主題、產出 ⑥ PDF 後回報「PRISMA 流程中間有空格沒填清楚」。追因＝`build_search_report_data.py` 組流程數字時用了**與實際 `g2b_screen.json`／`g6_verified.json` 不符的鍵名**，讀不到值→格子留空、且數字不對帳。
 
@@ -35,7 +36,10 @@
 
 **⑦ 交接時另抓到一個同類『靜默 no-op』缺失（`verify_have_fetchable.py`）**：該器 `verify()` 在記憶體把 `fulltext_verified=True` 蓋上去，但 `main()` **從不回寫檔案**→ 跑完 `verify_have_fetchable.py --in seed.json --only-included`（正是 `gate_guard.check_have_verified` FAIL 訊息建議的指令）後，seed 檔仍無 `fulltext_verified`→守門依舊 FAIL，使用者照建議做卻過不了關。已修：新增 `_write_back()` 並在 `main()` 預設回寫（`--no-write` 可關），保留外層 `papers` wrapper。實測：對本 run seed 跑一次→6 筆 `fulltext_verified=true` 落檔、`gate_guard` 由 FAIL 轉 PASS。
 
+**⑧ EBM_Analysis 報告器設計感知修正（`build_reports.py`）**：FINAL_REPORT 渲染器**硬編 RCT 措辭**——「證據基礎：N 項**隨機對照試驗**」與研究特徵表「phase＋；**多中心雙盲平行**」。實跑本主題（prompt-vs-delayed SITT）證據體**全為 NRSI（觀察性）**，照原樣渲染會把觀察性研究**誤標成 RCT**（正確性問題）。已改為**設計感知**：證據基礎標籤讀 `syn.evidence_base_label`（缺則回退舊 RCT 預設）、研究特徵表設計欄讀 `study_characteristics[].design_detail`（缺則回退「多中心雙盲平行」）。實測：報告正確輸出「9 項真實世界觀察性研究（NRSI；非隨機）」、設計欄顯示「NRSI 回顧性世代（claims；IPTW…）」。向後相容（無新欄位的舊 RCT run 行為不變）。`selfcheck_consistency`／`analysis_gate` 皆 PASS、PDF（Cochrane 6 段）正常產出。
+
 **想被重點看 / 自己不確定的點**：
+- (e) `build_reports.py` 的設計感知是否足夠（仍有其他 RCT 預設語彙散落在 rob_section 預設標題等；本輪只接了證據基礎標籤＋設計欄兩處，其餘以 syn 欄位覆寫）。
 - (d) 是否該乾脆**讓 `funnel_check.py` 也認得 `flow` 結構**（目前它只認 `funnel`＋`【算式】`，對現行報告等同休眠）？本輪選擇把流程稽核補進 `check_search_report_format`（已涵蓋空格/缺數），未動 `funnel_check`；請評估是否需進一步整併以免兩套流程檢查語意分歧。
 - (a) ⑤a 語意改動：把「UNVERIFIED 保留」改為「剔除」是否與 spec 一致？我的依據是 `check_unverified_excluded`（UNVERIFIED 不得入⑤b/交接/Zotero）＝實際就是剔除，原報告器文字「保留」與 gate 矛盾，故改。請確認此解讀。
 - (b) 相容鍵名取值順序是否有遺漏的 run-schema 變體（特別是 `kept` 可能為 list 的防呆）。
