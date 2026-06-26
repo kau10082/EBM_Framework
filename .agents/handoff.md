@@ -4,7 +4,7 @@
 
 ## 待審查（FROM Claude Code，需註明本輪審查範圍：僅哪幾個檔；一塊結案後清空）
 
-**【初審】功能塊：修正 ⑥ PRISMA 流程表中段空格未填 ＋ 流程數字不對帳**
+**【初審】功能塊：修正報告/交接層的「靜默失敗」三例 — ⑥ PRISMA 流程空格未填＋數字不對帳、⑥ PDF 路徑相對致守門誤報、⑦ verify_have_fetchable 驗了不回寫**
 
 **本輪審查範圍：僅以下檔案**
 - `EBM_Search/scripts/build_search_report_data.py`
