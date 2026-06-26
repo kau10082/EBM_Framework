@@ -159,6 +159,21 @@ def main():
     # 正向：無 tracks（單軌報告）→ 不適用、通過
     allok &= _passes("Synthesis 無 tracks（單軌）應通過", V.check_synthesis_tracks({"sof": []}))
 
+    # 本機全文內容↔paper_id 標題稽核（2026-06 使用者糾正而立；補 ⑤a DOI↔title 的分析端對稱缺口）
+    import fulltext_title_audit as FTA
+    _A = "Monoclonal antibodies in type 2 asthma: an updated network meta-analysis"
+    _B = "Monoclonal antibodies in type 2 asthma: a systematic review and network meta-analysis"
+    _edris = "REVIEW Open Access " + _B + " Ahmed Edris Silke De Feyter Tania Maes Guy Joos Lies Lahousse Abstract"
+    _ps = [{"paper_id": "A_updated", "title": _A}, {"paper_id": "B_sr", "title": _B}]
+    _tx = {"A_updated": _edris, "B_sr": _edris}   # A 的本機全文其實是 B 的文 → A 應 mismatch
+    _r = {x["paper_id"]: x for x in FTA.audit(_ps, lambda pid: _tx.get(pid))}
+    allok &= _fires("本機全文內容放錯 paper_id（內容是別篇）", FTA.mismatches(list(_r.values())))
+    allok &= _passes("正確全文不誤報 mismatch", FTA.mismatches([_r["B_sr"]]))
+    _unv = FTA.audit([{"paper_id": "Z", "title": "Distinct Heading Alpha Beta Gamma"}],
+                     lambda p: "Introduction Methods Results")[0]["status"] == "unverifiable"
+    print(("  ✅" if _unv else "  ❌") + " 標題缺如(.txt 截掉封面)→unverifiable 不誤殺（防誤報）")
+    allok &= _unv
+
     print("\n" + ("✅ 全部分析端守門有效。" if allok else "❌ 有守門未如預期，請檢查。"))
     return 0 if allok else 1
 
