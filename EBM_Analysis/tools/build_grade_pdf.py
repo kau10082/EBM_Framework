@@ -136,7 +136,10 @@ def build(infile, out, font=None, layout="cochrane5"):
             rows.append([cell(r.get("trial", ""), 7.5), cell(r.get("randomization", ""), 7.5), cell(r.get("deviations", ""), 7.5),
                          cell(r.get("missing_data", ""), 7.5), cell(r.get("measurement", ""), 7.5), cell(r.get("selective_reporting", ""), 7.5),
                          cell(r.get("overall", ""), 7.5), cell((r.get("evidence_basis", "") + "：" + (r.get("note", "") or "")), 7)])
-        t = Table(rows, colWidths=FR(0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.07, 0.43)); t.setStyle(tstyle()); S.append(t)
+        # 欄寬資料驅動：AMSTAR2/MAIC 的欄內容（綜整名＋關鍵領域敘述）比 RCT 的 RoB2(短判定詞)長，
+        # 故 rob_section.colwidths 可覆寫預設，避免窄欄(0.08)文字溢出（2026-06 使用者回報）。
+        _cw = rsec.get("colwidths") or [0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.07, 0.43]
+        t = Table(rows, colWidths=FR(*_cw)); t.setStyle(tstyle()); S.append(t)
         S.append(Spacer(1, 3 * mm))
 
         # ── 3 數據綜整與統合分析（7 欄）──
