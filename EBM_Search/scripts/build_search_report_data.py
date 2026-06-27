@@ -61,8 +61,11 @@ def build_data(cache, mailto):
     g6recs = g6.get("records", []) if isinstance(g6, dict) else (g6 or [])
     ver_by_pmid = {str(r.get("pmid")): r for r in g6recs if r.get("pmid")}
     ver_by_doi = {r.get("doi"): r for r in g6recs if r.get("doi")}
-    retracted = sum(1 for r in g6recs if r.get("verify") == "RETRACTED")
-    unverified = sum(1 for r in g6recs if r.get("verify") == "UNVERIFIED")
+    # ⑤a 驗證判定鍵相容兩種寫法：⑤a 落檔多用 verdict、報告器舊版用 verify（與 gate_guard 同樣 _vv 相容）。
+    def _vv(r): return r.get("verify") or r.get("verdict")
+    retracted = sum(1 for r in g6recs if _vv(r) == "RETRACTED")
+    # 無法驗證＝UNVERIFIED 與 UNRESOLVED（無 PMID/DOI 可驗）皆計入，兩者都不入 ⑤b/交接（與 gate 一致）。
+    unverified = sum(1 for r in g6recs if _vv(r) in ("UNVERIFIED", "UNRESOLVED"))
 
     # ── 精確判『文獻類型/研究設計』：讀每篇 pubtype＋摘要，逐篇判實際設計，
     #    嚴禁用 ⑤b 的 design 桶一概標「真實世界」(那只是『核心 vs 背景』分流，非研究設計)。
@@ -173,18 +176,48 @@ def build_data(cache, mailto):
 
     # ---- flow numbers ----
     nU = (union.get("count", "") if isinstance(union, dict) else len(union))
-    surv = g2b.get("survivors", ""); drop = g2b.get("dropped", "")
+    # ②b 保留/剔除數：優先由 records 的 verdict 實算（最可靠），缺 records 才退回數值型計數鍵。
+    # （相容各 run 的 g2b_screen 鍵名差異；不可直接取 kept/survivors——它們可能是『清單』而非計數，
+    #  直接 str() 會把整個 list 印進 PRISMA 格子。故只接受『可轉成數字』的計數鍵。）
+    _g2b_recs = g2b.get("records") or []
+    def _g2b_count(verdict, *count_keys):
+        if _g2b_recs:
+            return sum(1 for r in _g2b_recs if r.get("verdict") == verdict)
+        for k in count_keys:
+            v = g2b.get(k)
+            if isinstance(v, int):
+                return v
+            if isinstance(v, list):
+                return len(v)
+        return ""
+    surv = _g2b_count("kept", "kept_count", "survivors", "kept")
+    drop = _g2b_count("removed", "removed_count", "dropped", "removed")
     from collections import Counter
     vc = Counter(r.get("verdict") for r in g3)
     n_hit = vc.get("切題", 0); n_off = vc.get("離題", 0); n_no = vc.get("全文及摘要皆無", 0)
-    n_new = g4.get("n_new_concordant", 0)
+    # ④ 引文追蹤新增切題數：相容鍵名，缺則由 g4_citation_tracking.json 的 new_relevant 或 g4 的 hits 實算。
+    g4track = _load(cache / "g4_citation_tracking.json") or {}
+    n_new = (g4.get("n_new_concordant") or g4.get("new_切題")
+             or len(g4track.get("new_relevant") or [])
+             or len(g4.get("hits") or []) or 0)
+    # 自驗（防本輪 bug 復發）：PRISMA 每個流程數字都必須是整數。本輪根因＝讀 cache 用了不符的鍵名
+    # （survivors/dropped/verify/n_new_concordant）→ 讀到空字串 "" → 格子留空、流程不對帳，卻無人擋。
+    # 故在組 flow 前硬擋：任一數字非 int（疑似鍵名不符讀到空值）即 raise，讓產生器『大聲失敗』而非靜默出空格。
+    _flow_nums = {"union(nU)": nU, "②b保留(surv)": surv, "②b剔除(drop)": drop,
+                  "③切題(n_hit)": n_hit, "③離題(n_off)": n_off, "③皆無(n_no)": n_no,
+                  "④新增(n_new)": n_new, "撤稿(retracted)": retracted, "無法驗證(unverified)": unverified}
+    _bad = [k for k, v in _flow_nums.items() if not isinstance(v, int)]
+    if _bad:
+        raise ValueError("PRISMA 流程數字缺失/非整數（疑似 cache 鍵名與產生器不符→讀到空值）：%s。"
+                         "請確認 g2b_screen.json（kept/removed 由 records 實算）、g6_verified.json（verdict）、"
+                         "g4_citation*.json（new_relevant/hits）的鍵名與本產生器一致。" % ", ".join(_bad))
     flow = [
         {"stage": "識別 Identification：六腿廣蒐→跨腿去重", "start": "—", "excluded": "—", "remain": "%s（文獻聯集）" % nU},
         {"stage": "②b 高敏初篩（標題＋摘要）", "start": str(nU), "excluded": "剔除明顯離題 %s" % drop, "remain": str(surv)},
         {"stage": "③ 嚴格離題篩 Tier1–4（全文）", "start": str(surv), "excluded": "離題 %d、全文及摘要皆無 %d" % (n_off, n_no), "remain": "切題 %d" % n_hit},
         {"stage": "④ 引文追蹤（聚焦種子，收斂）", "start": str(n_hit), "excluded": "—（新增 +%d）" % n_new, "remain": str(n_hit + n_new)},
-        {"stage": "⑤a 交叉驗證（Crossref＋PubMed）", "start": str(n_hit + n_new), "excluded": "撤稿 −%d（UNVERIFIED %d 保留）" % (retracted, unverified), "remain": str(n_hit + n_new - retracted)},
-        {"stage": "⑤b 決定納入單位", "start": str(n_hit + n_new - retracted), "excluded": "背景 %d、待評估會議摘要 %d" % (len(bg), len(aw)), "remain": "核心 %d（＋base SR/MA %d）" % (len(core), len(base_srma))},
+        {"stage": "⑤a 交叉驗證（Crossref＋PubMed）", "start": str(n_hit + n_new), "excluded": "撤稿 −%d、無法驗證 −%d（皆剔除，不入分析）" % (retracted, unverified), "remain": str(n_hit + n_new - retracted - unverified)},
+        {"stage": "⑤b 決定納入單位", "start": str(n_hit + n_new - retracted - unverified), "excluded": "背景 %d、待評估會議摘要 %d" % (len(bg), len(aw)), "remain": "核心 %d（＋base SR/MA %d）" % (len(core), len(base_srma))},
     ]
     reconcile = "對帳：核心 %d ＋ 背景 %d ＋ 待評估 %d ＝ %d。" % (len(core), len(bg), len(aw), len(core) + len(bg) + len(aw))
 

@@ -195,8 +195,10 @@ def main():
     build(data, out_pdf)
     # 把 pdf_path 登記回 _search_report.json，供 gate_guard『Phase1 PDF 實體產出』找得到
     # (舊版渲染後未回寫→守門報『_search_report.json 無 pdf_path』；2026-06 使用者糾正)
+    # 登記『絕對路徑』：Stop hook 的 gate_guard 由 repo 根（CLAUDE_PROJECT_DIR）執行，
+    # 相對路徑（如 cache/...）會解析失敗→誤報『PDF 不存在』。寫 abspath 才不受 CWD 影響。
     try:
-        data["pdf_path"] = out_pdf
+        data["pdf_path"] = os.path.abspath(out_pdf)
         Path(src).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     except Exception:
         pass

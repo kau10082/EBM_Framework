@@ -430,7 +430,23 @@ def check_search_report_format(cache):
     ss = data.get("search_strings") or []
     if not ss: f.append("search_strings 空（第2段 須各腿逐字布林字串）")
     elif not any((s.get("query") or "").strip() for s in ss): f.append("search_strings 無任何非空 query（MECIR 可重製）")
-    if len(data.get("flow") or []) < 3: f.append("flow < 3 階（第3段 PRISMA 流程須逐階段數字）")
+    flow = data.get("flow") or []
+    if len(flow) < 3: f.append("flow < 3 階（第3段 PRISMA 流程須逐階段數字）")
+    # PRISMA 每格不得留空/缺數字（防本輪 bug：產生器讀錯 cache 鍵→格子空白/不對帳卻無人擋）。
+    # 規則：每列 start/excluded/remain 去空白後須非空；除首列(識別 Identification，start/excluded 容許『—』占位)外，
+    # start 與 remain 必須含至少一個數字（它們恆為流程計數）；任何格含 'None'/空＝未填妥。
+    for i, st in enumerate(flow):
+        if not isinstance(st, dict):
+            f.append(f"flow[{i}] 非物件"); continue
+        for col in ("start", "excluded", "remain"):
+            cell = str(st.get(col, "")).strip()
+            if cell == "" or "None" in cell:
+                f.append(f"flow[{i}]（{str(st.get('stage',''))[:18]}）的 `{col}` 格留空/未填妥：{cell!r}")
+        if i > 0:  # 非首列：start/remain 須含數字（流程計數不得只剩標籤、無數）
+            for col in ("start", "remain"):
+                cell = str(st.get(col, ""))
+                if not _re.search(r"\d", cell):
+                    f.append(f"flow[{i}]（{str(st.get('stage',''))[:18]}）的 `{col}` 無數字（流程計數缺失）：{cell!r}")
     inc = data.get("included") or []
     if not inc:
         f.append("included 空（第4段 至少列核心）")
@@ -621,6 +637,12 @@ def check_pdf_emitted(cache):
         return ["_search_report.json 無 pdf_path：Phase1 PDF 未產出/未登記（無 PDF 不算 Phase1 完成；"
                 "路徑須由產生器以 settings.report.pdf_output_dir 解析後登記，勿寫死）"]
     p = Path(pdf)
+    # 防誤報：產生器理應登記『絕對路徑』，但若舊版登記了相對路徑，gate 由 repo 根執行會解析失敗→
+    # 誤判『PDF 不存在』。故相對路徑時，依序回退到 cache 目錄、cache/檔名 再判，避免假性 FAIL。
+    if not p.exists() and not p.is_absolute():
+        for cand in (cache / pdf, cache / p.name):
+            if cand.exists():
+                p = cand; break
     if not p.exists() or p.stat().st_size < 1024:
         return [f"登記的 Phase1 PDF 不存在或過小(<1KB)：{pdf}"]
     return []
