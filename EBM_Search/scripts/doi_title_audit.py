@@ -18,7 +18,7 @@ similarity 低於門檻＝DOI↔title 不符＝該 DOI 可能填錯，須標 UNV
   mism = A.audit(records, mailto="x@y")              # 回 [{doi,recorded,crossref,sim}, ...]（空=全符）
   sim  = A.title_sim(a, b)                            # 0..1（離線，純字串）
 """
-import sys, json, re, time, argparse, difflib, urllib.request, urllib.parse
+import sys, json, re, time, argparse, difflib, urllib.request, urllib.parse, urllib.error
 
 MIN_SIM = 0.55   # 標題相似度門檻；低於此＝DOI↔title 不符（保守，避免標點/排版差異誤殺）
 
@@ -33,29 +33,41 @@ def title_sim(a, b):
     return difflib.SequenceMatcher(None, na, nb).ratio()
 
 def crossref_title(doi, mailto, timeout=30):
+    """回 (status, title)：status ∈ ok／not_found（404＝DOI 不存在，最典型的幻覺 DOI）／error（網路等暫時失敗）。
+    三態不可混：not_found 是『來源真的沒有』＝稽核 FAIL；error 是『抓取失敗』＝不可當已比對放行（fail-closed）。"""
     try:
         u = "https://api.crossref.org/works/" + urllib.parse.quote(doi) + "?mailto=" + mailto
         req = urllib.request.Request(u, headers={"User-Agent": "EBM-Framework/0.22 (mailto:%s)" % mailto})
         m = json.loads(urllib.request.urlopen(req, timeout=timeout).read())["message"]
-        return (m.get("title") or [""])[0]
-    except Exception:
-        return None
+        return "ok", (m.get("title") or [""])[0]
+    except urllib.error.HTTPError as e:
+        return ("not_found", "") if e.code == 404 else ("error", "HTTP %s" % e.code)
+    except Exception as e:
+        return "error", str(e)[:60]
 
 def audit(records, mailto="ebm@example.com", sleep=0.2):
-    """回不符清單（空＝全部 DOI↔title 一致或無法查）。records: [{doi,title,...}]。"""
-    out = []
+    """回 {"checked": 實際完成比對數, "mismatches": [...], "not_found": [...], "errors": [...]}。
+    records: [{doi,title,...}]。**斷網/404 不得靜默放行**：曾經任何查不到都 continue，
+    斷網跑一次＝mismatches 0、宣稱 checked=n → gate 誤認 ⑤a 已誠實比對（fail-open）。"""
+    mism, not_found, errors = [], [], []
+    checked = 0
     for r in records:
         doi = (r.get("doi") or "").strip()
         rec_t = r.get("title") or ""
         if not doi or not rec_t:
             continue
-        ct = crossref_title(doi, mailto); time.sleep(sleep)
-        if ct is None:
-            continue   # Crossref 查不到（非索引/暫時失敗）→ 不誤判為不符
+        status, ct = crossref_title(doi, mailto); time.sleep(sleep)
+        if status == "not_found":
+            not_found.append({"doi": doi, "recorded": rec_t[:64]})   # DOI 不存在＝疑幻覺 DOI，稽核 FAIL
+            continue
+        if status == "error":
+            errors.append({"doi": doi, "detail": ct})                # 抓取失敗＝未比對，不可計入 checked
+            continue
+        checked += 1
         sim = title_sim(rec_t, ct)
         if sim < MIN_SIM:
-            out.append({"doi": doi, "recorded": rec_t, "crossref": ct, "sim": round(sim, 2)})
-    return out
+            mism.append({"doi": doi, "recorded": rec_t, "crossref": ct, "sim": round(sim, 2)})
+    return {"checked": checked, "mismatches": mism, "not_found": not_found, "errors": errors}
 
 def _selftest():
     ok = True
@@ -87,16 +99,25 @@ def main():
         ap.print_help(); return
     recs = json.loads(open(a.infile, encoding="utf-8").read())
     recs = recs if isinstance(recs, list) else recs.get("papers") or recs.get("records") or []
-    mism = audit(recs, a.mailto)
+    res = audit(recs, a.mailto)
+    mism, not_found, errors = res["mismatches"], res["not_found"], res["errors"]
     n_doi = sum(1 for r in recs if (r.get("doi") or "").strip())
     if a.outfile:
         with open(a.outfile, "w", encoding="utf-8") as f:
-            json.dump({"checked": n_doi, "min_sim": MIN_SIM, "mismatches": mism}, f, ensure_ascii=False, indent=1)
-        print(f"wrote {a.outfile} (checked={n_doi}, mismatches={len(mism)})")
+            json.dump({"checked": res["checked"], "n_doi": n_doi, "min_sim": MIN_SIM,
+                       "mismatches": mism, "not_found": not_found, "errors": errors},
+                      f, ensure_ascii=False, indent=1)
+        print(f"wrote {a.outfile} (checked={res['checked']}/{n_doi}, mismatches={len(mism)}, "
+              f"not_found={len(not_found)}, errors={len(errors)})")
     print(f"DOI↔title MISMATCHES: {len(mism)}")
     for m in mism:
         print(f"  sim={m['sim']} | DOI {m['doi']}\n     recorded: {m['recorded'][:64]}\n     crossref: {m['crossref'][:64]}")
-    sys.exit(2 if mism else 0)
+    if not_found:
+        print(f"DOI NOT FOUND (404，疑幻覺 DOI)：{len(not_found)}")
+        for m in not_found: print(f"  DOI {m['doi']} | {m['recorded']}")
+    if errors:
+        print(f"查詢失敗（≠已比對，請恢復網路重跑）：{len(errors)}")
+    sys.exit(2 if (mism or not_found or errors) else 0)
 
 if __name__ == "__main__":
     main()

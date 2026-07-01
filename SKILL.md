@@ -39,7 +39,7 @@ description: >-
 ## 執行流程（分階段、逐關停頓）
 
 ### Phase 1 — 檢索（★硬性逐關停頓；嚴禁跳關、嚴禁一次跑多關、嚴禁提早驗證）
-**Phase 1 切兩段、契約交班（v0.21）**：**Stage A＝關 ⓪–②c（廣搜→去重→高敏初篩→全文/摘要取得性）** → 以 `build_stage1_corpus.py` 寫出交接契約 `_stage1_corpus.json`（每筆 metadata＋全文/摘要狀態＋取得管道；無內容者入 awaiting＝待評估），經邊界硬 gate `stage1_check.py` PASS（全文狀態 resolved、待評估不混入候選、每腿取盡）才進；**Stage B＝關 ③–⑦（嚴格篩→引文追蹤→交叉驗證→決定納入單位）只讀該 JSON**，輸出 `_corpus_seed.json`。此切割把「待評估屬哪關」釘成磁碟邊界、降分心強遵從。**每關報告前自己先 `gate_guard.py --cache <dir>` 並貼 PASS。**
+**Phase 1 單一流程（v0.22；Stage A/B 切分與 `_stage1_corpus` 契約已廢除，勿再找 `build_stage1_corpus.py`/`stage1_check.py`——腳本已移除）**：⓪–⑦ 逐關推進、共用同一 cache（`g0_strategy` → `g1_legs_manifest`/`g1_union` → `g2b_screen`/`g2b_survivors` → `g3_FINAL_screen` → `g4_citation_tracking` → `g6_verified` → `g7_units` → `_search_report`），收尾輸出 `_corpus_seed.json`。各關產物由 `gate_guard.py` 對應硬 gate 看守（停頓點防搶跑、每腿取盡、②b/④ 須標題＋摘要篩、撤稿與無法驗證剔除、⑤b 只放行切題、⑥ 報告 5 段版型＋流程數字閉合）。**每關報告前自己先 `python EBM_Search/scripts/gate_guard.py --cache <dir>` 並貼 PASS。**
 
 完整規格讀 `EBM_Search/SEARCH_SPEC.md`。**下列停頓點是硬性規定**：每一關都必須「**做完該關 → 停下來逐項報告 → 等使用者明確確認**」才進下一關。**嚴禁合併關卡、嚴禁跳關、嚴禁在廣蒐／篩選階段就做 Crossref 驗證、嚴禁在篩選收斂前就建交接包。**
 

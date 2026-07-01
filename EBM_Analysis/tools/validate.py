@@ -34,6 +34,11 @@ def _subschema(full, path):
     node = full
     for k in path:
         node = node[k]
+    # 子 schema 內的 $ref（如 #/definitions/sof_row）指向『文件根』的 definitions——
+    # 抽出子節點後若不帶上 definitions，任何含 sof 的 synthesis 一驗就 PointerToNowhere crash
+    # （＝synthesis 的 schema 驗證從未真正跑過）。
+    if isinstance(node, dict) and "definitions" not in node and isinstance(full.get("definitions"), dict):
+        node = {**node, "definitions": full["definitions"]}
     return node
 
 

@@ -51,6 +51,8 @@
         "properties": {
           "paper_id": { "type": "string" },
           "title": { "type": "string" },
+          "doi": { "type": ["string", "null"], "description": "自交接包 _corpus_seed 帶入（ingest_seed 寫入；analysis_scope 列需補全文清單用）——曾不在白名單，ingest 產的草稿被本 schema 必拒" },
+          "pmid": { "type": ["string", "null"], "description": "自交接包 _corpus_seed 帶入（同 doi）" },
           "relevance": {
             "enum": ["direct", "indirect", "background", "excluded"],
             "description": "相對於 review_question 的相關性"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""生成 outputs/FINAL_REPORT.pdf：前半＝流程圖＋說明，後半＝分析結果（含 SoF 表）。
+"""生成 outputs/FINAL_REPORT_flowchart.pdf（流程圖版；規格定版 FINAL_REPORT.pdf 由 tools/build_grade_pdf.py 產）：\n前半＝流程圖＋說明，後半＝分析結果（含 SoF 表）。
 
 ★ 禁用 emoji／彩色符號（⚠️✅❌⭐🚫 等含 U+FE0F）——微軟正黑無此字形，會變方格 □。
   警示用文字「【注意】」「※」或彩色底框；安全符號：● ○ • → ① ② ③ ≈ – —。
@@ -20,14 +20,23 @@ import re
 from pathlib import Path
 
 # ── 字型 ────────────────────────────────────────────
-try:
-    pdfmetrics.registerFont(TTFont('CJK', 'C:/Windows/Fonts/msyh.ttc', subfontIndex=0))
-    FONT = 'CJK'
+_FONT_CANDS = ['C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/msjh.ttc',
+               '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+               '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+               '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+               '/System/Library/Fonts/PingFang.ttc']
+FONT = FONTB = None
+for _fp in _FONT_CANDS:
+    try:
+        pdfmetrics.registerFont(TTFont('CJK', _fp, subfontIndex=0)); FONT = FONTB = 'CJK'; break
+    except Exception:
+        continue
+if FONT == 'CJK':
     try:
         pdfmetrics.registerFont(TTFont('CJKB', 'C:/Windows/Fonts/msyhbd.ttc', subfontIndex=0)); FONTB = 'CJKB'
     except Exception:
-        FONTB = 'CJK'
-except Exception:
+        pass
+if FONT is None:
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light')); FONT = FONTB = 'STSong-Light'
 pdfmetrics.registerFontFamily('CJK', normal=FONT, bold=FONTB, italic=FONT, boldItalic=FONTB)
@@ -61,7 +70,10 @@ def _deep_safe(o):
     if isinstance(o, list): return [_deep_safe(x) for x in o]
     if isinstance(o, dict): return {k: _deep_safe(v) for k, v in o.items()}
     return o
-_SD = _deep_safe(json.loads((_CACHE / '_synthesis.json').read_text(encoding='utf-8')))
+_SYNP = _CACHE / '_synthesis.json'
+if not _SYNP.exists():
+    raise SystemExit('找不到 %s：請先完成 Phase 4（產出 cache/_synthesis.json）再產本 PDF' % _SYNP)
+_SD = _deep_safe(json.loads(_SYNP.read_text(encoding='utf-8')))
 SYN = _SD.get('synthesis', _SD)
 _CP = _CACHE / '_corpus.json'
 _CORP = _deep_safe(json.loads(_CP.read_text(encoding='utf-8'))) if _CP.exists() else {'papers': []}
@@ -78,6 +90,7 @@ N_LIGHT = sum(1 for p in _PP if p.get('grade_track') == 'light_summary')
 N_EXCL = sum(1 for p in _PP if p.get('grade_track') == 'none')
 N_RCT = sum(1 for p in _PP if p.get('grade_track') == 'full' and p.get('role') == 'pivotal_efficacy')
 N_MA = sum(1 for p in _PP if p.get('grade_track') == 'full' and p.get('role') == 'meta_analysis')
+N_OTH = N_FULL - N_RCT - N_MA   # full 軌其他角色（supportive/safety/other）——分項必須與總數對帳，不得漏列
 
 def md2rl(s):
     """把 JSON 內的純文字安全送進 reportlab Paragraph：跳脫 & < >，**粗體**→<b>，換行→<br/>，淨化缺字形符號。"""
@@ -138,7 +151,8 @@ def prisma_diagram():
     d.add(Line(95, yrow_top + 2, 375, yrow_top + 2, strokeColor=BLUE, strokeWidth=1.1))
     for bx in (95, 375):
         d.add(Line(bx, yrow_top + 2, bx, yrow_top, strokeColor=BLUE, strokeWidth=1.1))
-    _box(d, cx, yrow_top, 160, 44, [f'{N_FULL+N_TARGET} 篇 → 進 GRADE 評讀', f'（{N_RCT} 個 RCT ＋ {N_MA} 篇統合分析＋{N_TARGET} 安全性）'], GREENL, 8.2, edge=GREEN)
+    _box(d, cx, yrow_top, 160, 44, [f'{N_FULL+N_TARGET} 篇 → 進 GRADE 評讀',
+         f'（主效 {N_RCT}＋統合 {N_MA}＋其他 {N_OTH}＋安全性 {N_TARGET}）'], GREENL, 8.2, edge=GREEN)
     _box(d, 95, yrow_top, 130, 44, [f'{N_LIGHT} 篇 → 列為背景', '（機制／藥動／綜述）'], AMBERL, 8.0)
     _box(d, 375, yrow_top, 130, 44, [f'{N_EXCL} 篇 → 排除', '（與主題無關）'], REDL, 8.0, edge=RED)
     _arrow(d, cx, yrow_top - 44, yrow_top - 60)
@@ -249,9 +263,12 @@ REL_ROWS = [['回顧（類型）', '涵蓋範圍', '納入試驗', 'AMSTAR 2 信
 # 評讀日期：由 run_state 帶（到「日」），不硬編；失敗回退
 try:
     import run_state as _rs
-    _DATE = _rs.load().get('search_date') or '2026-06-14'
+    _DATE = _rs.load().get('search_date') or ''
 except Exception:
-    _DATE = '2026-06-14'
+    _DATE = ''
+if not _DATE:
+    import sys as _s2; _s2.stderr.write('⚠ run_state 無 search_date：封面日期留「未記錄」，請補 run_state.json\n')
+    _DATE = '（未記錄）'
 story = []
 _TP = (SYN.get('report_title') or '實證評讀總報告').split('：')  # report_title 可能為 JSON null，需 or 防護（同 _TITLE）
 story += [Spacer(1, 6), Paragraph(md2rl(_TP[0]), H1),
@@ -264,7 +281,7 @@ story += [Paragraph('一、分析流程', H3),
                     '先界定臨床問題，再判斷每篇扮演的角色，只讓真正的療效證據進入完整 GRADE 評讀；機制／藥動／綜述列為背景。'
                     '下為流程圖與各階段說明，其後並列各納入文獻的全文取得狀態。', BODY),
           Spacer(1, 4), prisma_diagram(), Spacer(1, 8)]
-story += [Paragraph(f'經此分流：{N_FULL+N_TARGET} 篇進入 GRADE 評讀（{N_RCT} 個隨機對照試驗＋{N_MA} 篇統合分析＋{N_TARGET} 篇針對性安全評估），'
+story += [Paragraph(f'經此分流：{N_FULL+N_TARGET} 篇進入 GRADE 評讀（主要療效報告 {N_RCT}＋統合分析 {N_MA}＋其他 {N_OTH}＋針對性安全評估 {N_TARGET}），'
                     f'{N_LIGHT} 篇機制／藥動／綜述列為背景參考，{N_EXCL} 篇排除。這一步確保後續的工夫花在「對臨床問題真正有用」的證據上。', BODY), Spacer(1, 6)]
 if LIT_ROWS and len(LIT_ROWS) > 1:
     # 直式頁可用寬約 170mm；欄寬總和須 ≤170，且整表 KeepTogether 不跨頁
@@ -288,9 +305,10 @@ if SYN.get('plain_summary'):                       # 白話 lead 段（通勤可
     story += [Paragraph('<b>【一分鐘讀懂】</b>　' + md2rl(SYN['plain_summary']), BODY), Spacer(1, 10)]
 _NSTUDY = len(SYN.get('study_characteristics', []))
 _DRUGS = '、'.join(dict.fromkeys(r.get('drug', '') for r in SYN.get('study_characteristics', []) if r.get('drug')))
+_EB_LABEL = SYN.get('evidence_base_label') or '項研究'   # 不得硬編『項隨機對照試驗』（NRSI 誤稱）
 story += [Paragraph('一、總結：這次分析發現了什麼、對臨床有什麼意義', H3),
-          Paragraph(f'這次評讀彙整了 {_NSTUDY} 項隨機對照試驗' + (f'（涵蓋 {_DRUGS}）' if _DRUGS else '') +
-                    '，探討此類介入作為「附加療法」（加在常規照護之上、而非取代）的效益與風險。'
+          Paragraph(f'這次評讀彙整了 {_NSTUDY} {_EB_LABEL}' + (f'（涵蓋 {_DRUGS}）' if _DRUGS else '') +
+                    '，探討本臨床問題所界定之介入的效益與風險。'
                     '以下把「發現」與「對臨床的影響」一併說明：', BODY),
           *[bullet(md2rl(b)) for b in SYN.get('bottom_line', [])],
           *([Spacer(1, 4), Paragraph('<b>給臨床的一句話：</b>' + md2rl(SYN['clinical_one_liner']), BODY)]
@@ -305,12 +323,14 @@ story += [NextPageTemplate('land'), PageBreak(),
           Paragraph('<b>表頭宣告（本表適用對象）</b>　族群（P）：' + md2rl(RQ.get('P', '')) +
                     '；介入（I）：' + md2rl(RQ.get('I', '')) + '；對照（C）：' + md2rl(RQ.get('C', '安慰劑')) + '。', SMALL),
           Spacer(1, 4), sof_table(), Spacer(1, 5),
-          Paragraph('解讀提醒：相對效應（RR／HR）必須搭配絕對數字才完整——同樣的風險比，在惡化風險高或低的'
-                    '病人身上，實際減少的惡化次數差異甚大；連續型結果（如 FEV1、生活品質分數）沒有比值，'
+          Paragraph('解讀提醒：相對效應（RR／HR）必須搭配絕對數字才完整——同樣的比值，在基準風險高或低的'
+                    '病人身上，實際避免的事件數差異甚大；連續型結果沒有比值，'
                     '其效益直接以「平均差」呈現。', NOTE),
           NextPageTemplate('port'), PageBreak()]
 
 # 非 SoF 表格一律直式、總寬 170mm 一致，每表 KeepTogether 不跨頁
+_SEC5 = 5
+_SEC6 = 5 + (1 if SYN.get('baseline_risk_strata') else 0)   # 5 跳過時 6 遞補為 5（編號連續）
 story += [Paragraph('三、證據品質與完整度', H3)]
 if len(BOE_ROWS) > 1:
     story += [KeepTogether([Paragraph('<b>證據體 GRADE（跨研究確定性，非逐篇取均/取最差；Cochrane Ch14 §14.2.1）</b>', BODYB),
@@ -327,14 +347,14 @@ story += [KeepTogether([Paragraph('<b>1. 納入研究特徵表</b>', BODYB), Spa
            if SYN.get('missing_evidence_sensitivity') else Spacer(0, 0)), Spacer(1, 5),
           Paragraph('<b>4. 次群組與對研究的意涵</b>', BODYB),
           Paragraph(md2rl(SYN.get('subgroup_implications', '')), BODY), Spacer(1, 5),
-          # 5. 基準風險分層：空資料時整段跳過(不印破表頭/空表)；與 markdown 端守衛一致
-          *([KeepTogether([Paragraph('<b>5. 基準風險分層的絕對效應</b>', BODYB),
+          # 5/6. 條件段落編號動態遞補（跳過的段落不佔號，否則煙霧測試的跳號檢查會假陽性擋關）
+          *([KeepTogether([Paragraph(f'<b>{_SEC5}. 基準風險分層的絕對效應</b>', BODYB),
                         Paragraph('絕對獲益高度取決於病人的基準風險（同一相對效應，套用不同對照組風險）：', SMALL), Spacer(1, 3),
                         qtable(BASE_ROWS, [70, 45, 55])]),
           Paragraph('故基準風險越高的病人，絕對獲益越大、NNTB 越小；低風險者獲益較小。'
                     '臨床決策宜結合個別病人的風險評估。', NOTE),
-          Paragraph('<b>【注意】低風險族群之 NNTB 為數學外推</b>：樞紐試驗多要求過去一年 ≧2 次惡化、'
-                    '排除輕度／極少發作之患者，將此相對效應套用於試驗未收案的低風險群存在『群體間接性（indirectness）』；'
+          Paragraph('<b>【注意】低風險族群之 NNTB 為數學外推</b>：樞紐試驗收案條件通常限定較高風險族群，'
+                    '將此相對效應套用於試驗未收案的低風險群存在『群體間接性（indirectness）』；'
                     '實際絕對獲益可能更小（NNTB 更大）。', NOTE)] if SYN.get('baseline_risk_strata') else []),
           Spacer(1, 10)]
 
@@ -348,7 +368,7 @@ if REL_REVIEWS:
             Paragraph('角色：' + md2rl(r['role']), SMALL),
             Paragraph('評級依據：' + md2rl(r.get('amstar2_basis') or ''), NOTE),
             Spacer(1, 5)]
-    story += [Paragraph('<b>6. 相關系統性回顧／統合分析（AMSTAR 2 品質）</b>', BODYB),
+    story += [Paragraph(f'<b>{_SEC6}. 相關系統性回顧／統合分析（AMSTAR 2 品質）</b>', BODYB),
               Paragraph('與上方 4 個 RCT「納入研究特徵表」分離（study vs review 單位區分）；'
                         '去重後不與個別 RCT 結論疊加。', NOTE), Spacer(1, 4),
               *rel_block, Spacer(1, 6)]
@@ -356,8 +376,7 @@ if REL_REVIEWS:
 story += [Paragraph('四、跨研究確定性、衝突分析與權重裁決', H3),
           Paragraph(md2rl(SYN.get('conflict_analysis', '')), BODY),
           (Paragraph('權重裁決：' + md2rl(SYN.get('weight_adjudication', '')), NOTE) if SYN.get('weight_adjudication') else Spacer(0, 0)),
-          Paragraph('方法學說明：' + md2rl(SYN.get('vote_counting_check', '') or
-                    '本引擎不做自己的統計池化；類別層級二分結果採用已發表統合分析之合併估計（標明異質性侷限），單藥療效以最大樞紐試驗為錨點。'), NOTE)]
+          Paragraph('方法學說明：' + md2rl(SYN.get('vote_counting_check', '') or '（未提供）'), NOTE)]
 warn = Table([[Paragraph('<b>【注意】不可做非正式間接比較</b>：各試驗的參與者基線、藥物劑量與測量指標不盡相同，'
                          '不應直接比較不同藥物之間相對效應的大小（各試驗未做頭對頭比較，較低的 RR 不代表該藥較優）；'
                          '藥物優劣須有正式間接比較（網絡統合）或直接對頭試驗才能斷定。', NOTE)]],
@@ -383,7 +402,9 @@ def footer(canvas, doc):
     canvas.restoreState()
 
 _OUTPUTS.mkdir(parents=True, exist_ok=True)
-doc = BaseDocTemplate(str(_OUTPUTS / 'FINAL_REPORT.pdf'), pagesize=A4,
+# 輸出另名：outputs/FINAL_REPORT.pdf 是規格定版（Cochrane 6 段，由 build_grade_pdf 產）——
+# 本『流程圖版』與其共用檔名會後跑者無聲互蓋，故獨立檔名。
+doc = BaseDocTemplate(str(_OUTPUTS / 'FINAL_REPORT_flowchart.pdf'), pagesize=A4,
                       leftMargin=20 * mm, rightMargin=20 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
                       title=_TITLE, author='EBM_Analysis')
 pw, ph = A4
@@ -398,12 +419,12 @@ doc.build(story)
 # 渲染後磚塊稽核：缺字形會渲成 NULL(\x00)；emoji/dingbat 漏網→警示（防交付帶磚塊）
 try:
     import fitz as _fz
-    _t = ''.join(_pg.get_text() for _pg in _fz.open(str(_OUTPUTS / 'FINAL_REPORT.pdf')))
+    _t = ''.join(_pg.get_text() for _pg in _fz.open(str(_OUTPUTS / 'FINAL_REPORT_flowchart.pdf')))
     _bad = _t.count('\x00')
     _emj = _EMOJI_RE.findall(_t)
     if _bad or _emj:
         print('⚠️ 磚塊稽核：NULL(\\x00) x%d、emoji漏網 %r —— 請檢查字形淨化' % (_bad, sorted(set(_emj))[:8]))
     else:
-        print('OK -> outputs/FINAL_REPORT.pdf（磚塊稽核：無 NULL、無 emoji 漏網）')
+        print('OK -> outputs/FINAL_REPORT_flowchart.pdf（磚塊稽核：無 NULL、無 emoji 漏網）')
 except Exception:
-    print('OK -> outputs/FINAL_REPORT.pdf')
+    print('OK -> outputs/FINAL_REPORT_flowchart.pdf')

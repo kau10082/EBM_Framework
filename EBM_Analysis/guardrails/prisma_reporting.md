@@ -25,4 +25,4 @@ feeds: report_completeness
 - **MANUAL**（結構化資料無法判定）＝項 9 資料蒐集流程、24 註冊/protocol、25 資金、26 利益衝突、（無報告產物時）27 可得性。預設不阻擋但**一律列出、不靜默跳過**；於報告補齊或在 `synthesis.prisma_attest`（鍵＝項號字串，如 `"24"`）寫聲明 → 轉 **ATTEST**。`--strict` 時未聲明的 MANUAL 也計失敗。
 - **PENDING**＝該階段對應產物尚未產出（如只跑完檢索、評讀未做），中性、不阻擋。
 
-與 `selfcheck_consistency`（C1–C14，查「寫出來的彼此矛盾」）互補：本 gate 查「該有的維度齊不齊」。與 `report_completeness`（feeds 來源）同源，數字一律由 cache 帶。
+與 `selfcheck_consistency`（C1–C18，查「寫出來的彼此矛盾」）互補：本 gate 查「該有的維度齊不齊」。與 `report_completeness`（feeds 來源）同源，數字一律由 cache 帶。

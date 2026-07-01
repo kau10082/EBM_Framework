@@ -42,7 +42,9 @@ def selftest():
     cases.append((round(1 / abs(_corr("rr", 0.78, 0.404) - 0.404)), 11))
     # OR 0.62, ACR 0.48 → corr
     cases.append((round(_corr("or", 0.62, 0.48), 3), 0.364))
-    bad = [(g, e) for g, e in cases if abs(g - e) > 0.51]
+    # 容差分兩級：NNT 整數黃金值容 ±0.51（四捨五入邊界）；連續值(對應風險)須 ±0.005——
+    # 曾一律 0.51，OR 公式退化成 RR 乘法（0.298 vs 0.364，差 0.066）selftest 仍全綠。
+    bad = [(g, e) for g, e in cases if abs(g - e) > (0.51 if float(e).is_integer() else 0.005)]
     if bad:
         print("❌ absrisk 自我測試失敗：", bad); return 1
     print("✅ absrisk 自我測試通過（NNTB/CI/OR 公式黃金值相符）"); return 0
@@ -116,7 +118,11 @@ def main(argv):
     # 由事件數算風險差＋NNT 及其 95% CI：rdci  Cevents Cn  Ievents In
     if kind == "rdci":
         import math
+        if len(argv) < 5:
+            print("用法：rdci <對照事件數> <對照總數> <介入事件數> <介入總數>（4 個正數）"); return 2
         ce, cn, ie, ina = float(argv[1]), float(argv[2]), float(argv[3]), float(argv[4])
+        if cn <= 0 or ina <= 0:
+            print("總數（第 2、4 參數）必須 > 0"); return 2
         pc, pi = ce / cn, ie / ina
         rd = pi - pc
         se = math.sqrt(pc * (1 - pc) / cn + pi * (1 - pi) / ina)

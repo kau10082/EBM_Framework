@@ -13,7 +13,7 @@ manifest.yaml         ← 中央地圖：執行順序、護欄→GRADE 領域映
 phases/ (6)           ← 編排層；用 id 引用護欄、不重複內文
   00_global.md  00_triage.md（Phase 0 corpus 分流）
   01_extract.md  02_triage.md  03_grade.md  04_output.md
-guardrails/ (28)      ← 護欄正本（含 frontmatter：觸發條件、餵哪個 GRADE 領域）
+guardrails/ (36)      ← 護欄正本（含 frontmatter：觸發條件、餵哪個 GRADE 領域）
 schema/ (5)           ← ★ 完整性強制層：每階段 JSON Schema（缺欄＝不合格）
   phase0_corpus  phase1_extract  phase2_triage  phase3_grade  phase4_output（含 SoF／報告欄位）
 tools/                ← 無 API 的確定性輔助（Claude Code/Cowork 用）

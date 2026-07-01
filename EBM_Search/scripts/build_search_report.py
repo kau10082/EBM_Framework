@@ -56,22 +56,20 @@ def _font():
         if p and os.path.exists(p):
             try:
                 pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=idx) if idx is not None else TTFont("CJK", p))
-                return
+                return "CJK"
             except Exception:
                 continue
+    # CID fallback：styles/表格/footer 一律用回傳的字型名——不可寫死 "CJK"，
+    # 否則無 TTF 的機器上 "CJK" 未註冊 → doc.build 直接 KeyError/ValueError crash。
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
-    try:
-        pdfmetrics.registerFontFamily("CJK", normal="STSong-Light")
-        from reportlab.lib.fonts import addMapping
-        addMapping("CJK", 0, 0, "STSong-Light")
-    except Exception:
-        pass
+    return "STSong-Light"
 
 def _resolve_in(arg):
     if arg: return arg
     try:
-        rs = Path(__file__).resolve().parents[1] / "EBM_Analysis" / "tools"
+        # parents[2]＝repo 根（本檔在 EBM_Search/scripts/ 下，parents[1] 只到 EBM_Search，曾算錯一層使此 fallback 成死碼）
+        rs = Path(__file__).resolve().parents[2] / "EBM_Analysis" / "tools"
         sys.path.insert(0, str(rs)); import run_state
         st = run_state.load(); ftd = st.get("paths", {}).get("fulltext_dir")
         cand = st.get("paths", {}).get("search_report_data") or (os.path.join(ftd, "_search_report.json") if ftd else None)
@@ -101,40 +99,42 @@ def _out_dir(arg):
 
 def build(data, out_pdf):
     """渲染 5 段固定版型。data 結構見 SCHEMA_HINT / references/search_report_schema.json。"""
-    _font()
+    FONT = _font()
     ss = getSampleStyleSheet()
-    H1 = ParagraphStyle("H1", parent=ss["Heading1"], fontName="CJK", fontSize=15, spaceAfter=4)
-    H2 = ParagraphStyle("H2", parent=ss["Heading2"], fontName="CJK", fontSize=12,
+    H1 = ParagraphStyle("H1", parent=ss["Heading1"], fontName=FONT, fontSize=15, spaceAfter=4)
+    H2 = ParagraphStyle("H2", parent=ss["Heading2"], fontName=FONT, fontSize=12,
                         textColor=colors.HexColor("#0b5394"), spaceBefore=10, spaceAfter=4)
-    P  = ParagraphStyle("P", parent=ss["Normal"], fontName="CJK", fontSize=9, leading=12.5)
-    SMALL = ParagraphStyle("SM", parent=ss["Normal"], fontName="CJK", fontSize=7.6, leading=10, textColor=colors.HexColor("#444"))
-    MONO = ParagraphStyle("MONO", parent=ss["Normal"], fontName="CJK", fontSize=8, leading=11,
+    P  = ParagraphStyle("P", parent=ss["Normal"], fontName=FONT, fontSize=9, leading=12.5)
+    SMALL = ParagraphStyle("SM", parent=ss["Normal"], fontName=FONT, fontSize=7.6, leading=10, textColor=colors.HexColor("#444"))
+    MONO = ParagraphStyle("MONO", parent=ss["Normal"], fontName=FONT, fontSize=8, leading=11,
                           backColor=colors.HexColor("#f3f5f8"), borderPadding=3)
-    CELL = ParagraphStyle("CELL", parent=ss["Normal"], fontName="CJK", fontSize=7.4, leading=9)
-    def cc(t, s=CELL): return Paragraph(safe(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), s)
+    CELL = ParagraphStyle("CELL", parent=ss["Normal"], fontName=FONT, fontSize=7.4, leading=9)
+    # 逐字資料（布林字串/題目等）一律 XML 轉義後才進 Paragraph——含 '<b'、'&' 等片段會讓 paraparser 拋例外
+    def esc(t): return safe(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    def cc(t, s=CELL): return Paragraph(esc(t), s)
     def hstyle(bg):
-        return TableStyle([("FONTNAME", (0, 0), (-1, -1), "CJK"), ("FONTSIZE", (0, 0), (-1, -1), 7.4),
+        return TableStyle([("FONTNAME", (0, 0), (-1, -1), FONT), ("FONTSIZE", (0, 0), (-1, -1), 7.4),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#bbb")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(bg)),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eef3fa")])])
 
     E = []
-    E.append(Paragraph(safe(data.get("title", "EBM Phase 1 系統性檢索報告")), H1))
-    if data.get("topic"): E.append(Paragraph(safe(data["topic"]), P))
+    E.append(Paragraph(esc(data.get("title", "EBM Phase 1 系統性檢索報告")), H1))
+    if data.get("topic"): E.append(Paragraph(esc(data["topic"]), P))
 
     # 1. 檢索基本參數
     E.append(Paragraph("1. 檢索基本參數（Search Parameters）", H2))
     pm = data.get("params", {})
-    if pm.get("pico"):      E.append(Paragraph("<b>PICO 簡述：</b>" + safe(pm["pico"]), P))
-    E.append(Paragraph("<b>檢索日期（Date of Search）：</b>" + safe(data.get("search_date", "")), P))
-    if pm.get("databases"): E.append(Paragraph("<b>資料庫／來源：</b>" + safe("、".join(pm["databases"])), P))
-    if pm.get("limits"):    E.append(Paragraph("<b>限制條件：</b>" + safe(pm["limits"]), P))
+    if pm.get("pico"):      E.append(Paragraph("<b>PICO 簡述：</b>" + esc(pm["pico"]), P))
+    E.append(Paragraph("<b>檢索日期（Date of Search）：</b>" + esc(data.get("search_date", "")), P))
+    if pm.get("databases"): E.append(Paragraph("<b>資料庫／來源：</b>" + esc("、".join(pm["databases"])), P))
+    if pm.get("limits"):    E.append(Paragraph("<b>限制條件：</b>" + esc(pm["limits"]), P))
 
     # 2. 具體檢索策略／完整字串（逐字）
     E.append(Paragraph("2. 具體檢索策略／完整字串（Exact Search Strategy，逐字保留）", H2))
     for s in data.get("search_strings", []):
-        E.append(Paragraph("<b>%s：</b>" % safe(s.get("leg", "")), P))
-        E.append(Paragraph(safe(s.get("query", "") or "—"), MONO)); E.append(Spacer(1, 3))
+        E.append(Paragraph("<b>%s：</b>" % esc(s.get("leg", "")), P))
+        E.append(Paragraph(esc(s.get("query", "") or "—"), MONO)); E.append(Spacer(1, 3))
 
     # 3. PRISMA 流程數據
     E.append(Paragraph("3. PRISMA 文獻篩選流程數據（Selection Process / Flow）", H2))
@@ -143,7 +143,7 @@ def build(data, out_pdf):
     for st in data.get("flow", []):
         frows.append([cc(st.get("stage", "")), cc(st.get("start", "")), cc(st.get("excluded", "")), cc(st.get("remain", ""))])
     t = LongTable(frows, colWidths=[120 * mm, 22 * mm, 80 * mm, 50 * mm], repeatRows=1); t.setStyle(hstyle("#0b5394")); E.append(t)
-    if data.get("flow_reconcile"): E.append(Paragraph(safe(data["flow_reconcile"]), SMALL))
+    if data.get("flow_reconcile"): E.append(Paragraph(esc(data["flow_reconcile"]), SMALL))
 
     # 4. 最終納入的證據清單（核心；固定欄位）
     E.append(CondPageBreak(40 * mm))
@@ -154,30 +154,26 @@ def build(data, out_pdf):
         irows.append([cc(it.get("byline", "")), cc(it.get("title", "")), cc(it.get("doi", "") or "—"),
                       cc(it.get("pmid", "") or "—"), cc(it.get("verify", "") or "—")])
     t = LongTable(irows, colWidths=[40 * mm, 122 * mm, 52 * mm, 22 * mm, 36 * mm], repeatRows=1); t.setStyle(hstyle("#38761d")); E.append(t)
-    if data.get("included_note"): E.append(Paragraph(safe(data["included_note"]), SMALL))
+    if data.get("included_note"): E.append(Paragraph(esc(data["included_note"]), SMALL))
 
-    # 5. 進行中試驗
+    # 5. 進行中試驗（欄位固定＝登錄號｜標題｜狀態，缺狀態以「—」佔位——欄位不得依本批資料動態增減）
     E.append(CondPageBreak(36 * mm))
     E.append(Paragraph("5. 目前仍在進行中的 Trial（ClinicalTrials.gov；供完整度查核，不計入證據）", H2))
     ong = data.get("ongoing", [])
     if ong:
-        has_status = any(o.get("status") for o in ong)
-        if has_status:
-            orows = [[cc("登錄號", P), cc("標題", P), cc("狀態", P)]] + [[cc(o.get("nct", "")), cc(o.get("title", "")), cc(o.get("status", ""))] for o in ong]
-            t = LongTable(orows, colWidths=[34 * mm, 180 * mm, 46 * mm], repeatRows=1)
-        else:
-            orows = [[cc("登錄號", P), cc("標題", P)]] + [[cc(o.get("nct", "")), cc(o.get("title", ""))] for o in ong]
-            t = LongTable(orows, colWidths=[34 * mm, 226 * mm], repeatRows=1)
+        orows = [[cc("登錄號", P), cc("標題", P), cc("狀態", P)]] + \
+                [[cc(o.get("nct", "") or "—"), cc(o.get("title", "") or "—"), cc(o.get("status", "") or "—")] for o in ong]
+        t = LongTable(orows, colWidths=[34 * mm, 180 * mm, 46 * mm], repeatRows=1)
         t.setStyle(hstyle("#b45f06")); E.append(t)
     else:
-        E.append(Paragraph(safe(data.get("ongoing_note", "（無『進行中／未發表』狀態之試驗。）")), CELL))
+        E.append(Paragraph(esc(data.get("ongoing_note", "（無『進行中／未發表』狀態之試驗。）")), CELL))
 
     doc = BaseDocTemplate(out_pdf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm,
                           topMargin=12 * mm, bottomMargin=11 * mm, title=data.get("title", "檢索報告"))
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="n")
     sd = data.get("search_date", "")
     def footer(cv, d):
-        cv.setFont("CJK", 7); cv.setFillColor(colors.grey)
+        cv.setFont(FONT, 7); cv.setFillColor(colors.grey)
         cv.drawRightString(doc.leftMargin + doc.width, 6 * mm, "EBM_Framework Phase 1 檢索報告 · %s · p.%d" % (sd, d.page))
     doc.addPageTemplates([PageTemplate(id="n", frames=[frame], onPage=footer)])
     doc.build(E)
@@ -200,8 +196,9 @@ def main():
     try:
         data["pdf_path"] = os.path.abspath(out_pdf)
         Path(src).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        # 回寫失敗不可整碗吞：gate_guard 之後會報「無 pdf_path」，須留線索指向真因（檔案鎖/唯讀等）
+        sys.stderr.write("⚠ pdf_path 回寫 %s 失敗（%s）：gate_guard 將誤報 PDF 未產出，請解鎖後重跑本器\n" % (src, e))
     print("WROTE:", out_pdf, "|", os.path.getsize(out_pdf), "bytes")
 
 # ── SCHEMA_HINT（_search_report.json，5 段固定版型）─────────────────────────────

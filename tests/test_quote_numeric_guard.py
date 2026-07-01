@@ -35,5 +35,17 @@ def test_fabricated_middledot_caught():
 
 def test_digits_separator_agnostic():
     assert qv._digits("0.58") == {"0", "58"}
-    assert qv._digits("2,525") == {"2", "525"}
+    # 千分位收合為單一數字串：quote 與 PDF 抽出文字的千分位寫法（2,525 vs 2525）常不一致，
+    # 舊行為拆成 {'2','525'} 會把正確轉錄的數字誤判為捏造 → 假 FAIL 擋定稿。
+    assert qv._digits("2,525") == {"2525"}
     assert qv._digits("0·52") == {"0", "52"}
+
+
+def test_thousands_separator_not_false_fail():
+    # quote 用 2,525、原文 PDF 抽出為 2525 → 必須視為同一數字（雙向皆然）
+    src = "a total of 2525 patients were enrolled in the trial"
+    ok, _ = qv.match("A total of 2,525 patients were enrolled", qv._norm(src), 0.85, qv._digits(src))
+    assert ok is True
+    src2 = "a total of 2,525 patients were enrolled in the trial"
+    ok2, _ = qv.match("A total of 2525 patients were enrolled", qv._norm(src2), 0.85, qv._digits(src2))
+    assert ok2 is True

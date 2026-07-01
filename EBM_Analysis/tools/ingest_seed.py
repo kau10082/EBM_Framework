@@ -158,6 +158,14 @@ def main(argv=None):
             continue
         ext = os.path.splitext(pdf)[1] or ".pdf"
         dest = os.path.join(INPUTS_DIR, pid + ext)
+        # inputs/ 既有同名檔＝可能是人工補的更完整版（analysis_scope 明示的人工管道）——
+        # 不得被 seed 指向的（可能殘缺 OA）版本無聲蓋掉；內容不同時跳過並警示，人工裁決。
+        if os.path.isfile(dest) and os.path.getsize(dest) != os.path.getsize(src):
+            sys.stderr.write("⚠ 跳過 %s：inputs/ 已有同名 PDF（%d bytes）且與 seed 版（%d bytes）不同——"
+                             "疑為人工補的版本，保留既有檔；如要覆蓋請先手動刪除 %s\n"
+                             % (pid, os.path.getsize(dest), os.path.getsize(src), dest))
+            copied.append(pid)   # 既有檔視為已就位
+            continue
         if not args.dry_run:
             shutil.copy2(src, dest)
         copied.append(pid)

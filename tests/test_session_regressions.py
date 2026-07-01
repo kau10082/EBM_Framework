@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""本 session 多輪修正的『純函式回歸測試』——把當時用隔離腳本驗過的行為釘成永久測試，
+"""跨 session 修正的『純函式回歸測試』——把當時驗過的行為釘成永久測試，
 防未來改動靜默回歸（機器守門優先於記性）。涵蓋：
-  - absrisk._opt        CLI 參數長度守門（--ci 只給 1 值不可解包 crash）
-  - build_report_data._doctype 背景表型態程式化回推（不依賴手填 doctype）
+  - absrisk._opt                     CLI 參數長度守門（--ci 只給 1 值不可解包 crash）
+  - build_search_report_data.doctype_of  文獻類型由 design 桶回推（override 優先）
 
-註：原 build_stage1_corpus._pid 去重鍵測試已於 2026-06 移除——該模組（含 _pid）在
-EBM_Search v0.22（commit 40cf93c：取消 Stage A/B 切分、_stage1_corpus 交接契約）整支刪除，
-無對應後繼函式可改測；保留死 import 會使整個 pytest 套件 collection error。
+註：原 build_report_data._doctype 測試已隨該模組在 v0.22（commit 4254add）重寫為
+build_search_report_data.doctype_of 而改寫；原 build_stage1_corpus._pid 測試已於
+2026-06 隨 Stage A/B 廢除移除。保留死 import 會使整個 pytest 套件 collection error。
 """
 import absrisk
-import build_report_data as brd
+import build_search_report_data as brd
 
 
 # ── absrisk._opt：不足 n 個視為未提供（回 None），避免 lo,hi=sorted(...) ValueError ──
@@ -24,19 +24,17 @@ def test_opt_returns_values_when_exactly_n():
     assert absrisk._opt(["--dir", "harm"], "--dir", 1) == ["harm"]
 
 
-# ── build_report_data._doctype：缺手填 doctype 時從 pubtypes/標題程式化回推 ──
-def test_doctype_explicit_wins():
-    assert brd._doctype({"doctype": "Guideline", "title": "whatever"}) == "Guideline"
+# ── build_search_report_data.doctype_of：design 桶 → 文獻類型標籤；override（手填 doctype）優先 ──
+def test_doctype_override_wins():
+    assert brd.doctype_of("SR/MA/NMA/ITC", "Guideline") == "Guideline"
 
 
-def test_doctype_from_pubtypes():
-    assert brd._doctype({"sources": {"pubmed": {"pubtypes": ["Meta-Analysis"]}}}) == "Meta-Analysis"
+def test_doctype_from_design():
+    assert brd.doctype_of("SR/MA/NMA/ITC") == "NMA/MA"
+    assert brd.doctype_of("背景:會議摘要(待評估)") == "會議摘要"
+    assert brd.doctype_of("指引") == "指引"
 
 
-def test_doctype_from_title():
-    assert brd._doctype({"title": "A Systematic Review of X"}) == "Systematic Review"
-    assert brd._doctype({"input": {"title": "GOLD 2024 Guideline"}}) == "Guideline"
-
-
-def test_doctype_plain_rct_not_misclassified():
-    assert brd._doctype({"title": "A randomized controlled trial of X vs Y"}) is None
+def test_doctype_unknown_falls_back():
+    assert brd.doctype_of("") == "研究"
+    assert brd.doctype_of(None) == "研究"

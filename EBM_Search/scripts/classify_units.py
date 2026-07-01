@@ -47,6 +47,43 @@ def load_topic_config(path=None):
         sys.stderr.write(f"WARNING: Topic config file not found at {path}. PIVOTAL_LABALAMA_ARM will be empty and pivotal trial matching will fail.\n")
 
 load_topic_config()
+
+def _by_uid(items, src=""):
+    """以 uid 建索引；缺 uid 者跳過並警示——單筆髒資料不可讓整批 ⑤b 以 KeyError 中止。"""
+    out = {}; skipped = 0
+    for r in items:
+        u = r.get("uid") if isinstance(r, dict) else None
+        if u is None:
+            skipped += 1; continue
+        out[u] = r
+    if skipped:
+        sys.stderr.write("⚠ %s 有 %d 筆缺 uid，已跳過（未入索引，請補 uid 後重跑）\n" % (src or "輸入", skipped))
+    return out
+
+def records_of(g7):
+    """g7_units.json 統一讀取層（單一真值來源，防產出端/守門端契約飄移）：
+    相容本檔輸出 {"rows":[{uid,unit,design,...}]}（無 role 鍵）、舊形狀 {"records":[{role,...}]} 與裸 list。
+    回傳每筆帶 role∈{core,background,awaiting,""} 的 dict list；role 缺時由 unit/design 前綴推導
+    （核心:→core、待評估→awaiting、其餘有分類文字→background）。gate_guard 與報告產生器一律經此讀取。"""
+    if isinstance(g7, list):
+        recs = g7
+    elif isinstance(g7, dict):
+        recs = g7.get("records") or g7.get("rows") or []
+    else:
+        return []
+    out = []
+    for r in recs:
+        if not isinstance(r, dict):
+            continue
+        if r.get("role"):
+            out.append(r); continue
+        u = str(r.get("unit") or ""); d = str(r.get("design") or "")
+        role = ("core" if u.startswith("核心")
+                else "awaiting" if u.startswith("待評估") or d.startswith("待評估")
+                else "background" if (u or d) else "")
+        rr = dict(r); rr["role"] = role; out.append(rr)
+    return out
+
 TRIALCTX = re.compile(r"\b(trial|study|randomi[sz]ed|cohort|programme|program)\b", re.I)
 NCTRE = re.compile(r"NCT0?\d{6,8}", re.I)
 
@@ -140,8 +177,8 @@ def detect_trial(text, nct_field, names=None):
 def classify(cache, out="g7_units.json"):
     cache=Path(cache)
     ver=json.loads((cache/"g6_verified.json").read_text(encoding="utf-8"))
-    content={c["uid"]:c for c in json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8"))}
-    union={r["uid"]:r for r in json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8"))}
+    content=_by_uid(json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8")), "g2c_FINAL_content")
+    union=_by_uid(json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8")), "g1_raw_union")
     # 引文追蹤臂(citation-arm)的摘要不在 g2c（屬另一 PRISMA 臂）→ 由 g4_abstracts.json 補，避免被當 title-only
     g4ab={}
     p4=cache/"g4_abstracts.json"
@@ -338,7 +375,7 @@ def enrich(cache, mailto="test@example.com"):
     fae=g0.get("four_axis_expansion",{}).get("axisC_class_INN_devcode_brand",{})
     comp_groups=[v for k,v in fae.items() if k.endswith("_components") and isinstance(v,list)]
     comp_groups=[[_norm(x) for x in grp] for grp in comp_groups]
-    content={c["uid"]:c for c in json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8"))}
+    content=_by_uid(json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8")), "g2c_FINAL_content")
     g4ab=json.loads((cache/"g4_abstracts.json").read_text(encoding="utf-8")) if (cache/"g4_abstracts.json").exists() else {}
     ver=json.loads((cache/"g6_verified.json").read_text(encoding="utf-8"))
     ncts=set()
@@ -442,10 +479,10 @@ def resolve_arms(cache, mailto="test@example.com"):
     (2) 對每個 NCT 抓臂/介入逐成分判 has_triple/has_dual_ll。寫 nct_arms.json、uid_resolved.json、nct_names.json。
     取代舊 enrich『整串三合一名比對』（CT.gov 介入多為成分藥分項→整串比對全部誤判非三合一）。"""
     cache=Path(cache)
-    content={c["uid"]:c for c in json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8"))}
+    content=_by_uid(json.loads((cache/"g2c_FINAL_content.json").read_text(encoding="utf-8")), "g2c_FINAL_content")
     g4ab=json.loads((cache/"g4_abstracts.json").read_text(encoding="utf-8")) if (cache/"g4_abstracts.json").exists() else {}
     ver=json.loads((cache/"g6_verified.json").read_text(encoding="utf-8"))
-    union={r["uid"]:r for r in json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8"))}
+    union=_by_uid(json.loads((cache/"g1_raw_union.json").read_text(encoding="utf-8")), "g1_raw_union")
     ncts=set(); uid_resolved={}; rct_uids=[]
     for v in ver:
         if v.get("verdict")!="VERIFIED": continue

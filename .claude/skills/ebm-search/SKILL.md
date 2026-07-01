@@ -38,7 +38,7 @@ python EBM_Search/scripts/gate_guard.py --cache <cache_dir>
 
 `gate_guard` 會依 cache 內已存在的產物自動判斷在哪關、逐關跑對應硬 gate（取盡 `leg_exhaust_check`、
 策略遵從 `strategy_adherence_check`、四軸覆蓋 `axis_coverage_check`、嚴格篩逐軸 `strict_screen_check`、
-②c→③ 順序、⑥驗證覆蓋、Stage A→B 邊界 `stage1_check`、報告版型 `report_check`、撤稿、PDF 實體…）。
+②c→③ 順序、⑥驗證覆蓋、報告版型 `check_search_report_format`、流程數字閉合 `check_flow_closure`、撤稿、PDF 實體…）。
 **安裝/clone 後先 `python EBM_Search/scripts/selftest_guards.py`** 證明守門有效，再開工。
 （這條對齊 `SEARCH_SPEC.md` ★執行規範「機器守門優先於記性」；於啟動器重申，確保手機/遠端也照做。）
 

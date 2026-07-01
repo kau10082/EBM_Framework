@@ -35,6 +35,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -395,8 +396,23 @@ def main(argv=None):
         ap.error("缺少必要設定:%s(env ZOTERO_API_KEY 或 settings.yaml 的 zotero 區)" % ", ".join(missing))
     if len(items) > 50:
         ap.error("單批上限 50 筆,本次 %d 筆;請分批(之後可加自動分批)。" % len(items))
-    resp = post_to_zotero(items, conf)
+    try:
+        resp = post_to_zotero(items, conf)
+    except urllib.error.HTTPError as e:
+        sys.exit("❌ Zotero API 拒絕(HTTP %s)：多為 API key 錯誤/過期或 library_id 不符——"
+                 "檢查 settings.yaml 的 zotero 區後重試(未寫入任何項目)" % e.code)
+    except Exception as e:  # noqa: BLE001
+        sys.exit("❌ Zotero 匯入失敗(%s)：網路/伺服器問題,未確認寫入;請重試" % str(e)[:80])
     print(json.dumps(resp, ensure_ascii=False, indent=2))
+    # Zotero 回應含 successful/unchanged/failed 三桶——部分失敗不可 exit 0 讓使用者以為全數入庫
+    failed = resp.get("failed") or {}
+    if failed:
+        sys.stderr.write("❌ 有 %d 筆匯入失敗（其餘已入庫）：\n" % len(failed))
+        for k, v in list(failed.items())[:10]:
+            sys.stderr.write("  - item[%s]: %s\n" % (k, (v or {}).get("message", v)))
+        sys.exit(1)
+    sys.stderr.write("✅ 全數入庫：successful %d、unchanged %d\n"
+                     % (len(resp.get("successful") or {}), len(resp.get("unchanged") or {})))
 
 
 if __name__ == "__main__":

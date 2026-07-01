@@ -39,6 +39,13 @@ def _register_font(explicit=None):
                 pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=0)); return "CJK"
             except Exception:
                 continue
+    try:  # 無任何 TTF 時退 reportlab 內建 CID 字型（繁體覆蓋有限但不會整片缺字）
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        sys.stderr.write("找不到 TTF CJK 字型，改用內建 STSong-Light（繁體覆蓋有限；建議 --font 指定 msjh.ttc/wqy-zenhei.ttc）\n")
+        return "STSong-Light"
+    except Exception:
+        pass
     sys.stderr.write("找不到 CJK 字型，中文會缺字；建議 --font 指定 msyh.ttc/wqy-zenhei.ttc\n")
     return "Helvetica"
 
@@ -117,7 +124,8 @@ def build(infile, out, font=None, layout="cochrane5"):
         S.append(P("證明各試驗臨床上『可擺在一起比』（Cochrane Ch9）：研究設計／基準風險／介入·對照精確內容／追蹤時框。", 8.5, col="#555", sp=3))
         rows = [["試驗", "研究設計", "N／族群（基準風險）", "介入臂", "對照臂", "追蹤", "主要終點"]]
         for r in (syn.get("study_characteristics") or []):
-            rows.append([cell(r.get("trial", ""), 7.5), cell(r.get("phase", "") + "；多中心雙盲平行", 7.5),
+            # 設計感知：讀 design_detail（schema 已納契約）；缺值只印 phase——不得偽造『多中心雙盲平行』
+            rows.append([cell(r.get("trial", ""), 7.5), cell(r.get("design_detail") or r.get("phase", "") or "—", 7.5),
                          cell(r.get("n", ""), 7.5), cell(r.get("drug", "") + "（" + r.get("dose", "") + "）", 7.5),
                          cell(r.get("comparator", ""), 7.5), cell(r.get("duration", ""), 7.5), cell(r.get("primary_outcome", ""), 7.5)])
         t = Table(rows, colWidths=FR(0.08, 0.15, 0.13, 0.22, 0.13, 0.08, 0.21)); t.setStyle(tstyle()); S.append(t)
@@ -139,6 +147,9 @@ def build(infile, out, font=None, layout="cochrane5"):
         # 欄寬資料驅動：AMSTAR2/MAIC 的欄內容（綜整名＋關鍵領域敘述）比 RCT 的 RoB2(短判定詞)長，
         # 故 rob_section.colwidths 可覆寫預設，避免窄欄(0.08)文字溢出（2026-06 使用者回報）。
         _cw = rsec.get("colwidths") or [0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.07, 0.43]
+        if len(_cw) != 8:   # 欄寬數必須＝欄數，否則 reportlab 直接例外；長度不符時退回預設並警示
+            sys.stderr.write("⚠ rob_section.colwidths 長度 %d ≠ 8，改用預設欄寬\n" % len(_cw))
+            _cw = [0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.07, 0.43]
         t = Table(rows, colWidths=FR(*_cw)); t.setStyle(tstyle()); S.append(t)
         S.append(Spacer(1, 3 * mm))
 
