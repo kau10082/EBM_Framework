@@ -105,7 +105,8 @@ def main(argv=None):
             for f in files:
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, ROOT).replace("\\", "/")
-                # 排除規則（版權 PDF／git／快取一律排除；真值設定僅 --with-secrets 才含）
+                # 排除規則（版權 PDF／git／快取一律排除；真值設定 settings.yaml **預設即含**（私用版），
+                # 加 --shareable/--no-secrets 才排除——舊註解曾寫反方向（誤稱 --with-secrets 才含），易把私用版當可分享版外流）
                 # 底線開頭檔＝暫存/快取資料(_corpus.json/_synthesis.json…)排除，但**保留 _*.py 正當原始碼**
                 # （如 _build_pdf.py＝GRADE PDF 渲染器；曾被此規則誤殺，導致打包後 skill 無法產 PDF）
                 if f in ex_files or os.path.splitext(f)[1].lower() in EX_EXT or (f.startswith("_") and not f.endswith(".py")):

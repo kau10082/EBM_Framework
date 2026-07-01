@@ -201,7 +201,7 @@ def _first_author_last(rec):
         if isinstance(a0, dict):
             return a0.get("last") or a0.get("last_name") or ""
         if isinstance(a0, str):
-            return a0.split(",")[0].split()[0] if a0 else ""
+            return (a0.split(",")[0].split() or [""])[0]   # " "/"," 等髒值不可 IndexError 讓整批中止
     return ""
 
 
@@ -501,8 +501,18 @@ def verify_record(rec, args):
     def _confirmed(src, key):
         return src.get(key) if isinstance(src, dict) and src.get("status") in ("match", "retracted") else None
     _cr = sources.get("crossref", {})
-    resolved_doi = rec.get("doi") or _confirmed(_cr, "doi") or _confirmed(pub, "doi")
+    # 輸入自帶 DOI 若被 Crossref『以該 DOI 直查』判 miss（指向論文的標題與記錄不符）＝疑手填錯 DOI：
+    # 不可原樣冠上 verdict 外洩（下游 fulltext_fetch 優先用 resolved_doi 會抓到不相干論文的全文）。
+    # 此時優先採「確實匹配上」來源解析出的 DOI；無則保留但標 doi_suspect 供 ⑤a 稽核/人工修正。
+    rec_doi = rec.get("doi")
+    doi_suspect = bool(rec_doi and isinstance(_cr, dict) and _cr.get("status") == "miss"
+                       and str(_cr.get("doi") or "").lower().strip() == str(rec_doi).lower().strip())
+    if doi_suspect:
+        resolved_doi = _confirmed(_cr, "doi") or _confirmed(pub, "doi") or rec_doi
+    else:
+        resolved_doi = rec_doi or _confirmed(_cr, "doi") or _confirmed(pub, "doi")
     return {
+        **({"doi_suspect": True} if doi_suspect else {}),
         "id": rec.get("id"),
         "input": {"title": rec.get("title"), "year": _year_of(rec.get("year")),
                   "doi": rec.get("doi"), "first_author": _first_author_last(rec)},
@@ -522,7 +532,10 @@ def load_input(args):
     with open(args.infile, "r", encoding="utf-8") as f:
         data = json.load(f)
     if isinstance(data, dict):
-        data = data.get("items") or data.get("results") or []
+        data = data.get("items") or data.get("results")
+        if not isinstance(data, list):
+            sys.exit("輸入檔沒有可辨識的紀錄清單（預期頂層 list 或 items/results 鍵）：%s"
+                     "——餵錯檔不可靜默空跑寫出空 verified.json" % args.infile)
     return data
 
 

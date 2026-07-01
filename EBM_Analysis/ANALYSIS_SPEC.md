@@ -10,7 +10,7 @@
 **核心模型：你（Claude）就是運算引擎。不呼叫 Anthropic API、不跑外部 LLM 程序。**
 規格檔（相對 `EBM_Analysis/`；執行時加前綴）：
 - `phases/0N.md`：每階段指令（frontmatter 列出該階段要套用的 guardrails 與 output_schema）
-- `guardrails/*.md`：20 條護欄全文
+- `guardrails/*.md`：36 條護欄全文
 - `schema/*.json`：每階段輸出的 JSON Schema（完整性強制依據）
 - `tools/`：**無 API** 的確定性輔助（PDF 抽文字、schema 驗證、報告渲染）
 
@@ -61,7 +61,7 @@
 - **phase3 最關鍵**：對**每個 outcome**，五下調（偏誤風險／不一致性／間接性／不精確／發表偏誤）＋三上調領域**逐一**給 `verdict`＋`rationale`，缺一即 schema 驗證失敗 → 補齊。
 - 觸發到的護欄一定要在輸出留下結果，不可省略。各護欄觸發條件見 `manifest.yaml` 的 `guardrails:` 區。
 - 報告一律由 JSON 渲染，不憑印象寫。
-- **★ 每關自跑守門、貼 PASS 才往下（可攜強制，v0.21；手機/遠端亦同）**：本框架的機器守門在**手機/遠端/打包模式下專案 Stop hook 不一定觸發**，故**不可只靠 hook**。每完成一階段、尤其**定稿/產 PDF 前**，必須**自己**跑 `python EBM_Analysis/tools/verify_all.py`（完整：schema／selfcheck C1-C15／SoF／PRISMA 27 項／渲染煙霧測試）並**把 PASS 結果貼出**才算過關；FAIL 未清不得宣稱完成。`analysis_gate.py`（輕量、已掛 Stop hook）只是最後一道便宜防線，**不能取代**自跑 `verify_all`。
+- **★ 每關自跑守門、貼 PASS 才往下（可攜強制，v0.21；手機/遠端亦同）**：本框架的機器守門在**手機/遠端/打包模式下專案 Stop hook 不一定觸發**，故**不可只靠 hook**。每完成一階段、尤其**定稿/產 PDF 前**，必須**自己**跑 `python EBM_Analysis/tools/verify_all.py`（完整：schema／selfcheck C1-C18／SoF／PRISMA 27 項／渲染煙霧測試）並**把 PASS 結果貼出**才算過關；FAIL 未清不得宣稱完成。`analysis_gate.py`（輕量、已掛 Stop hook）只是最後一道便宜防線，**不能取代**自跑 `verify_all`。
 
 ## 護欄速查（全文見 guardrails/，此處僅觸發提示）
 | 護欄 | 觸發 |

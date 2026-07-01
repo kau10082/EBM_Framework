@@ -39,7 +39,11 @@ def gen_sources(dest):
     corpus = CACHE / "_corpus.json"
     if not corpus.exists():
         return False
-    d = json.loads(corpus.read_text(encoding="utf-8"))
+    try:
+        d = json.loads(corpus.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"⚠ _corpus.json 解析失敗（{str(e)[:50]}）：略過 sources.md（封存照常）")
+        return False
     rq = d.get("review_question", {})
     L = ["# 證據來源清單", "", "## 回顧問題（Review Question）", rq.get("statement", ""), "",
          f"- **P**：{rq.get('P','')}", f"- **I**：{rq.get('I','')}",
@@ -52,11 +56,17 @@ def gen_sources(dest):
         cite = reg = ""
         p1 = CACHE / f"{pid}.p1.json"
         if p1.exists():
-            cite = (json.loads(p1.read_text(encoding="utf-8")).get("citation", "") or "").replace("|", "／")
+            try:
+                cite = (json.loads(p1.read_text(encoding="utf-8")).get("citation", "") or "").replace("|", "／")
+            except Exception:
+                cite = "（p1 解析失敗）"
         p2 = CACHE / f"{pid}.p2.json"
         if p2.exists():
-            j = json.loads(p2.read_text(encoding="utf-8"))
-            reg = ((j.get("selective_reporting") or {}).get("registry")) or ""
+            try:
+                j = json.loads(p2.read_text(encoding="utf-8"))
+                reg = ((j.get("selective_reporting") or {}).get("registry")) or ""
+            except Exception:
+                reg = "（p2 解析失敗）"
         L.append(f"| {pid} | {p.get('relevance','')} | {p.get('role','')} | "
                  f"{p.get('grade_track','')} | {cite} | {reg} |")
     overlap = d.get("overlap_notes")
@@ -76,13 +86,20 @@ def _copy_dir(src, files, dest):
 
 
 def _clear(d):
+    """清空目錄（保留 .gitkeep）。回傳刪除失敗清單——單一鎖檔（OneDrive 暫鎖）不得讓清空
+    中途 crash（封存已完成、重跑又會撞「已存在」），失敗項一律回報、不靜默吞（資料保全硬規則）。"""
+    fails = []
     for f in d.iterdir():
         if f.name == ".gitkeep":
             continue
-        if f.is_file():
-            f.unlink()
-        elif f.is_dir():
-            shutil.rmtree(f)
+        try:
+            if f.is_file():
+                f.unlink()
+            elif f.is_dir():
+                shutil.rmtree(f)
+        except Exception as e:
+            fails.append((str(f), type(e).__name__))
+    return fails
 
 
 def main(argv):
@@ -137,8 +154,8 @@ def main(argv):
             for f in reports_dir.iterdir():
                 if f.is_file() and f.name != ".gitkeep" and not (deliver / f.name).exists():
                     shutil.copy2(f, deliver / f.name); dn += 1
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠ reports 成品夾解析/複製失敗（{str(e)[:50]}）：reports PDF 可能未入封存，請人工確認")
 
     # cache：JSON 入 audit；.txt 視 --with-text
     if CACHE.exists():
@@ -159,11 +176,22 @@ def main(argv):
             else:
                 shutil.copy2(f, audit / f.name); an += 1
 
+    # 資料保全硬規則：未 --with-text 時 .txt 不封存（版權考量、刻意），但即將被 --clear 刪除者
+    # 必須在 MANIFEST 記名——絕不允許「沒封存、沒記名、卻被清掉」的無聲遺失路徑。
+    skipped_txt = [] if with_text else sorted(f.name for f in CACHE.glob("*.txt")) if CACHE.exists() else []
+    manifest = [f"# 封存 {slug} {date}"]
+    if skipped_txt:
+        manifest.append("")
+        manifest.append("## 未封存的抽取全文 .txt（--with-text 未加；%s）"
+                        % ("已被 --clear 刪除、不可復原" if clear else "仍留在 cache/"))
+        manifest += [f"[未複製{'·已刪' if clear else ''}] cache/{n}" for n in skipped_txt]
+    (run / "MANIFEST.txt").write_text("\n".join(manifest) + "\n", encoding="utf-8")
+
     has_src = False if no_sources else gen_sources(deliver)
 
+    clear_fails = []
     if clear:
-        _clear(CACHE)
-        _clear(OUTPUTS)
+        clear_fails = _clear(CACHE) + _clear(OUTPUTS)
 
     src_msg = "未產生（--no-sources）" if no_sources else ("有" if has_src else "無（缺 _corpus.json）")
     try:
@@ -173,7 +201,12 @@ def main(argv):
     print(f"✅ 封存完成 → {_disp}")
     print(f"   deliverables: {dn} 檔　audit: {an} 檔　sources.md: {src_msg}")
     if clear:
-        print("   已清空 cache/ 與 outputs/（保留 .gitkeep），可開始下一個分析。")
+        if clear_fails:
+            print(f"   ⚠️ 清空有 {len(clear_fails)} 項刪除失敗（鎖檔/權限），請人工確認後清除：")
+            for path, et in clear_fails[:10]:
+                print(f"       - {path}（{et}）")
+        else:
+            print("   已清空 cache/ 與 outputs/（保留 .gitkeep），可開始下一個分析。")
     else:
         print("   （未清空；如要清出空間給下次分析，加 --clear）")
     return 0

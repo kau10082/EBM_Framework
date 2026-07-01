@@ -77,15 +77,17 @@ def _get_retry(url, timeout=60, tries=5, base=0.5):
             last = e; time.sleep(base * (2 ** i)); continue
     raise last
 
-# NCBI E-utilities 無 API key 上限 3 req/s → 函式層強制每次呼叫間隔 ≥0.34s（不依賴 CLI --sleep，
-# 防 batch（300+ 筆）尾段 429 穿透）。模組層單調節流：記上次呼叫時刻、不足則補眠。
-_NCBI_MIN_INTERVAL = 0.34
-_ncbi_last = [0.0]
-def _ncbi_throttle():
-    dt = time.time() - _ncbi_last[0]
-    if dt < _NCBI_MIN_INTERVAL:
-        time.sleep(_NCBI_MIN_INTERVAL - dt)
-    _ncbi_last[0] = time.time()
+# NCBI E-utilities 無 API key 上限 3 req/s。節流由 pmc_fulltext.NcbiClient 內建 rate limiter 負責——
+# 但 limiter 只在**同一個 client 實例**內有效：曾每筆記錄 new 一個 client（每個首發不等待），
+# 300+ 筆 batch 跨記錄間隔完全不受控 → 429 → 整批靜默判「無 PMC 全文」。故 client 全模組共用。
+_NCBI_CLI = {}
+def _ncbi_client(mail):
+    cli = _NCBI_CLI.get(mail)
+    if cli is None:
+        _, api_key = pmc_fulltext.resolve_credentials()
+        cli = pmc_fulltext.NcbiClient(mailto=mail, api_key=api_key)
+        _NCBI_CLI[mail] = cli
+    return cli
 
 def _norm_doi(d):
     if not d: return None
@@ -144,8 +146,7 @@ def _crossref_abstract(doi, mail):
 def _pmc_fulltext(pmid, doi, mail):
     """EuropePMC core 找 pmcid → NCBI efetch(db=pmc) 取 OA 全文 XML 去標籤。
     2026-06 修正：委派給正規 pmc_fulltext.NcbiClient 處理 route 與速率限制。"""
-    _, api_key = pmc_fulltext.resolve_credentials()
-    cli = pmc_fulltext.NcbiClient(mailto=mail, api_key=api_key)
+    cli = _ncbi_client(mail)
     pmcid = None
     if pmid:
         res = cli.idconv_pmcids([pmid])
@@ -237,10 +238,18 @@ def resolve_one(rec, min_chars=250, mail=None, sleep=0.0, force=False):
 
     # (4) Unpaywall 全部 oa_locations 實際下載+解析（DOI-based；無 DOI 時此管道不適用，
     #     OA 嘗試已由 (3) PMC 涵蓋）
+    lookup_failed = False
     if doi:
-        rec["unpaywall_checked"] = True
         is_oa, urls = _unpaywall_locations(doi, mail)
         rec["oa"] = is_oa
+        if is_oa is None:
+            # 查詢失敗（斷網/逾時/429）≠ 來源無 OA：不得蓋 unpaywall_checked，
+            # 否則會以「已窮盡管道」名義進待評估（gate 因缺旗標會擋下、逼恢復網路重跑——fail-closed）
+            lookup_failed = True
+            rec["unpaywall_lookup_failed"] = True
+        else:
+            rec["unpaywall_checked"] = True
+            rec.pop("unpaywall_lookup_failed", None)
         for url in urls:
             tried.append(url)
             try:
@@ -260,7 +269,13 @@ def resolve_one(rec, min_chars=250, mail=None, sleep=0.0, force=False):
                 if sleep: time.sleep(sleep)
                 return True
     rec["oa_urls_tried"] = tried
-    rec["channels_exhausted"] = True
+    rec["channels_exhausted"] = not lookup_failed   # 有管道沒真的查成＝尚未窮盡
+    # 重跑冪等：上一輪已抓到的 fulltext_excerpt 不因本輪網路失敗而降級回 awaiting
+    if rec.get("fulltext_excerpt") and len(rec["fulltext_excerpt"]) >= min_chars:
+        rec["content_status"] = "have"
+        rec.setdefault("content_via", "fulltext_excerpt(previous-run)")
+        if sleep: time.sleep(sleep)
+        return True
     if force and had_abstract:
         # Tier 3 強制實取但取不到更長正文：保留既有 abstract 當可篩內容（已蓋實抓證明旗標）
         rec["content_status"] = "have"
@@ -281,7 +296,8 @@ def resolve(records, min_chars=250, sleep=0.0):
         # 已有內容（registry/ai_summary/have）者跳過——本工具只處理缺內容者
         if r.get("content_status") in ("registry", "ai_summary"):
             continue
-        if r.get("content_status") == "have" and r.get("abstract") and len(r["abstract"]) >= min_chars:
+        if r.get("content_status") == "have" and (
+                (r.get("abstract") and len(r["abstract"]) >= min_chars) or r.get("fulltext_excerpt")):
             have += 1; continue
         ok = resolve_one(r, min_chars=min_chars, mail=mail, sleep=sleep)
         have += 1 if ok else 0
@@ -298,7 +314,13 @@ def main():
     raw = json.loads(Path(a.infile).read_text(encoding="utf-8"))
     # dict wrapper（如 {"papers":[...]}）只取出內層 list 解析；resolve 就地改 record 物件，
     # 故寫回原 raw 可同時保留外層結構與更新，不破壞後游依賴該 schema 的腳本。
-    recs = (raw.get("records") or raw.get("papers") or []) if isinstance(raw, dict) else raw
+    if isinstance(raw, dict):
+        recs = raw.get("records") or raw.get("papers")
+        if not isinstance(recs, list):
+            sys.exit("輸入檔沒有可辨識的紀錄清單（預期頂層 list 或 records/papers 鍵）：%s"
+                     "——餵錯檔不可靜默空跑並覆寫輸出" % a.infile)
+    else:
+        recs = raw
     res = resolve(recs, min_chars=a.min_chars, sleep=a.sleep)
     out = a.outfile or a.infile
     Path(out).write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

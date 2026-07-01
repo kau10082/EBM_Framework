@@ -24,7 +24,8 @@ CACHE = Path(workdir.cache_dir()); INPUTS = Path(workdir.inputs_dir())
 UA = {"User-Agent": "Mozilla/5.0 (EBM_Framework quote_verify; +https://github.com/kau10082/EBM_Framework)"}
 
 def _norm(s):
-    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+    s = re.sub(r"(?<=\d)[,，](?=\d)", "", (s or ""))   # 千分位收合（2,525≡2525），與 _digits 同步
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
 def _pdf_text(data):
     from pypdf import PdfReader
@@ -95,15 +96,23 @@ def source_text(paper_id, seed_map):
             if t:
                 return t, "unpaywall:oa（online 主來源失敗後備援）"
             return None, "online 取得失敗:%s" % str(e)[:40]
-    # 無 channel/url：仍嘗試 Unpaywall（有 DOI 就試）
+    # 無 channel/url 或無 seed 條目：inputs/<paper_id>.pdf 實體存在就直接核對——
+    # 曾因 seed 讀不到→seed_map 空→連本機 PDF 都不開，全部 skip 卻印 ✅（皇冠守門空轉）。
+    cand = INPUTS / (paper_id + ".pdf")
+    if cand.exists():
+        return _pdf_text(cand.read_bytes()), f"local:{cand.name}" + ("" if seed_map.get(paper_id) else "（無 seed 條目，直接用 inputs PDF）")
+    # 仍嘗試 Unpaywall（有 DOI 就試）
     t = _unpaywall_text(doi)
     if t:
         return t, "unpaywall:oa"
     return None, "無 channel/url"
 
 def _digits(s):
-    """取數字串集合（分隔符不敏感）：'0.58'→{'0','58'}、'0·52'→{'0','52'}、'2,525'→{'2','525'}。"""
-    return set(re.findall(r"\d+", s or ""))
+    """取數字串集合（分隔符不敏感）：'0.58'→{'0','58'}、'0·52'→{'0','52'}。
+    千分位先收合：'2,525'→'2525'——quote 與 PDF 抽出文字的千分位寫法常不一致，
+    拆成 {'2','525'} 會把正確轉錄的數字誤判為捏造（假 FAIL 擋定稿）。"""
+    s = re.sub(r"(?<=\d)[,，](?=\d)", "", s or "")
+    return set(re.findall(r"\d+", s))
 
 def match(quote, src_norm, threshold, src_digits=None):
     """模糊比對 ＋『數字守門』：difflib 對長句改一個數字仍 >0.85，故額外要求 quote 內**每個數字串都在原文出現**，
@@ -142,6 +151,9 @@ def main():
         seed = json.load(open(seed_path, encoding="utf-8"))
         seed_map = {p["paper_id"]: p for p in seed.get("papers", [])}
     p1files = sorted(CACHE.glob("*.p1.json"))
+    if not seed_map and p1files:
+        sys.stderr.write("⚠ 找不到交接包 _corpus_seed.json（--seed 未指定且 run_state 無 fulltext_dir）："
+                         "線上管道無從解析，只能核對 inputs/ 本機 PDF\n")
     total = ok = fail = skip = 0; failures = []
     for f in p1files:
         d = json.loads(f.read_text(encoding="utf-8")); pid = d["paper_id"]
@@ -201,6 +213,13 @@ def main():
     if failures:
         print("失敗清單："); [print("  -", x) for x in failures]
         sys.exit(1)
+    if skip and ok == 0:
+        # 一條都沒真正核對（seed 缺漏/來源全取不到）＝守門空轉，不得印 ✅ 放行（fail-closed）
+        print("❌ 有 quote 待核但一條都無法取得來源核對（seed 缺漏或全文管道全失敗）："
+              "請確認 --seed 指向 _corpus_seed.json、inputs/ 有 PDF，修復後重跑——空轉不算通過")
+        sys.exit(1)
+    if skip:
+        print(f"⚠ 有 {skip} 條 quote 無法核對（見上方 ⚠ 清單），需人工確認；其餘全部通過")
     print("✅ 所有可核對之逐字 quote 均在來源全文中找到（反幻覺核對通過）")
 
 if __name__ == "__main__":

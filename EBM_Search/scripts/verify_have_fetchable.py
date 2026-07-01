@@ -10,8 +10,10 @@ verify_have_fetchable.py — 『判 have 必須實抓得到全文』驗證器（
 拖到 Phase 1 評讀才爆。本器在 ②c/⑧ 就實抓每筆 have(online)、字元數 < 門檻即判『假 have』，
 回傳應改 need-supplement 的清單，並蓋 `fulltext_verified` 真旗標供守門檢核。
 
-判定：依序試 PMC fullTextXML → Unpaywall best/oa_locations PDF(瀏覽器 UA) → 取回正文字元數
-      ≥ min_chars(預設 3000，遠大於摘要) 才算『實抓到』；否則 false-have。
+判定：依序試 PMC fullTextXML → Unpaywall best/oa_locations PDF(瀏覽器 UA)；以 _is_real_fulltext
+      （≥12000 字元＋≥3 個章節/統計特徵）判『真全文』——排除中繼資料著陸頁假通過。
+      --min-chars 只是額外下限（低於 12000 時實質由 _is_real_fulltext 決定）。
+      整體網路不可用時 fail-closed：exit 3、不回寫，**不得把整批 have 誤判為假 have**。
 
 用法：python verify_have_fetchable.py --in <papers.json|corpus_seed> [--min-chars 3000] [--only-included]
 程式內：import verify_have_fetchable as v; res = v.verify(papers)
@@ -138,7 +140,13 @@ def verify(papers, min_chars=3000, only_included=False, sleep=0.2):
 
 def _load_papers(path):
     obj = json.loads(Path(path).read_text(encoding="utf-8"))
-    return obj.get("papers", obj if isinstance(obj, list) else [])
+    if isinstance(obj, list):          # 頂層 list 也是合法輸入（docstring 明示 papers.json|corpus_seed）
+        return obj
+    if isinstance(obj, dict):
+        v = obj.get("papers")
+        if isinstance(v, list):
+            return v
+    sys.exit("輸入檔沒有可辨識的 papers（預期頂層 list 或 papers 鍵）：%s" % path)
 
 
 def _write_back(path, papers):
@@ -153,14 +161,28 @@ def _write_back(path, papers):
         obj = papers
     p.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
 
+def _network_ok(timeout=10):
+    """整體連線探測：全斷網時不得開驗——否則整批 have(online) 會被抓不到而集體誤判假 have。"""
+    try:
+        _get("https://api.crossref.org/types", timeout)
+        return True
+    except urllib.error.HTTPError:
+        return True    # 伺服器有回應＝網路可用
+    except Exception:
+        return False
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="infile", required=True)
-    ap.add_argument("--min-chars", type=int, default=3000)
+    ap.add_argument("--min-chars", type=int, default=3000,
+                    help="額外字元下限；實際『真全文』判定以 _is_real_fulltext（≥12000＋章節特徵）為準")
     ap.add_argument("--only-included", action="store_true")
     ap.add_argument("--no-write", action="store_true", help="只驗不回寫（預設會把 fulltext_verified 回寫原檔）")
     a = ap.parse_args()
     papers = _load_papers(a.infile)
+    if not _network_ok():
+        sys.exit("❌ 網路不可用（Crossref 連線探測失敗）：不執行實抓驗證、不回寫——"
+                 "斷網跑一次會把整批 have 誤判為假 have（fail-closed）")
     res = verify(papers, min_chars=a.min_chars, only_included=a.only_included)
     if not a.no_write:
         _write_back(a.infile, papers)   # 回寫 fulltext_verified，讓 gate_guard 讀得到（否則白驗）
@@ -171,7 +193,7 @@ def main():
               % (f["paper_id"], f["pmid"], f["doi"], f["chars"], f["title"]))
     if res["false_have"]:
         sys.exit(1)
-    print("✅ 所有 have(online) 均實抓得到全文（≥%d 字元）。" % a.min_chars)
+    print("✅ 所有 have(online) 均實抓得到全文（過 _is_real_fulltext 真全文判定）。")
 
 if __name__ == "__main__":
     main()

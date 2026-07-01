@@ -76,14 +76,16 @@ def _get_json(url, ua, timeout=20):
 
 
 def unpaywall_lookup(doi, mailto, timeout=20):
-    """DOI → Unpaywall。回 {is_oa, oa_status, pdf_url, landing_url, host_type}。失敗回 {}。"""
+    """DOI → Unpaywall。回 {is_oa, oa_status, pdf_url, landing_url, host_type}。
+    無 DOI 回 {}；**查詢失敗回 None**——「抓取失敗」與「來源真的無 OA」必須可區分（硬規則），
+    失敗不得被 classify 靜默當成 closed（付費牆）。"""
     if not doi:
         return {}
     url = "%s/%s?email=%s" % (UNPAYWALL, urllib.parse.quote(doi), urllib.parse.quote(mailto))
     try:
         d = _get_json(url, UA % mailto, timeout)
     except Exception:                        # noqa: BLE001
-        return {}
+        return None
     loc = d.get("best_oa_location") or {}
     return {
         "is_oa": bool(d.get("is_oa")),
@@ -95,7 +97,8 @@ def unpaywall_lookup(doi, mailto, timeout=20):
 
 
 def pmcid_of(pmid, mailto, timeout=20):
-    """PMID → PMCID(佐證 PMC 有免費版;TODO:接 PMC OA 套件取真正 PDF)。無則回 ''。"""
+    """PMID → PMCID(佐證 PMC 有免費版;TODO:接 PMC OA 套件取真正 PDF)。
+    無 PMC 版回 ''；**查詢失敗回 None**（與「真的無 PMC 版」區分）。"""
     if not pmid:
         return ""
     url = "%s?ids=%s&format=json&tool=consensus-verify&email=%s" % (
@@ -105,10 +108,12 @@ def pmcid_of(pmid, mailto, timeout=20):
         recs = d.get("records") or []
         return recs[0].get("pmcid", "") if recs else ""
     except Exception:                        # noqa: BLE001
-        return ""
+        return None
 
 
 def classify(up):
+    if up is None:                            # Unpaywall 查詢失敗 ≠ 付費牆：獨立分類，不得混入 closed
+        return "lookup_failed"
     if up.get("pdf_url"):
         return "oa_direct"
     if up.get("is_oa"):
@@ -166,9 +171,15 @@ def main(argv=None):
 
     with open(args.infile, "r", encoding="utf-8") as f:
         data = json.load(f)
-    records = data.get("results") or data.get("items") or data if isinstance(data, dict) else data
+    if isinstance(data, dict):
+        records = data.get("results") or data.get("items") or data.get("records") or data.get("papers")
+        if not isinstance(records, list):
+            sys.exit("輸入檔沒有可辨識的紀錄清單（預期頂層 list 或 results/items/records/papers 鍵）：%s"
+                     "——餵錯檔不可靜默空跑當成功" % args.infile)
+    else:
+        records = data
 
-    rows, cats = [], {"oa_direct": 0, "oa_landing": 0, "closed": 0}
+    rows, cats = [], {"oa_direct": 0, "oa_landing": 0, "closed": 0, "lookup_failed": 0}
     for rec in records:
         inp = rec.get("input", rec)
         doi = rec.get("resolved_doi") or inp.get("doi") or rec.get("doi") or ""
@@ -176,11 +187,14 @@ def main(argv=None):
         title = (inp.get("title") or rec.get("title") or "")[:50]
         up = unpaywall_lookup(doi, mailto)
         cat = classify(up)
+        up = up or {}
         pmcid = "" if (args.no_pmc or not pmid) else pmcid_of(pmid, mailto)
         row = {"pmid": pmid, "doi": doi, "title": title, "category": cat,
                "oa_status": up.get("oa_status", ""), "pdf_url": up.get("pdf_url", ""),
-               "landing_url": up.get("landing_url", ""), "pmcid": pmcid,
-               "downloaded": None, "detail": ""}
+               "landing_url": up.get("landing_url", ""), "pmcid": pmcid if pmcid is not None else "",
+               "downloaded": None, "detail": "Unpaywall 查詢失敗（≠無 OA，請重跑）" if cat == "lookup_failed" else ""}
+        if pmcid is None:
+            row["detail"] = (row["detail"] + "；" if row["detail"] else "") + "PMCID 查詢失敗（≠無 PMC 版）"
         if args.download and cat == "oa_direct":
             dest = os.path.join(out_dir, "%s.pdf" % (pmid or _doi_slug(doi)))
             ok, detail = download_pdf(up["pdf_url"], dest, mailto)
@@ -193,9 +207,13 @@ def main(argv=None):
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump({"mailto": mailto, "summary": cats, "items": rows}, f, ensure_ascii=False, indent=2)
 
-    icon = {"oa_direct": "✅", "oa_landing": "⚠️", "closed": "🏥"}
-    sys.stderr.write("fulltext: %d 筆 | ✅oa_direct %d ／ ⚠️oa_landing %d ／ 🏥closed %d ｜ manifest→%s\n" % (
-        len(rows), cats["oa_direct"], cats["oa_landing"], cats["closed"], os.path.normpath(manifest_path)))
+    icon = {"oa_direct": "✅", "oa_landing": "⚠️", "closed": "🏥", "lookup_failed": "❓"}
+    sys.stderr.write("fulltext: %d 筆 | ✅oa_direct %d ／ ⚠️oa_landing %d ／ 🏥closed %d ／ ❓lookup_failed %d ｜ manifest→%s\n" % (
+        len(rows), cats["oa_direct"], cats["oa_landing"], cats["closed"], cats["lookup_failed"],
+        os.path.normpath(manifest_path)))
+    if cats["lookup_failed"]:
+        sys.stderr.write("⚠ 有 %d 筆 Unpaywall 查詢失敗：這些**不是**付費牆判定，請恢復網路後重跑，"
+                         "不得直接當 closed 走醫院清單。\n" % cats["lookup_failed"])
     for r in rows:
         dl = "" if r["downloaded"] is None else ("｜下載 %s" % ("OK " + r["detail"] if r["downloaded"] else r["detail"]))
         print("%s %-9s %-14s %s%s" % (icon[r["category"]], r["category"], r["oa_status"] or "-", r["title"], dl))

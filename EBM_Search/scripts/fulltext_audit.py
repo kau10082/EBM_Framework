@@ -50,7 +50,9 @@ def audit(papers, sleep=0.15):
 
 def _load_papers(seed_path):
     obj = json.loads(Path(seed_path).read_text(encoding="utf-8"))
-    return obj.get("papers", obj if isinstance(obj, list) else [])
+    if isinstance(obj, list):          # 頂層 list 也是合法輸入（obj.get 對 list 會 AttributeError crash）
+        return obj
+    return obj.get("papers", []) if isinstance(obj, dict) else []
 
 def main():
     ap = argparse.ArgumentParser()

@@ -113,13 +113,16 @@ class NcbiClient:
                 urllib.parse.quote(self.mailto), self._key_param())
             d = self._http(url)
             if not d:
+                sys.stderr.write("⚠ idconv batch %d–%d 抓取失敗：%d 筆 PMID 無法判定有無 PMC 版"
+                                 "（抓取失敗≠無 PMC 版，覆蓋率會無聲下降；請重跑）\n" % (i, i + batch, len(chunk)))
                 continue
             try:
                 for rec in json.loads(d).get("records", []):
                     if rec.get("pmcid"):
                         out[str(rec.get("pmid"))] = rec["pmcid"]
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write("⚠ idconv batch %d 回應解析失敗（%s）：該批 %d 筆視同未判定\n"
+                                 % (i, str(e)[:40], len(chunk)))
         return out
 
     def fetch_pmc_body(self, pmcid, min_len=1500):
@@ -131,6 +134,7 @@ class NcbiClient:
         url = "%s/efetch.fcgi?db=pmc&id=%s&retmode=xml%s" % (EUTILS, urllib.parse.quote(num), self._key_param())
         xml = self._http(url)
         if not xml:
+            sys.stderr.write("⚠ efetch db=pmc %s 抓取失敗（≠非 OA subset）\n" % pmcid)
             return None
         m = re.search(r"<body[ >].*?</body>", xml, re.S)
         if not m:

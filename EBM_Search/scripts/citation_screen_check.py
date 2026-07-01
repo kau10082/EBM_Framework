@@ -29,6 +29,12 @@ def check(g4):
         return ["g4_citation_tracking.json 非物件：無法稽核引文追蹤篩選方式"]
     rounds = g4.get("rounds") or []
     method = str(g4.get("screening_method") or "")
+    # fail-closed：④ 已有新增候選（new_relevant/hits）卻無 rounds 結構、也未聲明 title+abstract →
+    # 篩選方式完全不可稽核（曾因 rounds 空 → 迴圈不跑 → 紅線 gate 靜默通過）
+    if not rounds and "title+abstract" not in method and (g4.get("new_relevant") or g4.get("hits")):
+        fails.append("④ 有新增候選（new_relevant/hits）但無 rounds 結構、screening_method 也未聲明"
+                     " 'title+abstract'：引文追蹤的篩選方式不可稽核——請補 rounds（每輪 screened_on/"
+                     "abstracts_fetched/title_only_dropped）或聲明 screening_method")
     if rounds and "title+abstract" not in method and not any("title+abstract" in str(r.get("screened_on","")) for r in rounds):
         fails.append("④ 未聲明以『標題＋摘要』篩（screening_method/screened_on 皆無 title+abstract）："
                      "疑只憑標題篩＝Cochrane 高敏感紅線")

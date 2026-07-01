@@ -65,8 +65,10 @@ def main():
                 {"uid":"u3","verdict":"全文及摘要皆無"},{"uid":"u4","verdict":"切題"}],
                _io_s.open(_tu/"g3_FINAL_screen.json","w",encoding="utf-8"))
     # 違規：把離題(u2)＋待評估(u3) 當背景灌進 ⑤b → 必須 FAIL
-    _js_s.dump({"records":[{"uid":"u1","role":"core"},{"uid":"u2","role":"background"},
-                           {"uid":"u3","role":"background"},{"uid":"u4","role":"core"}]},
+    # （fixture 用 classify_units 的真實產出形狀 rows/unit（無 role 鍵）——曾因 selftest 手寫守門端期望的
+    #   records/role 形狀，掩蓋了「產出端寫 rows、守門端讀 records」的契約飄移，守門靜默跳檢卻自測全綠。）
+    _js_s.dump({"n":4,"rows":[{"uid":"u1","unit":"核心:x"},{"uid":"u2","unit":"","design":"背景:誤灌"},
+                              {"uid":"u3","unit":"","design":"背景:誤灌"},{"uid":"u4","unit":"核心:y"}]},
                _io_s.open(_tu/"g7_units.json","w",encoding="utf-8"))
     allok &= _assert_fires("⑤b 把離題/待評估當背景灌進決定單位（不入分析鐵律）",
         _gg_strat.check_units_only_concordant(_tu))
@@ -84,8 +86,8 @@ def main():
     _js_s.dump([{"uid":"u1","pmid":"111","verdict":"VERIFIED"},
                 {"uid":"u2","pmid":None,"doi":None,"verify":"UNVERIFIED"}],
                _io_s.open(_tv/"g6_verified.json","w",encoding="utf-8"))
-    # 違規：UNVERIFIED(u2) 被當背景留在 g7_units → 必須 FAIL
-    _js_s.dump({"records":[{"uid":"u1","role":"core","pmid":"111"},{"uid":"u2","role":"background"}]},
+    # 違規：UNVERIFIED(u2) 被當背景留在 g7_units → 必須 FAIL（fixture 用產出端真實 rows/unit 形狀）
+    _js_s.dump({"n":2,"rows":[{"uid":"u1","unit":"核心:x","pmid":"111"},{"uid":"u2","unit":"","design":"背景:誤留"}]},
                _io_s.open(_tv/"g7_units.json","w",encoding="utf-8"))
     allok &= _assert_fires("無法驗證(UNVERIFIED)被當背景留在 ⑤b（須同撤稿剔除）",
         _gg_strat.check_no_unverified(_tv))

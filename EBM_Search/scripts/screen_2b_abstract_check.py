@@ -38,6 +38,9 @@ SKIP_FETCH_STATES = {"registry", "conference"}
 # 同時達『占比 ≥ 閾值』與『筆數 ≥ 下限』才 FAIL，提醒疑似以 abstract_status 規避抓摘要。
 SKIP_FETCH_ABUSE_RATIO = 0.90
 SKIP_FETCH_ABUSE_MIN = 8
+# 剔除判定 token（相容常見寫法；勿只認 "removed"——枚舉飄移會讓 title-only 剔除全數漏檢）
+REMOVED_TOKENS = {"removed", "excluded", "dropped", "drop", "剔除", "排除"}
+KEPT_TOKENS = {"kept", "keep", "included", "保留", "納入"}
 
 def check(g2b):
     fails = []
@@ -60,12 +63,16 @@ def check(g2b):
     title_only_drops = 0
     removed_with_id = 0
     skip_fetch_drops = 0
+    unknown_verdicts = set()
     for r in records:
         pid = r.get("pmid"); doi = r.get("doi")
         has_id = bool((pid and str(pid).strip()) or (doi and str(doi).strip()))
         if has_id:
             has_id_any = True
-        if r.get("verdict") == "removed" and has_id:
+        v = str(r.get("verdict") or "").strip().lower()
+        if v and v not in REMOVED_TOKENS and v not in KEPT_TOKENS:
+            unknown_verdicts.add(v)
+        if v in REMOVED_TOKENS and has_id:
             removed_with_id += 1
             ok = bool(r.get("has_abstract")) or str(r.get("abstract_status") or "") in ABSTRACT_FETCHED_STATES
             if not ok:
@@ -73,6 +80,10 @@ def check(g2b):
             # 全靠 registry/conference『免抓摘要』豁免過關（自身無真摘要）＝疑似規避抓摘要的向量
             elif not r.get("has_abstract") and str(r.get("abstract_status") or "") in SKIP_FETCH_STATES:
                 skip_fetch_drops += 1
+    if unknown_verdicts:
+        fails.append(f"②b records 有無法辨識的 verdict 值 {sorted(unknown_verdicts)[:5]}："
+                     f"守門只認 {sorted(REMOVED_TOKENS)}/{sorted(KEPT_TOKENS)}——枚舉飄移會讓"
+                     "title-only 剔除全數漏檢（fail-closed，請統一 verdict 寫法）")
     if (removed_with_id >= SKIP_FETCH_ABUSE_MIN
             and skip_fetch_drops / removed_with_id >= SKIP_FETCH_ABUSE_RATIO):
         fails.append(

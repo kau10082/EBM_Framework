@@ -48,7 +48,11 @@ def main():
     rows = {}
     for p in sorted(CACHE.glob("*.p3.json")):
         pid = p.name[:-8]
-        data = json.loads(p.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"⚠ {p.name} 解析失敗（{str(e)[:50]}）：跳過本檔，其餘照常稽核——請修復該檔後重跑")
+            continue
         for o in data.get("outcomes", []):
             cat = categorize(o.get("outcome_name", ""))
             dd = o.get("downgrade_domains", {})

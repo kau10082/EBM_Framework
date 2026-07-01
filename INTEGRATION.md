@@ -63,7 +63,7 @@ python scripts/build_corpus_seed.py --in seed.json --out-dir "<全文資料夾>"
 ### 2）接力（單一入口，取代 `/ebm`）
 使用者回「**繼續／是**」即接力到 EBM_Analysis；回「否」則交接包留存，日後對 Claude 說「繼續（進入 EBM 分析）」或指向該交接包即可接上。
 
-> **入口統一**：本框架**已取消 `/ebm`、「以EBM方式分析」等獨立啟動**——EBM 評讀一律由 EBM_Search 完成檢索＋交叉驗證後接力進入，確保被評讀的證據都經過查證（去幻覺、定必含軸）。未經檢索就要直接評讀 PDF 時，`ebm` skill 會導引使用者先走 EBM_Search。
+> **入口統一**：本框架**已取消 `/ebm`、「以EBM方式分析」等獨立啟動**——EBM 評讀一律由 EBM_Search 完成檢索＋交叉驗證後接力進入，確保被評讀的證據都經過查證（去幻覺、定必含軸）。未經檢索就要直接評讀 PDF 時，`ebm-analysis` skill 會導引使用者先走 EBM_Search（`ebm-search`）。
 
 ### 3）EBM_Analysis 匯入（消費交接包）
 Phase 0 第 0 步：
@@ -95,7 +95,7 @@ python tools/ingest_seed.py --seed-dir "<交接包資料夾>"
 - **PII／本機路徑**：`crossref.mailto`、`report.pdf_output_dir`（OneDrive 文件夾）、`analysis.project_dir`（EBM_Analysis 專案根）。
 - **行為參數**：`source`／`matching`／`verdict`（非機敏，一起管理）。
 
-**解析順序**（EBM_Search 腳本的 `default_settings_path()`；EBM_Analysis 的 `analysis` 區由 `/ebm` 讀）：
+**解析順序**（EBM_Search 腳本的 `default_settings_path()`；EBM_Analysis 的 `analysis` 區由 `ebm-analysis` skill／各 tools 讀）：
 ```
 env EBM_CONFIG  >  EBM_Framework/config/settings.yaml（根）  >  各子計畫本地 config/settings.yaml（回退）
 ```

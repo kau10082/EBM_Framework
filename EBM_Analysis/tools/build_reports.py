@@ -41,7 +41,9 @@ def paper_ids():
 def report(pid):
     p1, p3, pp = load(pid, "p1"), load(pid, "p3"), load(pid, "p4")
     if not (p1 and p3 and pp):
-        return
+        missing = [ph for ph, d in (("p1", p1), ("p3", p3), ("p4", pp)) if not d]
+        sys.stderr.write(f"· 跳過 {pid}：缺 {'/'.join(missing)}（未產 report.md）\n")
+        return False
     L = [f"# EBM 評讀：{pp.get('paper_id', pid)}", "", "## PICO", pp.get("pico", ""), ""]
     bl = pp.get("bottom_line", {})
     L += ["## 🎯 核心結論", bl.get("text", ""), "",
@@ -57,6 +59,7 @@ def report(pid):
     hit = [f"- **{labels[k]}**：{cav[k]}" for k in labels if cav.get(k)]
     L += hit if hit else ["（無觸發護欄）"]
     (OUTPUTS / f"{pid}.report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    return True
 
 
 def synthesis():
@@ -134,7 +137,8 @@ def ledger():
 
 
 def _row(cells):
-    return "| " + " | ".join(str(c) for c in cells) + " |"
+    # 儲存格淨化：資料含換行會把列從中折斷、含 '|' 會多出一欄——欄位不得因髒值漂移（資料表硬規則）
+    return "| " + " | ".join(str(c).replace("\n", " ").replace("|", "\\|") for c in cells) + " |"
 
 
 def final_report():
@@ -156,7 +160,8 @@ def final_report():
     if sc:
         drugs = "、".join(dict.fromkeys(r["drug"] for r in sc))
         # 設計感知：證據體標籤由 syn.evidence_base_label 決定（NRSI 不得誤稱『隨機對照試驗』）。
-        _eb = syn.get("evidence_base_label") or "項隨機對照試驗"
+        # 回退值必須中性——曾回退『項隨機對照試驗』，含 NRSI 的證據體被誤稱 RCT。
+        _eb = syn.get("evidence_base_label") or "項研究"
         L += [f"**證據基礎**：{len(sc)} {_eb}，涵蓋 {drugs}。詳見各 `*.report.md` 與 `synthesis.md`。", ""]
     L += ["---", ""]
 
@@ -179,8 +184,8 @@ def final_report():
               "> 證明各試驗臨床上可比（Cochrane Ch9）：設計／基準風險／介入·對照精確內容／追蹤。", "",
               _row(["試驗", "研究設計", "N／族群", "介入臂", "對照臂", "追蹤", "主要終點"]), _row(["---"] * 7)]
         for r in sc:
-            # 設計感知：有 design_detail 用之（NRSI），否則回退 RCT 預設描述。
-            _dd = r.get("design_detail") or ((r.get("phase", "") + "；多中心雙盲平行"))
+            # 設計感知：有 design_detail 用之；缺值只印 phase——不得偽造『多中心雙盲平行』（NRSI/開放標籤/單中心會被寫錯設計）。
+            _dd = r.get("design_detail") or r.get("phase", "") or "—"
             L.append(_row([r["trial"], _dd, r["n"],
                            f'{r["drug"]}（{r["dose"]}）', r["comparator"], r["duration"], r["primary_outcome"]]))
         L.append("")
@@ -299,8 +304,8 @@ def main():
             sys.stderr.write("  修正 cache/_synthesis.json 後重跑；確需略過用 --skip-consistency。\n")
             sys.exit(1)
     OUTPUTS.mkdir(exist_ok=True)
-    for pid in paper_ids():
-        report(pid)
+    pids = paper_ids()
+    written = sum(1 for pid in pids if report(pid))
     synthesis()
     fr = final_report()
     n = ledger()
@@ -326,7 +331,10 @@ def main():
         run_state.autofill()
     except Exception:
         pass
-    print(f"✅ {n} papers → outputs/（report.md / synthesis.md{extra}{pdf_made} / ledger.csv）")
+    # 成功訊息據實：report.md 實際寫出數 ≠ ledger 列數（缺 p3/p4 的 paper 會被跳過，不可謊報全數產出）
+    skipped = len(pids) - written
+    note = f"（{skipped} 篇缺 p3/p4 未產 report.md）" if skipped else ""
+    print(f"✅ ledger {n} papers；report.md 實產 {written} 篇{note} → outputs/（synthesis.md{extra}{pdf_made} / ledger.csv）")
 
 
 if __name__ == "__main__":

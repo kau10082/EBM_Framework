@@ -150,8 +150,30 @@
             "properties": {
               "trial": {"type": "string"}, "drug": {"type": "string"}, "phase": {"type": "string"},
               "n": {"type": "string"}, "dose": {"type": "string"}, "duration": {"type": "string"},
-              "comparator": {"type": "string"}, "primary_outcome": {"type": "string"}
+              "comparator": {"type": "string"}, "primary_outcome": {"type": "string"},
+              "design_detail": {"type": "string", "description": "研究設計逐篇描述（如『多中心雙盲平行 RCT』『回溯性世代(NRSI)』）——renderer 讀此欄；缺值只印 phase，不得偽造設計"}
             }
+          }
+        },
+        "evidence_base_label": {"type": ["string", "null"], "description": "證據基礎量詞標籤（如『項隨機對照試驗』『項研究（含 NRSI）』）——renderer 讀此欄；曾因本鍵不在契約內（additionalProperties:false 必拒）使設計感知路徑成死碼、NRSI 被回退值誤稱 RCT"},
+        "screening_flow": {
+          "type": "array",
+          "description": "PRISMA-style 篩選流程（build_screening_flow 自動帶入或手填）；renderer 會把本鍵寫回 _synthesis.json，故必須在契約內，否則跑過一次渲染 verify_all schema gate 必 ❌",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stage": {"type": "string"}, "start": {"type": "string"}, "excluded": {"type": "string"},
+              "remain": {"type": "string"}, "note": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "rob_section": {
+          "type": "object", "additionalProperties": false,
+          "description": "第二段（偏誤風險）版型覆寫：NRSI/ROBINS-I 軌可自訂標題/導語/欄名（renderer 讀此欄；缺時用 RoB2 預設）",
+          "properties": {
+            "title": {"type": "string"}, "intro": {"type": "string"},
+            "columns": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+            "colwidths": {"type": "array", "items": {"type": "number"}, "minItems": 8, "maxItems": 8}
           }
         },
         "rob_summary": {

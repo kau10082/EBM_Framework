@@ -25,14 +25,38 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1] / "EBM_Analysis" / "tools"))
-try: sys.stdout.reconfigure(encoding="utf-8")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")   # 攔截訊息走 stderr：Windows/cp950 下不設會 UnicodeEncodeError→exit 1→hook 反而放行
 except Exception: pass
 
 ACTIVE_FLAG = "_search_active.flag"  # Gate ① 開始時建、交接/結案時移除；不存在＝檢索非進行中→守門休眠
 
+_CORRUPT = {}  # {路徑: 錯誤}——「檔案存在但解析失敗」≠「尚未產出」，必須 fail-closed，不得被當成『尚未到此關』靜默跳過
+
 def _load(p):
-    try: return json.loads(Path(p).read_text(encoding="utf-8"))
-    except Exception: return None
+    p = Path(p)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        _CORRUPT.setdefault(str(p), str(e)[:60])
+        return None
+
+def _recs(x):
+    """容錯抽出紀錄 list：裸 list 或 dict 的 records/results/items 皆可（防各產出器 wrapper 鍵名飄移）。"""
+    if isinstance(x, list):
+        return x
+    if isinstance(x, dict):
+        v = x.get("records") or x.get("results") or x.get("items")
+        if isinstance(v, list):
+            return v
+    return []
+
+def _corrupt_fails():
+    return [f"產物存在但 JSON 解析失敗（壞檔≠尚未產出，fail-closed）：{p}（{e}）——修復或重產該檔後才可放行"
+            for p, e in sorted(_CORRUPT.items())]
 
 def _active(cache):
     """檢索是否進行中：唯有哨兵旗標存在才讓 Stop hook 生效（避免全域每回合打擾）。"""
@@ -86,6 +110,18 @@ def _norm_doi(d):
     import re
     d = d.lower().strip(); d = re.sub(r"^https?://(dx\.)?doi\.org/", "", d); return d or None
 
+def _g7_recs(units):
+    """g7_units 一律經 classify_units.records_of 讀取（相容產出端 rows 與舊 records 形狀、補 role）。
+    回傳 (recs, fails)：形狀無法辨識時 fails 帶訊息——守門不得因讀不懂形狀而『視為未到此關』靜默跳過。"""
+    try:
+        import classify_units
+        recs = classify_units.records_of(units)
+    except Exception as e:
+        return None, [f"classify_units.records_of 載入失敗（{str(e)[:80]}）：無法稽核 ⑤b（fail-closed）"]
+    if not recs and isinstance(units, dict) and units and "rows" not in units and "records" not in units:
+        return None, ["g7_units.json 形狀無法辨識（無 rows/records 鍵）：無法稽核 ⑤b（fail-closed），請用 classify_units.py 重產"]
+    return recs, None
+
 def check_excl_requires_fulltext(cache):
     """全文/摘要搜尋及嚴格離題篩選 鐵律：『離題』只能在 Tier 3（實取全文）後定案——只有『切題』可在
     Tier 1/2（摘要／CT.gov 登錄／AI 合成）早停。故每筆 verdict=離題 必須帶 tier==3 或
@@ -94,6 +130,7 @@ def check_excl_requires_fulltext(cache):
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
+    g3 = _recs(g3)
     bad = []
     for r in g3:
         if (r.get("verdict") or "") != "離題":
@@ -124,6 +161,7 @@ def check_nocontent_bucket(cache):
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
+    g3 = _recs(g3)
     bad = []
     no_unpaywall = []
     no_ai = []
@@ -167,6 +205,7 @@ def check_screen_partition(cache):
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
+    g3 = _recs(g3)
     from collections import Counter
     VERD = {"切題", "離題", "全文及摘要皆無"}
     fails = []
@@ -348,9 +387,9 @@ def check_units_no_nocontent(cache):
     units = _load(cache / "g7_units.json")
     if units is None:
         return None
-    recs = units.get("records") if isinstance(units, dict) else units
-    if not isinstance(recs, list):
-        return None
+    recs, ff = _g7_recs(units)
+    if ff:
+        return ff
     BAD = ("全文及摘要皆無", "無內容", "兩者皆無")
     bad = []
     for r in recs:
@@ -378,6 +417,7 @@ def check_units_only_concordant(cache):
     g3 = _load(cache / "g3_FINAL_screen.json")
     if g3 is None:
         return None
+    g3 = _recs(g3)
     concordant = {r.get("uid") for r in g3 if (r.get("verdict") or "") == "切題"}
     excluded = {r.get("uid"): (r.get("verdict") or "") for r in g3
                 if (r.get("verdict") or "") in ("離題", "全文及摘要皆無")}
@@ -385,9 +425,9 @@ def check_units_only_concordant(cache):
     for r in (g4.get("new_relevant") or []):
         if r.get("uid"):
             concordant.add(r.get("uid"))
-    recs = units.get("records") if isinstance(units, dict) else units
-    if not isinstance(recs, list):
-        return None
+    recs, ff = _g7_recs(units)
+    if ff:
+        return ff
     bad = []
     for r in recs:
         if not isinstance(r, dict):
@@ -608,6 +648,7 @@ def check_verification_coverage(cache):
     if ver is None:
         return ["交接包存在但 g6_verified.json 不存在：included/background 未經⑥ Crossref+PubMed 交叉驗證"
                 "（未驗證不得進交接/Zotero/報告表二三）"]
+    ver = _recs(ver)
     vids = set()
     for v in ver:
         if v.get("pmid"): vids.add(("pmid", str(v.get("pmid"))))
@@ -654,6 +695,7 @@ def check_no_retracted(cache):
     ver = _load(cache / "g6_verified.json")
     if ver is None:
         return None
+    ver = _recs(ver)
     def _vv(v): return v.get("verdict") or v.get("verify")   # 相容兩種鍵名（⑤a 寫 verdict／報告器寫 verify）
     retr = {str(v.get("pmid")) for v in ver if _vv(v) == "RETRACTED" and v.get("pmid")}
     # Crossref is-retracted 多以 DOI 為憑——撤稿文獻可能無 PMID，須一併以 DOI 比對（審查 🔴 補強）
@@ -695,6 +737,7 @@ def check_no_unverified(cache):
     ver = _load(cache / "g6_verified.json")
     if ver is None:
         return None
+    ver = _recs(ver)
     def _vv(v): return v.get("verdict") or v.get("verify")
     unv_pmid = {str(v.get("pmid")) for v in ver if _vv(v) == "UNVERIFIED" and v.get("pmid")}
     unv_doi = {_norm_doi(v.get("doi")) for v in ver if _vv(v) == "UNVERIFIED" and v.get("doi")}
@@ -707,9 +750,11 @@ def check_no_unverified(cache):
         return (uid in unv_uid) or (pmid and str(pmid) in unv_pmid) or (_norm_doi(doi) in unv_doi)
     fails = []
     g7 = _load(cache / "g7_units.json")
-    recs = g7.get("records") if isinstance(g7, dict) else g7
-    if isinstance(recs, list):
-        for r in recs:
+    if g7 is not None:
+        recs, ff = _g7_recs(g7)
+        if ff:
+            fails.extend(ff)
+        for r in (recs or []):
             if _hit(r.get("uid"), r.get("pmid"), r.get("doi")):
                 fails.append(f"UNVERIFIED {r.get('pmid') or r.get('doi') or r.get('uid')} 在 ⑤b g7_units（{r.get('role')}）："
                              "無法驗證須與撤稿一樣剔除、不得當核心/背景保留")
@@ -736,6 +781,7 @@ def check_doi_title_audited(cache):
     ver = _load(cache / "g6_verified.json")
     if ver is None:
         return None   # ⑤a 未到此關
+    ver = _recs(ver)
     # 有 DOI 的納入候選才需稽核；若 g6_verified 全無 DOI，則無可稽核、放行。
     def _vv(v): return v.get("verdict") or v.get("verify")
     has_doi = any((v.get("doi") or "").strip() for v in ver
@@ -747,13 +793,36 @@ def check_doi_title_audited(cache):
         return ["⑤a 已產 g6_verified 但無 g6_title_audit.json：⑤a 對有 DOI 的納入候選必須跑 "
                 "doi_title_audit.py（--out g6_title_audit.json）做 Crossref『DOI↔實際標題』比對，"
                 "不得只查存在性（存在性無法擋手填錯 DOI——錯 DOI 指向的論文通常也存在）"]
+    fails = []
     mism = audit.get("mismatches") if isinstance(audit, dict) else None
     if mism:
         ds = [m.get("doi") for m in mism][:5]
-        return [f"⑤a DOI↔title 稽核有 {len(mism)} 筆不符未解決（DOI 可能填錯，sim<{audit.get('min_sim')}）：{ds}"
-                "；須修正 DOI 或標 UNVERIFIED 後重跑稽核，mismatches 清空才可放行"]
-    return []
+        fails.append(f"⑤a DOI↔title 稽核有 {len(mism)} 筆不符未解決（DOI 可能填錯，sim<{audit.get('min_sim')}）：{ds}"
+                     "；須修正 DOI 或標 UNVERIFIED 後重跑稽核，mismatches 清空才可放行")
+    if isinstance(audit, dict):
+        nf = audit.get("not_found") or []
+        er = audit.get("errors") or []
+        if nf:
+            fails.append(f"⑤a 有 {len(nf)} 筆 DOI 在 Crossref 為 404（DOI 不存在＝疑幻覺 DOI）："
+                         f"{[m.get('doi') for m in nf][:5]}；須修正或標 UNVERIFIED")
+        if er:
+            fails.append(f"⑤a DOI↔title 稽核有 {len(er)} 筆查詢失敗（網路等因素，未完成比對≠已比對）："
+                         "請恢復網路後重跑 doi_title_audit.py，errors 清空才可放行（fail-closed）")
+    return fails
 
+
+def check_flow_closure(cache):
+    """⑥ 流程數字閉合：_search_report.json 的 flow 逐列『起始±排除＝剩餘』、跨列銜接、
+    flow_reconcile 對帳算式實算（funnel_check.check；相容舊 funnel【算式】格式）。
+    check_search_report_format 只驗格子有數字，本關驗數字『對不對』。"""
+    data = _load(cache / "_search_report.json")
+    if data is None:
+        return None
+    try:
+        import funnel_check
+        return funnel_check.check(data)
+    except Exception as e:
+        return [f"funnel_check 載入失敗：{str(e)[:80]}"]
 
 def check_exhaust(cache):
     man = _load(cache / "g1_legs_manifest.json")
@@ -807,6 +876,7 @@ def _all_checks(cache):
             _safe("⑤b 不得有『待評估,無內容』(③Tier4終端桶不在⑤b重生)", check_units_no_nocontent, cache),
             _safe("⑤b 只消費切題(離題/待評估等同丟棄、不入分析)", check_units_only_concordant, cache),
             _safe("⑥ 報告須照使用者 5 段格式(作者/年份/文獻類型 byline 等)", check_search_report_format, cache),
+            _safe("⑥ 流程數字閉合(起始±排除=剩餘、跨列銜接、對帳算式)", check_flow_closure, cache),
             _safe("③ 逐 Tier 停頓報告(T1→T2→T3→T4 不得跨層搶跑)", check_screen_tier_stops, cache),
             _safe("Gate③ 嚴格篩逐軸核對(不放水)", check_strict_screen, cache),
             _safe("④引文追蹤須標題+摘要批次篩(禁只憑標題丟)", check_citation_screen, cache),
@@ -831,6 +901,8 @@ def run(cache, quiet=False):
             for f in res: lines.append(f"       - {f}"); all_fails.append(f)
         else:
             lines.append(f"  ✅ {name}：通過")
+    for f in _corrupt_fails():   # 壞 JSON≠尚未產出：任何被略過的損壞產物一律亮出（fail-closed）
+        lines.append(f"  ❌ {f}"); all_fails.append(f)
     if all_fails:
         print("❌ gate_guard 攔截到未通關項目：")
         print("\n".join(lines))
@@ -849,6 +921,7 @@ def run_hook(cache):
     for name, res in checks:
         if res:
             for f in res: fails.append(f"[{name}] {f}")
+    fails.extend(f"[壞產物] {f}" for f in _corrupt_fails())   # 壞 JSON 不得被當『尚未到此關』放行
     if fails:
         sys.stderr.write("gate_guard 攔截：本輪檢索關卡有未通關項目，請修正後再結束：\n"
                          + "\n".join("  - " + f for f in fails) + "\n")

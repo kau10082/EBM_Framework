@@ -35,31 +35,73 @@ def _safe_eval(side):
     except Exception:
         return None
 
+_SIGNED = re.compile(r"([+\-])?\s*(\d+)")
+
+def _nums(cell):
+    """抽出格內帶號數字：回傳 [(sign, int), ...]；sign ∈ {'+','-',''}。輸入先過 _normalize（全形→ASCII、去千分位）。"""
+    return [(m.group(1) or "", int(m.group(2))) for m in _SIGNED.finditer(_normalize(str(cell or "")))]
+
+def check_flow(data):
+    """現行 5 段版型（flow: [{stage,start,excluded,remain}] ＋ flow_reconcile 字串）的數字閉合檢查：
+    (a) 逐列：start（恰 1 數）±excluded 各帶號數（無號/−＝扣除、+＝新增）＝ remain（恰 1 數）；
+        任一格數字數量不合（0 或 >1）→ 該列略過（首列 Identification 的「—」即此類）。
+    (b) 跨列：remain[i] 與 start[i+1] 都恰 1 數時必須相等（上一關剩餘＝下一關起始）。
+    (c) flow_reconcile 內「a + b + c = d」型算式實算比對。"""
+    fails = []
+    flow = data.get("flow") or []
+    parsed = []
+    for i, st in enumerate(flow):
+        if not isinstance(st, dict):
+            parsed.append((None, None, None)); continue
+        s = [n for _, n in _nums(st.get("start"))]
+        e = _nums(st.get("excluded"))
+        r = [n for _, n in _nums(st.get("remain"))]
+        parsed.append((s, e, r))
+        if len(s) == 1 and len(r) == 1:
+            delta = sum(n if sg == "+" else -n for sg, n in e)
+            if s[0] + delta != r[0]:
+                fails.append(f"flow[{i}]（{str(st.get('stage',''))[:20]}）數字不閉合："
+                             f"起始 {s[0]} {'+' if delta >= 0 else '−'} {abs(delta)} ≠ 剩餘 {r[0]}"
+                             f"（start={st.get('start')!r} excluded={st.get('excluded')!r} remain={st.get('remain')!r}）")
+    for i in range(len(parsed) - 1):
+        r_prev = parsed[i][2]; s_next = parsed[i + 1][0]
+        if r_prev and s_next and len(r_prev) == 1 and len(s_next) == 1 and r_prev[0] != s_next[0]:
+            fails.append(f"flow[{i}]→flow[{i+1}] 不銜接：上一關剩餘 {r_prev[0]} ≠ 下一關起始 {s_next[0]}")
+    rec = _normalize(str(data.get("flow_reconcile") or ""))
+    # 對帳句形如「核心 26 + 背景 35 + 待評估 21 = 82」：數字間可夾中文標籤，故容許 + 前後的非數字文字
+    for m in re.finditer(r"(\d+(?:[^+=\d]*\+[^+=\d]*\d+)+)[^=\d]*=[^\d]*(\d+)", rec):
+        total = sum(int(x) for x in re.findall(r"\d+", m.group(1)))
+        if total != int(m.group(2)):
+            fails.append(f"flow_reconcile 對帳不成立：{m.group(0)}（實算＝{total}）")
+    return fails
+
 def check(data, min_exprs=3):
-    """回傳 fails 清單（空＝通過）。"""
+    """回傳 fails 清單（空＝通過）。相容兩代格式：舊 funnel（【算式】標記）與現行 flow（start/excluded/remain）。"""
     fails = []
     funnel = data.get("funnel", []) or []
-    blob = " ".join([(s.get("change") or "") + " " + (s.get("remain") or "") + " " + (s.get("annot") or "")
-                     for s in funnel]) + " " + (data.get("funnel_closure") or "")
-    blob = _normalize(blob)                      # 先把全形運算子(＝－＋)轉 ASCII，再抽【...】
-    exprs = _EXPR.findall(blob)
-    checked = 0
-    for raw in exprs:
-        e = _normalize(raw)
-        if "=" not in e:
-            continue
-        lhs, rhs = e.split("=", 1)
-        L, R = _safe_eval(lhs), _safe_eval(rhs)
-        if L is None or R is None:
-            # 看起來像算式(含數字+運算子)卻解析失敗→格式錯誤/含不支援運算(/、括號、錯字)，不可靜默跳過
-            if re.search(r"\d", e) and re.search(r"[+\-*/()]", e):
-                fails.append(f"流程圖算式無法解析：【{raw.strip()}】（僅支援 +−* 與數字；勿用 / 或括號或錯字，否則失去校驗）")
-            continue
-        checked += 1
-        if L != R:
-            fails.append(f"流程圖算式不成立：【{raw.strip()}】→ 左 {L} ≠ 右 {R}")
-    if checked < min_exprs:
-        fails.append(f"流程圖算式不足（只解析到 {checked} 條，需 ≥{min_exprs}）：每關轉換須附【a−b=c】算式供機器核閉合，禁裸數字")
+    if funnel or data.get("funnel_closure"):   # 舊版 funnel 格式：抽【...】算式逐條核
+        blob = " ".join([(s.get("change") or "") + " " + (s.get("remain") or "") + " " + (s.get("annot") or "")
+                         for s in funnel]) + " " + (data.get("funnel_closure") or "")
+        blob = _normalize(blob)                  # 先把全形運算子(＝－＋)轉 ASCII，再抽【...】
+        exprs = _EXPR.findall(blob)
+        checked = 0
+        for raw in exprs:
+            e = _normalize(raw)
+            if "=" not in e:
+                continue
+            lhs, rhs = e.split("=", 1)
+            L, R = _safe_eval(lhs), _safe_eval(rhs)
+            if L is None or R is None:
+                # 看起來像算式(含數字+運算子)卻解析失敗→格式錯誤/含不支援運算(/、括號、錯字)，不可靜默跳過
+                if re.search(r"\d", e) and re.search(r"[+\-*/()]", e):
+                    fails.append(f"流程圖算式無法解析：【{raw.strip()}】（僅支援 +−* 與數字；勿用 / 或括號或錯字，否則失去校驗）")
+                continue
+            checked += 1
+            if L != R:
+                fails.append(f"流程圖算式不成立：【{raw.strip()}】→ 左 {L} ≠ 右 {R}")
+        if checked < min_exprs:
+            fails.append(f"流程圖算式不足（只解析到 {checked} 條，需 ≥{min_exprs}）：每關轉換須附【a−b=c】算式供機器核閉合，禁裸數字")
+    fails.extend(check_flow(data))
     return fails
 
 def main():

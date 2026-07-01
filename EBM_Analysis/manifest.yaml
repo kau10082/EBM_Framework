@@ -61,6 +61,9 @@ guardrails:
   grading_rules:            {applies_to: all,        trigger: "每個 outcome 評定", note: "imprecision 操作準則/階層/多劑量/間接性疊加/COI 何時下調"}
   heterogeneity:            {applies_to: sr_ma,      trigger: "outcome 來自 MA"}
   rob2:                     {applies_to: rct,        trigger: "RCT 核心結果"}
+  robins_i:                 {applies_to: nrsi,       trigger: "NRSI（非隨機研究）偏誤評讀", note: "ROBINS-I 七領域＋木桶原則；critical 必剔除、不進統合（工具↔設計三路徑路由之一）"}
+  amstar2:                  {applies_to: sr_ma,      trigger: "SR/MA 方法學品質評讀", note: "AMSTAR 2 十六題（7 關鍵）→整體信心；機器 gate 併入 validate.py"}
+  multitrack_integration:   {applies_to: synthesis,  trigger: "RCT/NRSI/SR-MA 多軌並行整合", note: "三軌絕不混池、不混 GRADE、不混森林圖；容器＝phase4 synthesis.tracks，機器看守 check_synthesis_tracks"}
   coi:                      {applies_to: all,        trigger: "有 COI/Funding 章節"}
   effect_measure:           {applies_to: all,        trigger: "讀已算好效應量"}
   nonreporting:             {applies_to: sr_ma,      trigger: "評讀 SR/MA 缺失證據"}
