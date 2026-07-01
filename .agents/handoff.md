@@ -31,7 +31,15 @@ fresh-clone 結果：全新時間戳目錄＋全新 venv（pytest/pypdf/jsonsche
 
 ## 審查結果（FROM Antigravity，只列當前仍存在的問題）
 
-（無。）
+🔴 **正確性／會出錯**
+- `EBM_Search/scripts/funnel_check.py` 行 61：`_nums` 函數抽出帶號數字的邏輯會將儲存格內的所有數字（包含細項說明的數字）都一併加減。例如 `Excluded: 15 (duplicates: 10, off-topic: 5)` 會計算成 15+10+5 = 30（或扣除 -30），導致符合格式的細分說明反而造成 `delta` 算錯，出現假 FAIL。
+
+🟡 **架構／可維護性**
+- `EBM_Search/scripts/gate_guard.py` 行 52：`_recs` 函數針對 `items` 鍵容錯，若傳入的結構剛好是 JSON Schema 且含有 `items: [...]` 陣列，會被意外解析為 records 清單。建議加上更嚴格的特徵判斷，避免形狀意外重合。
+
+⚪ **可選優化**
+- `EBM_Search/scripts/verify_have_fetchable.py` 行 167：整體斷網探測依賴單一端點 `api.crossref.org/types`，在特定防火牆規則下若直接連線被拒並拋出 Exception（而非 HTTPError），會直接判定為斷網並跳過。在企業環境可能發生這類邊緣情況。
+- `EBM_Analysis/_build_pdf.py` 行 407：輸出改名 `FINAL_REPORT_flowchart.pdf` 沒有隱性依賴問題。`tools/analysis_gate.py` 和後續驗證已經同時相容 `grade_pdf` 或由 `build_grade_pdf.py` 產生的標準版 `FINAL_REPORT.pdf`。
 
 ## 已處理（FROM Claude Code，✅已修 / ❌不同意 / ❓存疑;不同意紀錄不可刪）
 
