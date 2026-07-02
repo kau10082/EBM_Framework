@@ -36,15 +36,42 @@ def _safe_eval(side):
         return None
 
 _SIGNED = re.compile(r"([+\-])?\s*(\d+)")
+_PAREN = re.compile(r"[（(][^（()）]*[)）]")   # 括號註記（細項/說明常在括號內）
+
+def _signed_in(txt):
+    """已正規化文字內的帶號數字：[(sign, int), ...]；sign ∈ {'+','-',''}。"""
+    return [(m.group(1) or "", int(m.group(2))) for m in _SIGNED.finditer(txt)]
 
 def _nums(cell):
-    """抽出格內帶號數字：回傳 [(sign, int), ...]；sign ∈ {'+','-',''}。輸入先過 _normalize（全形→ASCII、去千分位）。"""
-    return [(m.group(1) or "", int(m.group(2))) for m in _SIGNED.finditer(_normalize(str(cell or "")))]
+    """抽出格內帶號數字（原樣解讀）。輸入先過 _normalize（全形→ASCII、去千分位）。"""
+    return _signed_in(_normalize(str(cell or "")))
+
+def _single(cell):
+    """start/remain 抽『單一計數』：優先剝除括號註記後恰 1 數者（如『核心 26（＋base 8）』→26），
+    否則回原樣抽出的全部數字（呼叫端以 len==1 決定是否可檢）。"""
+    raw = _normalize(str(cell or ""))
+    stripped = [n for _, n in _signed_in(_PAREN.sub(" ", raw))]
+    if len(stripped) == 1:
+        return stripped
+    return [n for _, n in _signed_in(raw)]
+
+def _delta_candidates(cell):
+    """excluded 格的變化量『候選解讀』（去重 list）：(1) 全部帶號數字直加減；(2) 先剝除括號註記再加減。
+    逐列檢查時**任一解讀能閉合即通過**——括號細項備註（如『剔除 15（重複 10、離題 5）』）總數與細項
+    同格並存，單一解讀會把 15+10+5 全加而假 FAIL（Antigravity 初審 🔴）；而『—（新增 +5）』的加項
+    又只存在於括號內，故兩種解讀都要保留。"""
+    raw = _normalize(str(cell or ""))
+    cands = []
+    for txt in (raw, _PAREN.sub(" ", raw)):
+        d = sum(n if sg == "+" else -n for sg, n in _signed_in(txt))
+        if d not in cands:
+            cands.append(d)
+    return cands
 
 def check_flow(data):
     """現行 5 段版型（flow: [{stage,start,excluded,remain}] ＋ flow_reconcile 字串）的數字閉合檢查：
-    (a) 逐列：start（恰 1 數）±excluded 各帶號數（無號/−＝扣除、+＝新增）＝ remain（恰 1 數）；
-        任一格數字數量不合（0 或 >1）→ 該列略過（首列 Identification 的「—」即此類）。
+    (a) 逐列：start（恰 1 數）±excluded 帶號數（無號/−＝扣除、+＝新增；括號細項容錯，任一解讀閉合即過）
+        ＝ remain（恰 1 數）；任一格數字數量不合（0 或 >1）→ 該列略過（首列 Identification 的「—」即此類）。
     (b) 跨列：remain[i] 與 start[i+1] 都恰 1 數時必須相等（上一關剩餘＝下一關起始）。
     (c) flow_reconcile 內「a + b + c = d」型算式實算比對。"""
     fails = []
@@ -52,19 +79,19 @@ def check_flow(data):
     parsed = []
     for i, st in enumerate(flow):
         if not isinstance(st, dict):
-            parsed.append((None, None, None)); continue
-        s = [n for _, n in _nums(st.get("start"))]
-        e = _nums(st.get("excluded"))
-        r = [n for _, n in _nums(st.get("remain"))]
-        parsed.append((s, e, r))
+            parsed.append((None, None)); continue
+        s = _single(st.get("start"))
+        r = _single(st.get("remain"))
+        parsed.append((s, r))
         if len(s) == 1 and len(r) == 1:
-            delta = sum(n if sg == "+" else -n for sg, n in e)
-            if s[0] + delta != r[0]:
+            deltas = _delta_candidates(st.get("excluded"))
+            if all(s[0] + d != r[0] for d in deltas):
+                d0 = deltas[-1]   # 顯示剝括號後的解讀（通常最接近本意）
                 fails.append(f"flow[{i}]（{str(st.get('stage',''))[:20]}）數字不閉合："
-                             f"起始 {s[0]} {'+' if delta >= 0 else '−'} {abs(delta)} ≠ 剩餘 {r[0]}"
+                             f"起始 {s[0]} {'+' if d0 >= 0 else '−'} {abs(d0)} ≠ 剩餘 {r[0]}"
                              f"（start={st.get('start')!r} excluded={st.get('excluded')!r} remain={st.get('remain')!r}）")
     for i in range(len(parsed) - 1):
-        r_prev = parsed[i][2]; s_next = parsed[i + 1][0]
+        r_prev = parsed[i][1]; s_next = parsed[i + 1][0]
         if r_prev and s_next and len(r_prev) == 1 and len(s_next) == 1 and r_prev[0] != s_next[0]:
             fails.append(f"flow[{i}]→flow[{i+1}] 不銜接：上一關剩餘 {r_prev[0]} ≠ 下一關起始 {s_next[0]}")
     rec = _normalize(str(data.get("flow_reconcile") or ""))

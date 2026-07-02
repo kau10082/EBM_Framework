@@ -45,13 +45,16 @@ def _load(p):
         return None
 
 def _recs(x):
-    """容錯抽出紀錄 list：裸 list 或 dict 的 records/results/items 皆可（防各產出器 wrapper 鍵名飄移）。"""
+    """容錯抽出紀錄 list：裸 list 或 dict 的 records/results/items 皆可（防各產出器 wrapper 鍵名飄移）。
+    加嚴：清單元素必須全為 dict 才視為紀錄——避免形狀意外重合（如 JSON Schema 的 `items` 鍵、
+    字串清單等）被誤當 records 消費（Antigravity 初審 🟡）。"""
     if isinstance(x, list):
         return x
     if isinstance(x, dict):
-        v = x.get("records") or x.get("results") or x.get("items")
-        if isinstance(v, list):
-            return v
+        for k in ("records", "results", "items"):
+            v = x.get(k)
+            if isinstance(v, list) and all(isinstance(r, dict) for r in v):
+                return v
     return []
 
 def _corrupt_fails():

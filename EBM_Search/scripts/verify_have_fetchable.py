@@ -162,14 +162,18 @@ def _write_back(path, papers):
     p.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
 
 def _network_ok(timeout=10):
-    """整體連線探測：全斷網時不得開驗——否則整批 have(online) 會被抓不到而集體誤判假 have。"""
-    try:
-        _get("https://api.crossref.org/types", timeout)
-        return True
-    except urllib.error.HTTPError:
-        return True    # 伺服器有回應＝網路可用
-    except Exception:
-        return False
+    """整體連線探測：全斷網時不得開驗——否則整批 have(online) 會被抓不到而集體誤判假 have。
+    探兩個獨立端點（Crossref→NCBI）：單一端點被防火牆規則整個拒連時不誤判斷網（Antigravity 初審 ⚪）。"""
+    for probe in ("https://api.crossref.org/types",
+                  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi"):
+        try:
+            _get(probe, timeout)
+            return True
+        except urllib.error.HTTPError:
+            return True    # 伺服器有回應＝網路可用
+        except Exception:
+            continue
+    return False
 
 def main():
     ap = argparse.ArgumentParser()
