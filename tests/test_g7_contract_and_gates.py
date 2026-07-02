@@ -77,3 +77,31 @@ def test_flow_closure_catches_bad_row_and_bad_chain():
 def test_flow_closure_catches_bad_reconcile():
     fails = fc.check_flow(_flow_data([], "對帳：核心 26 ＋ 背景 35 ＝ 100。"))
     assert any("對帳不成立" in f for f in fails)
+
+
+# ── 複審輪回歸（Antigravity 初審 🔴/🟡）──────────────────────────────
+
+def test_flow_closure_paren_breakdown_not_false_fail():
+    # 🔴：excluded 格「總數＋括號細項」並存（15＝10+5）不得把 15+10+5 全加成假 FAIL
+    rows = [{"stage": "②b", "start": "500", "excluded": "剔除 15（重複 10、離題 5）", "remain": "485"}]
+    assert fc.check_flow(_flow_data(rows)) == []
+    # 括號內的加項仍要吃到（④ 引文追蹤「—（新增 +5）」）
+    rows2 = [{"stage": "④", "start": "80", "excluded": "—（新增 +5）", "remain": "85"}]
+    assert fc.check_flow(_flow_data(rows2)) == []
+    # 真正錯的數字：兩種解讀都閉合不了 → 仍要 FAIL
+    rows3 = [{"stage": "②b", "start": "500", "excluded": "剔除 15（重複 10、離題 5）", "remain": "479"}]
+    assert any("不閉合" in f for f in fc.check_flow(_flow_data(rows3)))
+
+
+def test_flow_single_prefers_paren_stripped():
+    # remain「核心 26（＋base SR/MA 8）」→ 剝括號後恰 1 數＝26，該列可檢且正確閉合
+    rows = [{"stage": "⑤b", "start": "82", "excluded": "背景 35、待評估 21", "remain": "核心 26（＋base SR/MA 8）"}]
+    assert fc.check_flow(_flow_data(rows)) == []
+
+
+def test_recs_rejects_non_dict_lists():
+    # 🟡：items/records 清單元素非 dict（如 JSON Schema 的 items、字串清單）不得被當紀錄
+    assert gg._recs({"items": ["a", "b"]}) == []
+    assert gg._recs({"items": {"type": "object"}}) == []
+    assert gg._recs({"records": [{"uid": "x"}]}) == [{"uid": "x"}]
+    assert gg._recs({"results": [{"pmid": "1"}], "items": ["junk"]}) == [{"pmid": "1"}]
